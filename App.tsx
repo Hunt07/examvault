@@ -236,8 +236,11 @@ const App: React.FC = () => {
     });
 
     // Listen to Notifications
-    const unsubNotifs = onSnapshot(query(collection(db, "notifications"), where("recipientId", "==", user.id), orderBy("timestamp", "desc")), (snapshot) => {
-      setNotifications(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Notification)));
+    // Removed orderBy to avoid requiring a composite index immediately. Sorting client-side.
+    const unsubNotifs = onSnapshot(query(collection(db, "notifications"), where("recipientId", "==", user.id)), (snapshot) => {
+      const fetchedNotifs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Notification));
+      fetchedNotifs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      setNotifications(fetchedNotifs);
     });
 
     return () => {

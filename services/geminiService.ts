@@ -1,3 +1,5 @@
+
+// @ts-ignore
 import { GoogleGenAI, Type } from "@google/genai";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -57,9 +59,12 @@ export const describeImage = async (base64Data: string, mimeType: string): Promi
       text: "Analyze this image from a study document. Describe the key information, including any text, diagrams, or main concepts. This will be used as a summary for other students."
     };
 
+    // Remove data URL prefix if present for clean base64
+    const cleanBase64 = base64Data.replace(/^data:.+;base64,/, '');
+
     const imagePart = {
       inlineData: {
-        data: base64Data,
+        data: cleanBase64,
         mimeType: mimeType,
       },
     };

@@ -122,7 +122,7 @@ const Header: React.FC<{ onUploadClick: () => void }> = ({ onUploadClick }) => {
             if (notification.senderId) {
                 setView('publicProfile', notification.senderId);
             } else if (notification.resourceId) {
-                // Fallback for course/lecturer subscriptions that link to resource
+                // Fallback if no senderId
                 setView('resourceDetail', notification.resourceId);
             }
             break;

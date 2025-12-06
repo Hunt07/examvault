@@ -114,7 +114,7 @@ export enum NotificationType {
 export interface Notification {
   id: string;
   recipientId: string;
-  senderId?: string; // Added to allow redirection to profile
+  senderId?: string; // Added senderId
   type: NotificationType;
   message: string;
   resourceId?: string;

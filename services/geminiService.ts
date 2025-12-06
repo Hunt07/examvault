@@ -1,11 +1,10 @@
-
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 
-// Initialize the Google Generative AI SDK
-// Uses the API key from the environment variable as per strict guidelines.
-const genAI = new GoogleGenerativeAI(process.env.API_KEY as string);
+// Use Vite environment variable for Vercel deployment with safety check
+const apiKey = import.meta.env?.VITE_API_KEY || "";
+const genAI = new GoogleGenerativeAI(apiKey);
 
-// Using gemini-1.5-flash for speed and efficiency
+// Using gemini-1.5-flash for best speed/cost ratio in production
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 export const summarizeContent = async (
@@ -48,7 +47,7 @@ Based on the following material, please provide the summary with these exact sec
     return response.text() || "No summary generated.";
   } catch (error) {
     console.error("Error generating summary with Gemini:", error);
-    return "Could not generate summary at this time. Please check your API key settings.";
+    return "Could not generate summary. Please check your VITE_API_KEY configuration.";
   }
 };
 
@@ -73,7 +72,7 @@ export const describeImage = async (base64Data: string, mimeType: string): Promi
     return response.text() || "No description generated.";
   } catch (error) {
     console.error("Error describing image with Gemini:", error);
-    return "Could not generate a description for the image at this time.";
+    return "Could not generate a description for the image.";
   }
 };
 
@@ -143,7 +142,7 @@ export const generateStudySet = async (
     
     const result = await jsonModel.generateContent(parts);
     const response = result.response;
-    const text = response.text() || "[]";
+    const text = response.text();
     
     return JSON.parse(text);
   } catch (error) {

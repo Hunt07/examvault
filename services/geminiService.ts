@@ -1,7 +1,7 @@
-
-// @ts-ignore
 import { GoogleGenAI, Type } from "@google/genai";
 
+// Access API key from environment variable as per guidelines
+// The API key must be obtained exclusively from the environment variable process.env.API_KEY
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const summarizeContent = async (
@@ -20,58 +20,54 @@ Based on the following material, please provide the summary with these exact sec
 - **Potential Exam Questions:** A numbered list of 2-3 sample questions that could be asked on an exam based on this material.
 `;
 
-    let requestContents: any;
+    let parts: any[] = [];
 
     if (fileBase64 && mimeType) {
         // Remove data URL prefix if present for clean base64
         const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
         
-        requestContents = {
-            parts: [
-                { text: textPrompt },
-                {
-                    inlineData: {
-                        mimeType: mimeType,
-                        data: cleanBase64
-                    }
+        parts = [
+            { text: textPrompt },
+            {
+                inlineData: {
+                    mimeType: mimeType,
+                    data: cleanBase64
                 }
-            ]
-        };
+            }
+        ];
     } else {
-        requestContents = `${textPrompt}\n\nMaterial to analyze:\n---\n${content}\n---`;
+        parts = [{ text: `${textPrompt}\n\nMaterial to analyze:\n---\n${content}\n---` }];
     }
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: requestContents,
+        model: 'gemini-2.5-flash',
+        contents: { parts }
     });
-
+    
     return response.text || "No summary generated.";
   } catch (error) {
     console.error("Error generating summary with Gemini:", error);
-    return "Could not generate summary at this time. Please try again later.";
+    return "Could not generate summary at this time. Please check your API key.";
   }
 };
 
 export const describeImage = async (base64Data: string, mimeType: string): Promise<string> => {
   try {
-    const textPart = {
-      text: "Analyze this image from a study document. Describe the key information, including any text, diagrams, or main concepts. This will be used as a summary for other students."
-    };
-
-    // Remove data URL prefix if present for clean base64
     const cleanBase64 = base64Data.replace(/^data:.+;base64,/, '');
 
-    const imagePart = {
-      inlineData: {
-        data: cleanBase64,
-        mimeType: mimeType,
-      },
-    };
-
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: { parts: [textPart, imagePart] },
+        model: 'gemini-2.5-flash',
+        contents: {
+            parts: [
+                { text: "Analyze this image from a study document. Describe the key information, including any text, diagrams, or main concepts. This will be used as a summary for other students." },
+                {
+                    inlineData: {
+                        data: cleanBase64,
+                        mimeType: mimeType,
+                    },
+                }
+            ]
+        }
     });
 
     return response.text || "No description generated.";
@@ -88,69 +84,66 @@ export const generateStudySet = async (
   mimeType?: string
 ): Promise<any> => {
   try {
-    let textPrompt;
+    let promptText;
     let schema;
 
     if (setType === 'flashcards') {
-      textPrompt = `Analyze the provided study material and generate a set of 5-10 flashcards as a JSON array. Each object in the array should have a 'term' (a key concept or question) and a 'definition' (a concise explanation or answer).`;
+      promptText = `Analyze the provided study material and generate a set of 5-10 flashcards.`;
       schema = {
         type: Type.ARRAY,
         items: {
           type: Type.OBJECT,
           properties: {
-            term: { type: Type.STRING, description: 'The key term or question for the front of the flashcard.' },
-            definition: { type: Type.STRING, description: 'The definition or answer for the back of the flashcard.' },
+            term: { type: Type.STRING },
+            definition: { type: Type.STRING },
           },
           required: ['term', 'definition'],
         },
       };
-    } else { // quiz
-      textPrompt = `Analyze the provided study material and generate a 5-question multiple-choice quiz as a JSON array. Each object should have a 'question', an array of exactly 4 'options', and the 'correctAnswer' which must exactly match one of the strings in the 'options' array.`;
+    } else {
+      promptText = `Analyze the provided study material and generate a 5-question multiple-choice quiz.`;
       schema = {
         type: Type.ARRAY,
         items: {
-          type: Type.OBJECT,
-          properties: {
-            question: { type: Type.STRING, description: 'The question for the quiz.' },
-            options: { type: Type.ARRAY, items: { type: Type.STRING }, description: 'An array of 4 possible answers.' },
-            correctAnswer: { type: Type.STRING, description: 'The correct answer, which must be one of the strings from the options array.' },
-          },
-          required: ['question', 'options', 'correctAnswer'],
-        },
+            type: Type.OBJECT,
+            properties: {
+                question: { type: Type.STRING },
+                options: { type: Type.ARRAY, items: { type: Type.STRING } },
+                correctAnswer: { type: Type.STRING },
+            },
+            required: ['question', 'options', 'correctAnswer'],
+        }
       };
     }
 
-    let requestContents: any;
-
+    let parts: any[] = [];
     if (fileBase64 && mimeType) {
-        // Remove data URL prefix if present for clean base64
         const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
-        
-        requestContents = {
-            parts: [
-                { text: textPrompt },
-                {
-                    inlineData: {
-                        mimeType: mimeType,
-                        data: cleanBase64
-                    }
+        parts = [
+            { text: promptText },
+            {
+                inlineData: {
+                    mimeType: mimeType,
+                    data: cleanBase64
                 }
-            ]
-        };
+            }
+        ];
     } else {
-        requestContents = `${textPrompt}\n\nMaterial to analyze:\n---\n${content}\n---`;
+        parts = [{ text: `${promptText}\n\nMaterial to analyze:\n---\n${content}\n---` }];
     }
     
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: requestContents,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: schema,
-      },
+        model: 'gemini-2.5-flash',
+        contents: { parts },
+        config: {
+            responseMimeType: 'application/json',
+            responseSchema: schema
+        }
     });
-
-    return JSON.parse(response.text || "[]");
+    
+    const text = response.text || "";
+    // With schema, the text is guaranteed to be JSON.
+    return JSON.parse(text);
   } catch (error) {
     console.error(`Error generating ${setType} with Gemini:`, error);
     return [];

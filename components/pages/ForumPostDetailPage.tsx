@@ -1,5 +1,5 @@
 
-import React, { useContext, useState, useMemo, useRef } from 'react';
+import React, { useContext, useState, useMemo, useRef, useEffect } from 'react';
 import type { ForumPost, ForumReply, Attachment } from '../../types';
 import { AppContext } from '../../App';
 import { ArrowLeft, ThumbsUp, CheckCircle, MessageCircle, Paperclip, Image as ImageIcon, X, FileText, Download, Trash2 } from 'lucide-react';
@@ -79,7 +79,7 @@ const ReplyComponent: React.FC<{
     };
 
     return (
-        <div className="mt-6">
+        <div id={reply.id} className="mt-6 scroll-mt-24 transition-colors duration-1000 p-2 rounded-lg">
             <div className={`flex gap-4 items-start`}>
                 <button onClick={() => handleUserClick(reply.author.id)} className="shrink-0">
                     <img src={reply.author.avatarUrl} alt={reply.author.name} className="w-10 h-10 rounded-full" />
@@ -243,7 +243,7 @@ const ReplyComponent: React.FC<{
 
 
 const ForumPostDetailPage: React.FC<{ post: ForumPost }> = ({ post }) => {
-    const { user, userRanks, setView, handlePostVote, addReplyToPost, goBack, deleteForumPost } = useContext(AppContext);
+    const { user, userRanks, setView, handlePostVote, addReplyToPost, goBack, deleteForumPost, scrollTargetId, setScrollTargetId } = useContext(AppContext);
     
     const [newReplyText, setNewReplyText] = useState('');
     const [newReplyAttachment, setNewReplyAttachment] = useState<Attachment | undefined>(undefined);
@@ -275,6 +275,23 @@ const ForumPostDetailPage: React.FC<{ post: ForumPost }> = ({ post }) => {
         }
         return group;
     }, [post.replies]);
+
+    // Handle Deep Linking / Scrolling for Replies
+    useEffect(() => {
+        if (scrollTargetId) {
+            setTimeout(() => {
+                const targetElement = document.getElementById(scrollTargetId);
+                if (targetElement) {
+                    targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    targetElement.classList.add('bg-yellow-100', 'dark:bg-yellow-900/20', 'rounded-lg');
+                    setTimeout(() => {
+                        targetElement.classList.remove('bg-yellow-100', 'dark:bg-yellow-900/20', 'rounded-lg');
+                        setScrollTargetId(null);
+                    }, 2000);
+                }
+            }, 500);
+        }
+    }, [scrollTargetId, post.id]);
 
     const handleVoteForPost = () => {
         if (isOwnPost) return;

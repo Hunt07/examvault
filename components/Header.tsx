@@ -42,7 +42,7 @@ function timeAgo(dateString: string): string {
 }
 
 const Header: React.FC<{ onUploadClick: () => void }> = ({ onUploadClick }) => {
-  const { user, userRanks, logout, setView, notifications, markNotificationAsRead, markAllNotificationsAsRead, savedResourceIds, resources, isDarkMode, toggleDarkMode } = useContext(AppContext);
+  const { user, userRanks, logout, setView, notifications, markNotificationAsRead, markAllNotificationsAsRead, savedResourceIds, resources, isDarkMode, toggleDarkMode, setScrollTargetId } = useContext(AppContext);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const notificationsRef = useRef<HTMLDivElement>(null);
   
@@ -75,8 +75,7 @@ const Header: React.FC<{ onUploadClick: () => void }> = ({ onUploadClick }) => {
 
   const savedCount = savedResourceIds.length;
     
-  // Auto-sync downwards: if items are removed, we shouldn't show a notification for that,
-  // and we should reset the viewed count so future adds trigger the dot.
+  // Auto-sync downwards
   useEffect(() => {
     if (user && savedCount < lastViewedCount) {
         setLastViewedCount(savedCount);
@@ -116,13 +115,21 @@ const Header: React.FC<{ onUploadClick: () => void }> = ({ onUploadClick }) => {
     if (!notification.isRead) {
       markNotificationAsRead(notification.id);
     }
+
+    // Set scroll target if specific comment/reply link exists
+    if (notification.commentId) {
+        setScrollTargetId(notification.commentId);
+    } else if (notification.replyId) {
+        setScrollTargetId(notification.replyId);
+    }
     
     switch(notification.type) {
         case NotificationType.Subscription:
             if (notification.senderId) {
+                // Redirect to the new follower's profile
                 setView('publicProfile', notification.senderId);
             } else if (notification.resourceId) {
-                // Fallback if no senderId
+                // Fallback for course/lecturer notifications that link to a resource
                 setView('resourceDetail', notification.resourceId);
             }
             break;

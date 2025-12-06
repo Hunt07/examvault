@@ -114,12 +114,14 @@ export enum NotificationType {
 export interface Notification {
   id: string;
   recipientId: string;
-  senderId?: string; // Added senderId
+  senderId?: string;
   type: NotificationType;
   message: string;
   resourceId?: string;
   conversationId?: string;
   forumPostId?: string;
+  commentId?: string;
+  replyId?: string;
   timestamp: string;
   isRead: boolean;
 }

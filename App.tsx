@@ -75,6 +75,8 @@ interface AppContextType {
   hasUnreadMessages: boolean;
   hasUnreadDiscussions: boolean;
   isLoading: boolean;
+  scrollTargetId: string | null;
+  setScrollTargetId: (id: string | null) => void;
 }
 
 export const AppContext = React.createContext<AppContextType>({} as AppContextType);
@@ -90,6 +92,7 @@ const App: React.FC = () => {
   const [view, setViewState] = useState<View>('dashboard');
   const [viewHistory, setViewHistory] = useState<{ view: View; id?: string }[]>([]);
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
+  const [scrollTargetId, setScrollTargetId] = useState<string | null>(null);
   
   // Initialize dark mode from local storage or system preference
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -236,9 +239,9 @@ const App: React.FC = () => {
     });
 
     // Listen to Notifications
-    // Removed orderBy to avoid requiring a composite index immediately. Sorting client-side.
     const unsubNotifs = onSnapshot(query(collection(db, "notifications"), where("recipientId", "==", user.id)), (snapshot) => {
       const fetchedNotifs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Notification));
+      // Sort client-side
       fetchedNotifs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       setNotifications(fetchedNotifs);
     });
@@ -257,8 +260,22 @@ const App: React.FC = () => {
   // ------------------------------------------------------------------
   // HELPER: CREATE NOTIFICATION
   // ------------------------------------------------------------------
-  const sendNotification = async (recipientId: string, senderId: string, type: NotificationType, message: string, linkIds?: { resourceId?: string, forumPostId?: string, conversationId?: string }) => {
+  const sendNotification = async (recipientId: string, senderId: string, type: NotificationType, message: string, linkIds?: { resourceId?: string, forumPostId?: string, conversationId?: string, commentId?: string, replyId?: string }) => {
       if (recipientId === senderId) return; // Don't notify self
+
+      // Check for duplicates in client-side state to avoid spamming
+      const isDuplicate = notifications.some(n => 
+          n.recipientId === recipientId &&
+          n.senderId === senderId &&
+          n.type === type &&
+          !n.isRead && 
+          (linkIds?.resourceId ? n.resourceId === linkIds.resourceId : true) &&
+          (linkIds?.forumPostId ? n.forumPostId === linkIds.forumPostId : true) &&
+          (linkIds?.commentId ? n.commentId === linkIds.commentId : true) &&
+          (linkIds?.replyId ? n.replyId === linkIds.replyId : true)
+      );
+
+      if (isDuplicate) return;
 
       await addDoc(collection(db, "notifications"), {
           recipientId,
@@ -586,8 +603,9 @@ const App: React.FC = () => {
   const addCommentToResource = async (resourceId: string, text: string, parentId: string | null) => {
     if (!user) return;
     try {
+        const commentId = `c-${Date.now()}`;
         const newComment: Comment = {
-            id: `c-${Date.now()}`,
+            id: commentId,
             author: sanitizeForFirestore(user), // Sanitize user to avoid undefined fields
             text,
             timestamp: new Date().toISOString(),
@@ -603,14 +621,26 @@ const App: React.FC = () => {
         // 1. Notify resource author
         const resource = resources.find(r => r.id === resourceId);
         if (resource && resource.author.id !== user.id) {
-            sendNotification(resource.author.id, user.id, NotificationType.NewReply, `${user.name} commented on your resource: ${resource.title}`, { resourceId });
+            sendNotification(
+                resource.author.id, 
+                user.id, 
+                NotificationType.NewReply, 
+                `${user.name} commented on your resource: ${resource.title}`, 
+                { resourceId, commentId }
+            );
         }
 
         // 2. Notify parent comment author (if reply)
         if (parentId) {
             const parentComment = resource?.comments.find(c => c.id === parentId);
             if (parentComment && parentComment.author.id !== user.id && parentComment.author.id !== resource?.author.id) {
-                 sendNotification(parentComment.author.id, user.id, NotificationType.NewReply, `${user.name} replied to your comment on ${resource?.title}`, { resourceId });
+                 sendNotification(
+                     parentComment.author.id, 
+                     user.id, 
+                     NotificationType.NewReply, 
+                     `${user.name} replied to your comment on ${resource?.title}`, 
+                     { resourceId, commentId }
+                 );
             }
         }
 
@@ -689,8 +719,9 @@ const App: React.FC = () => {
       if (!user) return;
       
       try {
+          const replyId = `reply-${Date.now()}`;
           const newReply: ForumReply = {
-              id: `reply-${Date.now()}`,
+              id: replyId,
               author: sanitizeForFirestore(user),
               text,
               timestamp: new Date().toISOString(),
@@ -711,14 +742,26 @@ const App: React.FC = () => {
           // 1. Notify post author
           const post = forumPosts.find(p => p.id === postId);
           if (post && post.author.id !== user.id) {
-              sendNotification(post.author.id, user.id, NotificationType.NewReply, `${user.name} replied to your post: ${post.title}`, { forumPostId: postId });
+              sendNotification(
+                  post.author.id, 
+                  user.id, 
+                  NotificationType.NewReply, 
+                  `${user.name} replied to your post: ${post.title}`, 
+                  { forumPostId: postId, replyId }
+              );
           }
 
           // 2. Notify parent reply author
           if (parentId) {
               const parentReply = post?.replies.find(r => r.id === parentId);
               if (parentReply && parentReply.author.id !== user.id && parentReply.author.id !== post?.author.id) {
-                  sendNotification(parentReply.author.id, user.id, NotificationType.NewReply, `${user.name} replied to your comment in ${post?.title}`, { forumPostId: postId });
+                  sendNotification(
+                      parentReply.author.id, 
+                      user.id, 
+                      NotificationType.NewReply, 
+                      `${user.name} replied to your comment in ${post?.title}`, 
+                      { forumPostId: postId, replyId }
+                  );
               }
           }
 
@@ -1011,7 +1054,8 @@ const App: React.FC = () => {
       toggleUserSubscription, toggleLecturerSubscription, toggleCourseCodeSubscription,
       updateUserProfile, sendMessage, startConversation, sendDirectMessageToUser, markNotificationAsRead, markAllNotificationsAsRead, markMessagesAsRead,
       goBack, hasUnreadMessages, hasUnreadDiscussions,
-      isLoading, deleteResource
+      isLoading, deleteResource,
+      scrollTargetId, setScrollTargetId
     }}>
       <div className="min-h-screen bg-slate-50 dark:bg-dark-bg transition-colors duration-300">
         <Header onUploadClick={() => { setFulfillingRequest(undefined); setIsUploadModalOpen(true); }} />

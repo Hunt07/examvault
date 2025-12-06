@@ -1,7 +1,8 @@
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 
 // Use Vite environment variable for Vercel deployment with safety check
-const apiKey = import.meta.env?.VITE_API_KEY || "";
+// Cast to any to prevent TS error: Property 'env' does not exist on type 'ImportMeta'
+const apiKey = (import.meta as any).env?.VITE_API_KEY || "";
 const genAI = new GoogleGenerativeAI(apiKey);
 
 // Using gemini-1.5-flash for best speed/cost ratio in production

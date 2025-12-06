@@ -485,6 +485,29 @@ const App: React.FC = () => {
                const userRef = doc(db, "users", user.id);
                await updateDoc(userRef, { uploadCount: increment(1) });
                earnPoints(25, "Resource uploaded successfully!");
+               
+               // Fan-out notifications to subscribers
+               users.forEach(u => {
+                   if (u.id === user.id) return;
+                   
+                   let shouldNotify = false;
+                   let msg = '';
+
+                   if (u.subscriptions?.users?.includes(user.id)) {
+                       shouldNotify = true;
+                       msg = `${user.name} uploaded a new resource: ${resourceData.title}`;
+                   } else if (resourceData.lecturer && u.subscriptions?.lecturers?.includes(resourceData.lecturer)) {
+                       shouldNotify = true;
+                       msg = `New resource for ${resourceData.lecturer}: ${resourceData.title}`;
+                   } else if (u.subscriptions?.courseCodes?.includes(resourceData.courseCode)) {
+                       shouldNotify = true;
+                       msg = `New resource for ${resourceData.courseCode}: ${resourceData.title}`;
+                   }
+
+                   if (shouldNotify) {
+                       sendNotification(u.id, NotificationType.Subscription, msg, { resourceId: docRef.id });
+                   }
+               });
           }
       } catch (error) {
           console.error("Upload failed", error);
@@ -572,10 +595,20 @@ const App: React.FC = () => {
             comments: arrayUnion(sanitizeForFirestore(newComment))
         });
 
+        // 1. Notify resource author
         const resource = resources.find(r => r.id === resourceId);
         if (resource && resource.author.id !== user.id) {
             sendNotification(resource.author.id, NotificationType.NewReply, `${user.name} commented on your resource: ${resource.title}`, { resourceId });
         }
+
+        // 2. Notify parent comment author (if reply)
+        if (parentId) {
+            const parentComment = resource?.comments.find(c => c.id === parentId);
+            if (parentComment && parentComment.author.id !== user.id && parentComment.author.id !== resource?.author.id) {
+                 sendNotification(parentComment.author.id, NotificationType.NewReply, `${user.name} replied to your comment on ${resource?.title}`, { resourceId });
+            }
+        }
+
     } catch (error) {
         console.error("Failed to add comment", error);
         setToast({ message: "Failed to post comment. Please try again.", type: 'error' });
@@ -670,10 +703,20 @@ const App: React.FC = () => {
               replies: arrayUnion(sanitizeForFirestore(newReply))
           });
 
+          // 1. Notify post author
           const post = forumPosts.find(p => p.id === postId);
           if (post && post.author.id !== user.id) {
               sendNotification(post.author.id, NotificationType.NewReply, `${user.name} replied to your post: ${post.title}`, { forumPostId: postId });
           }
+
+          // 2. Notify parent reply author
+          if (parentId) {
+              const parentReply = post?.replies.find(r => r.id === parentId);
+              if (parentReply && parentReply.author.id !== user.id && parentReply.author.id !== post?.author.id) {
+                  sendNotification(parentReply.author.id, NotificationType.NewReply, `${user.name} replied to your comment in ${post?.title}`, { forumPostId: postId });
+              }
+          }
+
       } catch (error) {
           console.error("Failed to add reply", error);
           setToast({ message: "Failed to post reply.", type: 'error' });
@@ -820,7 +863,6 @@ const App: React.FC = () => {
       // 3. Propagate updates to Comments (inside Resources)
       // Since we can't easily query nested array objects in Firestore without specific structure/index,
       // we iterate recent resources (or all in this case as dataset is small for now).
-      // Ideally, use a collectionGroup query if comments were subcollections.
       const allResSnap = await getDocs(collection(db, "resources"));
       allResSnap.forEach(async (docSnap) => {
           const res = docSnap.data() as Resource;

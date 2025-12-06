@@ -19,6 +19,7 @@ export const mockUser: User = {
     lecturers: ['V NITTIYA'],
     courseCodes: ['BCCS2033'],
   },
+  savedResourceIds: ['res-2', 'res-7'],
 };
 
 const mockUser2: User = {
@@ -35,6 +36,7 @@ const mockUser2: User = {
   currentYear: 3,
   currentSemester: 1,
   subscriptions: { users: [], lecturers: [], courseCodes: [] },
+  savedResourceIds: [],
 };
 
 const mockUser3: User = {
@@ -51,6 +53,7 @@ const mockUser3: User = {
   currentYear: 2,
   currentSemester: 2,
   subscriptions: { users: [], lecturers: [], courseCodes: [] },
+  savedResourceIds: [],
 };
 
 const mockUser4: User = {
@@ -67,6 +70,7 @@ const mockUser4: User = {
   currentYear: 3,
   currentSemester: 3,
   subscriptions: { users: [], lecturers: [], courseCodes: [] },
+  savedResourceIds: [],
 };
 
 const mockUser5: User = {
@@ -83,6 +87,7 @@ const mockUser5: User = {
   currentYear: 1,
   currentSemester: 1,
   subscriptions: { users: [], lecturers: [], courseCodes: [] },
+  savedResourceIds: [],
 };
 
 const mockUser6: User = {
@@ -99,6 +104,7 @@ const mockUser6: User = {
   currentYear: 2,
   currentSemester: 2,
   subscriptions: { users: [], lecturers: [], courseCodes: [] },
+  savedResourceIds: [],
 };
 
 export const mockUsers: User[] = [mockUser, mockUser2, mockUser3, mockUser4, mockUser5, mockUser6];

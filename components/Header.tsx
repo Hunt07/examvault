@@ -119,6 +119,13 @@ const Header: React.FC<{ onUploadClick: () => void }> = ({ onUploadClick }) => {
     
     switch(notification.type) {
         case NotificationType.Subscription:
+            if (notification.senderId) {
+                setView('publicProfile', notification.senderId);
+            } else if (notification.resourceId) {
+                // Fallback for course/lecturer subscriptions that link to resource
+                setView('resourceDetail', notification.resourceId);
+            }
+            break;
         case NotificationType.NewResource:
         case NotificationType.RequestFulfilled:
             if (notification.resourceId) {
@@ -131,9 +138,15 @@ const Header: React.FC<{ onUploadClick: () => void }> = ({ onUploadClick }) => {
             }
             break;
         case NotificationType.NewForumPost:
+            if (notification.forumPostId) {
+                setView('forumDetail', notification.forumPostId);
+            }
+            break;
         case NotificationType.NewReply:
             if (notification.forumPostId) {
                 setView('forumDetail', notification.forumPostId);
+            } else if (notification.resourceId) {
+                setView('resourceDetail', notification.resourceId);
             }
             break;
     }

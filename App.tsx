@@ -257,11 +257,12 @@ const App: React.FC = () => {
   // ------------------------------------------------------------------
   // HELPER: CREATE NOTIFICATION
   // ------------------------------------------------------------------
-  const sendNotification = async (recipientId: string, type: NotificationType, message: string, linkIds?: { resourceId?: string, forumPostId?: string, conversationId?: string }) => {
-      if (recipientId === user?.id) return; // Don't notify self
+  const sendNotification = async (recipientId: string, senderId: string, type: NotificationType, message: string, linkIds?: { resourceId?: string, forumPostId?: string, conversationId?: string }) => {
+      if (recipientId === senderId) return; // Don't notify self
 
       await addDoc(collection(db, "notifications"), {
           recipientId,
+          senderId,
           type,
           message,
           timestamp: new Date().toISOString(),
@@ -477,6 +478,7 @@ const App: React.FC = () => {
                });
                sendNotification(
                    fulfillingRequest.requester.id,
+                   user.id,
                    NotificationType.RequestFulfilled,
                    `${user.name} fulfilled your request for ${fulfillingRequest.title}`,
                    { resourceId: docRef.id }
@@ -508,7 +510,7 @@ const App: React.FC = () => {
                    }
 
                    if (shouldNotify) {
-                       sendNotification(u.id, NotificationType.Subscription, msg, { resourceId: docRef.id });
+                       sendNotification(u.id, user.id, NotificationType.Subscription, msg, { resourceId: docRef.id });
                    }
                });
           }
@@ -601,14 +603,14 @@ const App: React.FC = () => {
         // 1. Notify resource author
         const resource = resources.find(r => r.id === resourceId);
         if (resource && resource.author.id !== user.id) {
-            sendNotification(resource.author.id, NotificationType.NewReply, `${user.name} commented on your resource: ${resource.title}`, { resourceId });
+            sendNotification(resource.author.id, user.id, NotificationType.NewReply, `${user.name} commented on your resource: ${resource.title}`, { resourceId });
         }
 
         // 2. Notify parent comment author (if reply)
         if (parentId) {
             const parentComment = resource?.comments.find(c => c.id === parentId);
             if (parentComment && parentComment.author.id !== user.id && parentComment.author.id !== resource?.author.id) {
-                 sendNotification(parentComment.author.id, NotificationType.NewReply, `${user.name} replied to your comment on ${resource?.title}`, { resourceId });
+                 sendNotification(parentComment.author.id, user.id, NotificationType.NewReply, `${user.name} replied to your comment on ${resource?.title}`, { resourceId });
             }
         }
 
@@ -709,14 +711,14 @@ const App: React.FC = () => {
           // 1. Notify post author
           const post = forumPosts.find(p => p.id === postId);
           if (post && post.author.id !== user.id) {
-              sendNotification(post.author.id, NotificationType.NewReply, `${user.name} replied to your post: ${post.title}`, { forumPostId: postId });
+              sendNotification(post.author.id, user.id, NotificationType.NewReply, `${user.name} replied to your post: ${post.title}`, { forumPostId: postId });
           }
 
           // 2. Notify parent reply author
           if (parentId) {
               const parentReply = post?.replies.find(r => r.id === parentId);
               if (parentReply && parentReply.author.id !== user.id && parentReply.author.id !== post?.author.id) {
-                  sendNotification(parentReply.author.id, NotificationType.NewReply, `${user.name} replied to your comment in ${post?.title}`, { forumPostId: postId });
+                  sendNotification(parentReply.author.id, user.id, NotificationType.NewReply, `${user.name} replied to your comment in ${post?.title}`, { forumPostId: postId });
               }
           }
 
@@ -815,7 +817,7 @@ const App: React.FC = () => {
           await updateDoc(userRef, { "subscriptions.users": arrayRemove(targetUserId) });
       } else {
           await updateDoc(userRef, { "subscriptions.users": arrayUnion(targetUserId) });
-          sendNotification(targetUserId, NotificationType.Subscription, `${user.name} started following you.`);
+          sendNotification(targetUserId, user.id, NotificationType.Subscription, `${user.name} started following you.`);
       }
   };
 
@@ -864,8 +866,6 @@ const App: React.FC = () => {
       });
 
       // 3. Propagate updates to Comments (inside Resources)
-      // Since we can't easily query nested array objects in Firestore without specific structure/index,
-      // we iterate recent resources (or all in this case as dataset is small for now).
       const allResSnap = await getDocs(collection(db, "resources"));
       allResSnap.forEach(async (docSnap) => {
           const res = docSnap.data() as Resource;
@@ -959,7 +959,7 @@ const App: React.FC = () => {
           lastMessageTimestamp: new Date().toISOString()
       });
 
-      sendNotification(recipientId, NotificationType.NewMessage, `New message from ${user.name}`, { conversationId });
+      sendNotification(recipientId, user.id, NotificationType.NewMessage, `New message from ${user.name}`, { conversationId });
   };
   
   const sendDirectMessageToUser = (userId: string, text: string) => {

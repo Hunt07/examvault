@@ -13,7 +13,7 @@ export interface User {
   currentYear: number;
   currentSemester: number;
   subscriptions: UserSubscriptions;
-  savedResourceIds?: string[];
+  savedResourceIds: string[];
 }
 
 export interface UserSubscriptions {
@@ -114,6 +114,7 @@ export enum NotificationType {
 export interface Notification {
   id: string;
   recipientId: string;
+  senderId?: string; // Added to allow redirection to profile
   type: NotificationType;
   message: string;
   resourceId?: string;

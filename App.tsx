@@ -90,12 +90,19 @@ const sanitizeForFirestore = (obj: any): any => {
   return JSON.parse(JSON.stringify(obj));
 };
 
-// Generate a default SVG avatar with the user's first initial
+// Generate a default SVG avatar with the user's first initial and random color
 const generateDefaultAvatar = (name: string): string => {
-  const initial = name.charAt(0).toUpperCase();
+  const initial = name && name.length > 0 ? name.charAt(0).toUpperCase() : '?';
+  const colors = ['#2563eb', '#db2777', '#ca8a04', '#16a34a', '#dc2626', '#7c3aed', '#0891b2', '#be123c'];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const color = colors[Math.abs(hash) % colors.length];
+
   const svgString = `
     <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
-      <rect width="100" height="100" fill="#2563eb"/>
+      <rect width="100" height="100" fill="${color}"/>
       <text x="50" y="65" font-family="Arial, sans-serif" font-size="50" font-weight="bold" fill="white" text-anchor="middle">${initial}</text>
     </svg>
   `.trim();
@@ -174,6 +181,19 @@ const App: React.FC = () => {
                 hasUpdates = true;
             }
 
+            // Legacy avatar check on login
+            const isLegacyAvatar = !userData.avatarUrl || 
+                                   userData.avatarUrl.includes('picsum') || 
+                                   userData.avatarUrl.includes('dicebear') ||
+                                   userData.avatarUrl.includes('via.placeholder');
+
+            if (isLegacyAvatar) {
+                const newAvatar = generateDefaultAvatar(userData.name);
+                userData.avatarUrl = newAvatar;
+                updates.avatarUrl = newAvatar;
+                hasUpdates = true;
+            }
+
             if (hasUpdates) {
                 await updateDoc(userRef, updates);
             }
@@ -227,7 +247,34 @@ const App: React.FC = () => {
 
     // Listen to Users
     const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
-      const fetchedUsers = snapshot.docs.map(d => d.data() as User);
+      const fetchedUsers: User[] = [];
+      const batch = writeBatch(db);
+      let needsCommit = false;
+
+      snapshot.docs.forEach((docSnap) => {
+        const u = docSnap.data() as User;
+        
+        // GLOBAL MIGRATION CHECK
+        // If avatar is missing, or is a known legacy placeholder, replace it.
+        const isLegacy = !u.avatarUrl || 
+                         u.avatarUrl.includes('picsum') || 
+                         u.avatarUrl.includes('dicebear') || 
+                         u.avatarUrl.includes('via.placeholder');
+        
+        if (isLegacy) {
+            const newAvatar = generateDefaultAvatar(u.name);
+            u.avatarUrl = newAvatar; // Optimistic update for UI state
+            const ref = doc(db, "users", u.id);
+            batch.update(ref, { avatarUrl: newAvatar });
+            needsCommit = true;
+        }
+        fetchedUsers.push(u);
+      });
+
+      if (needsCommit) {
+          batch.commit().catch(e => console.error("Avatar migration failed", e));
+      }
+
       setUsers(fetchedUsers);
       if (user) {
         const me = fetchedUsers.find(u => u.id === user.id);
@@ -317,15 +364,21 @@ const App: React.FC = () => {
   useEffect(() => {
       if (!user) return;
       // Find messages sent TO the current user that are still 'Sent'
+      // Simulate network delay of 1.5s
       const incomingSentMessages = directMessages.filter(m => m.recipientId === user.id && m.status === MessageStatus.Sent);
       
       if (incomingSentMessages.length > 0) {
-          const batch = writeBatch(db);
-          incomingSentMessages.forEach(msg => {
-              const msgRef = doc(db, "directMessages", msg.id);
-              batch.update(msgRef, { status: MessageStatus.Delivered });
-          });
-          batch.commit();
+          const timeoutId = setTimeout(() => {
+              const batch = writeBatch(db);
+              let hasUpdates = false;
+              incomingSentMessages.forEach(msg => {
+                  const msgRef = doc(db, "directMessages", msg.id);
+                  batch.update(msgRef, { status: MessageStatus.Delivered });
+                  hasUpdates = true;
+              });
+              if (hasUpdates) batch.commit();
+          }, 1500);
+          return () => clearTimeout(timeoutId);
       }
   }, [directMessages, user]);
 

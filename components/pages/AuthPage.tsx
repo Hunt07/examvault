@@ -92,7 +92,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
 
         {/* Login Card */}
         <div className="bg-white p-8 rounded-xl shadow-xl border border-slate-100">
-          <h2 className="text-2xl font-bold text-center text-slate-800 mb-6">Student & Staff Login</h2>
+          <h2 className="text-2xl font-bold text-center text-slate-800 mb-6">Student Login</h2>
 
           {/* Email Preview + Status */}
           <div className="mb-5">

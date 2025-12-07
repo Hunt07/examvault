@@ -930,8 +930,6 @@ const App: React.FC = () => {
       });
 
       // 3. Propagate updates to Comments (inside Resources)
-      // Since we can't easily query nested array objects in Firestore without specific structure/index,
-      // we iterate recent resources (or all in this case as dataset is small for now).
       const allResSnap = await getDocs(collection(db, "resources"));
       allResSnap.forEach(async (docSnap) => {
           const res = docSnap.data() as Resource;

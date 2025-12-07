@@ -174,14 +174,6 @@ const App: React.FC = () => {
                 hasUpdates = true;
             }
 
-            // Migration for Legacy Avatars (Dicebear/Picsum) to Initials
-            if (userData.avatarUrl && (userData.avatarUrl.includes('dicebear') || userData.avatarUrl.includes('picsum'))) {
-                const newAvatar = generateDefaultAvatar(userData.name);
-                userData.avatarUrl = newAvatar;
-                updates.avatarUrl = newAvatar;
-                hasUpdates = true;
-            }
-
             if (hasUpdates) {
                 await updateDoc(userRef, updates);
             }
@@ -196,7 +188,7 @@ const App: React.FC = () => {
               id: firebaseUser.uid,
               name: displayName,
               email: firebaseUser.email || "",
-              avatarUrl: defaultAvatar, 
+              avatarUrl: defaultAvatar, // Use Initial-based SVG
               joinDate: new Date().toISOString(),
               bio: "I am a student at UNIMY.",
               points: 0,

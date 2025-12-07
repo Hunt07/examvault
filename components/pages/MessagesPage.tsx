@@ -364,16 +364,13 @@ const MessagesPage: React.FC<{ activeConversationId: string | null }> = ({ activ
                         </div>
                         <div className="p-4 bg-white dark:bg-dark-surface border-t border-slate-200 dark:border-zinc-700 w-full relative">
                             {showEmojiPicker && (
-                                <div ref={emojiPickerRef} className="absolute bottom-20 left-4 bg-white dark:bg-zinc-800 shadow-xl rounded-lg p-2 border border-slate-200 dark:border-zinc-700 grid grid-cols-4 gap-2 z-20">
+                                <div ref={emojiPickerRef} className="absolute bottom-20 right-4 bg-white dark:bg-zinc-800 shadow-xl rounded-lg p-2 border border-slate-200 dark:border-zinc-700 grid grid-cols-4 gap-2 z-20">
                                     {emojis.map(emoji => (
                                         <button key={emoji} onClick={() => addEmoji(emoji)} className="text-xl p-1 hover:bg-slate-100 dark:hover:bg-zinc-700 rounded transition">{emoji}</button>
                                     ))}
                                 </div>
                             )}
                             <form onSubmit={handleSendMessage} className="flex items-center gap-2 w-full">
-                                <button type="button" onClick={() => setShowEmojiPicker(!showEmojiPicker)} className="p-2 text-slate-500 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 transition">
-                                    <Smile size={24} />
-                                </button>
                                 <input
                                     type="text"
                                     value={newMessage}
@@ -382,6 +379,9 @@ const MessagesPage: React.FC<{ activeConversationId: string | null }> = ({ activ
                                     className="flex-grow bg-slate-100 dark:bg-zinc-800 dark:text-white text-slate-900 placeholder:text-slate-500 dark:placeholder:text-slate-500 px-4 py-3 border border-slate-300 dark:border-zinc-700 rounded-full focus:ring-primary-500 focus:border-primary-500 transition min-w-0"
                                     autoComplete="off"
                                 />
+                                <button type="button" onClick={() => setShowEmojiPicker(!showEmojiPicker)} className="p-2 text-slate-500 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 transition">
+                                    <Smile size={24} />
+                                </button>
                                 <button type="submit" className="bg-primary-600 text-white p-3 rounded-full hover:bg-primary-700 transition shrink-0">
                                     <Send size={20} />
                                 </button>

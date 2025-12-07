@@ -87,7 +87,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
             <BookOpen size={32} />
           </div>
           <h1 className="text-4xl font-bold text-slate-800 tracking-tight">ExamVault</h1>
-          <p className="text-slate-500 mt-2 font-medium">Unimy's Collaborative Study Hub</p>
+          <p className="text-slate-500 mt-2 font-medium">UNIMY's Collaborative Study Hub</p>
         </div>
 
         {/* Login Card */}

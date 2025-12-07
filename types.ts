@@ -140,6 +140,8 @@ export interface DirectMessage {
   text: string;
   timestamp: string;
   status: MessageStatus;
+  isDeleted?: boolean;
+  editedAt?: string;
 }
 
 export interface Conversation {

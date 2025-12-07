@@ -65,6 +65,8 @@ interface AppContextType {
   toggleCourseCodeSubscription: (courseCode: string) => void;
   updateUserProfile: (data: Partial<User>) => void;
   sendMessage: (conversationId: string, text: string) => void;
+  editMessage: (messageId: string, newText: string) => void;
+  deleteMessage: (messageId: string) => void;
   startConversation: (userId: string, initialMessage?: string) => void;
   sendDirectMessageToUser: (userId: string, text: string) => void;
   markNotificationAsRead: (id: string) => void;
@@ -86,6 +88,18 @@ export const AppContext = React.createContext<AppContextType>({} as AppContextTy
 // Helper to remove undefined values which Firestore hates
 const sanitizeForFirestore = (obj: any): any => {
   return JSON.parse(JSON.stringify(obj));
+};
+
+// Generate a default SVG avatar with the user's first initial
+const generateDefaultAvatar = (name: string): string => {
+  const initial = name.charAt(0).toUpperCase();
+  const svgString = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
+      <rect width="100" height="100" fill="#2563eb"/>
+      <text x="50" y="65" font-family="Arial, sans-serif" font-size="50" font-weight="bold" fill="white" text-anchor="middle">${initial}</text>
+    </svg>
+  `.trim();
+  return `data:image/svg+xml;base64,${btoa(svgString)}`;
 };
 
 const App: React.FC = () => {
@@ -167,11 +181,14 @@ const App: React.FC = () => {
             setUser(userData);
           } else {
             // New user - Create profile in Firestore
+            const displayName = firebaseUser.displayName || "Student";
+            const defaultAvatar = generateDefaultAvatar(displayName);
+
             const newUser: User = {
               id: firebaseUser.uid,
-              name: firebaseUser.displayName || "Student",
+              name: displayName,
               email: firebaseUser.email || "",
-              avatarUrl: firebaseUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${firebaseUser.email}`,
+              avatarUrl: defaultAvatar, // Use generated initial avatar
               joinDate: new Date().toISOString(),
               bio: "I am a student at UNIMY.",
               points: 0,
@@ -1043,6 +1060,22 @@ const App: React.FC = () => {
 
       sendNotification(recipientId, user.id, NotificationType.NewMessage, `New message from ${user.name}`, { conversationId });
   };
+
+  const editMessage = async (messageId: string, newText: string) => {
+      const msgRef = doc(db, "directMessages", messageId);
+      await updateDoc(msgRef, {
+          text: newText,
+          editedAt: new Date().toISOString()
+      });
+  };
+
+  const deleteMessage = async (messageId: string) => {
+      const msgRef = doc(db, "directMessages", messageId);
+      await updateDoc(msgRef, {
+          isDeleted: true,
+          text: "" // Clear text content for privacy
+      });
+  };
   
   const sendDirectMessageToUser = (userId: string, text: string) => {
       startConversation(userId, text);
@@ -1115,7 +1148,7 @@ const App: React.FC = () => {
       addForumPost, handlePostVote, deleteForumPost, addReplyToPost, handleReplyVote, deleteReplyFromPost, toggleVerifiedAnswer,
       addResourceRequest, deleteResourceRequest, openUploadForRequest,
       toggleUserSubscription, toggleLecturerSubscription, toggleCourseCodeSubscription,
-      updateUserProfile, sendMessage, startConversation, sendDirectMessageToUser, markNotificationAsRead, markAllNotificationsAsRead, markMessagesAsRead,
+      updateUserProfile, sendMessage, editMessage, deleteMessage, startConversation, sendDirectMessageToUser, markNotificationAsRead, markAllNotificationsAsRead, markMessagesAsRead,
       clearAllNotifications,
       goBack, hasUnreadMessages, hasUnreadDiscussions,
       isLoading, deleteResource,

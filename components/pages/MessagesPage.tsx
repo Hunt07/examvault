@@ -3,7 +3,7 @@ import React, { useContext, useMemo, useState, useEffect, useRef } from 'react';
 import { AppContext } from '../../App';
 import type { User } from '../../types';
 import { MessageStatus } from '../../types';
-import { Send, Check, CheckCheck, MessageCircle, ArrowLeft, FileText, Notebook, ExternalLink } from 'lucide-react';
+import { Send, Check, CheckCheck, MessageCircle, ArrowLeft, FileText, Notebook, ExternalLink, MoreVertical, Edit2, Trash2, X } from 'lucide-react';
 
 const formatTimestamp = (timestamp: string): string => {
     const date = new Date(timestamp);
@@ -31,10 +31,64 @@ const MessageStatusIcon: React.FC<{ status: MessageStatus }> = ({ status }) => {
     }
 };
 
-const MessageBubble: React.FC<{ text: string; isSender: boolean }> = ({ text, isSender }) => {
-    const { setView, resources } = useContext(AppContext);
-    
+interface MessageBubbleProps {
+    message: {
+        id: string;
+        text: string;
+        timestamp: string;
+        isDeleted?: boolean;
+        editedAt?: string;
+    };
+    isSender: boolean;
+}
+
+const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isSender }) => {
+    const { setView, resources, deleteMessage, editMessage } = useContext(AppContext);
+    const [showOptions, setShowOptions] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editText, setEditText] = useState(message.text);
+    const optionsRef = useRef<HTMLDivElement>(null);
+
+    // 15 minutes in milliseconds
+    const EDIT_WINDOW = 15 * 60 * 1000;
+    const canEdit = isSender && !message.isDeleted && (Date.now() - new Date(message.timestamp).getTime() < EDIT_WINDOW);
+    const canDelete = isSender && !message.isDeleted;
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (optionsRef.current && !optionsRef.current.contains(event.target as Node)) {
+                setShowOptions(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const handleDelete = () => {
+        if (confirm("Are you sure you want to delete this message?")) {
+            deleteMessage(message.id);
+        }
+        setShowOptions(false);
+    };
+
+    const handleEdit = () => {
+        setIsEditing(true);
+        setShowOptions(false);
+    };
+
+    const submitEdit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (editText.trim() && editText !== message.text) {
+            editMessage(message.id, editText);
+        }
+        setIsEditing(false);
+    };
+
     const renderText = (text: string) => {
+        if (message.isDeleted) {
+            return <span className="italic opacity-60 flex items-center gap-1"><X size={12}/> This message was deleted</span>;
+        }
+
         // Regex to find URLs
         const urlRegex = /(https?:\/\/[^\s]+|http:\/\/[^\s]+)/g;
         const parts = text.split(urlRegex);
@@ -96,9 +150,56 @@ const MessageBubble: React.FC<{ text: string; isSender: boolean }> = ({ text, is
         });
     };
 
+    if (isEditing) {
+        return (
+            <form onSubmit={submitEdit} className="w-full">
+                <input 
+                    type="text" 
+                    value={editText} 
+                    onChange={e => setEditText(e.target.value)}
+                    className="w-full px-2 py-1 rounded text-slate-800 dark:text-white bg-white/90 dark:bg-black/20 border-none focus:ring-1 focus:ring-white mb-1"
+                    autoFocus
+                />
+                <div className="flex justify-end gap-2 text-xs">
+                    <button type="button" onClick={() => setIsEditing(false)} className="opacity-70 hover:opacity-100">Cancel</button>
+                    <button type="submit" className="font-bold hover:underline">Save</button>
+                </div>
+            </form>
+        );
+    }
+
     return (
-        <div className="break-words whitespace-pre-wrap text-sm md:text-base">
-            {renderText(text)}
+        <div className="group relative">
+            <div className="break-words whitespace-pre-wrap text-sm md:text-base">
+                {renderText(message.text)}
+                {message.editedAt && !message.isDeleted && <span className="text-[10px] opacity-60 italic ml-1">(edited)</span>}
+            </div>
+            
+            {/* Context Menu Trigger */}
+            {(canEdit || canDelete) && (
+                <button 
+                    onClick={() => setShowOptions(!showOptions)}
+                    className={`absolute -right-2 -top-2 opacity-0 group-hover:opacity-100 transition p-1 rounded-full ${isSender ? 'text-white hover:bg-white/20' : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-zinc-600'}`}
+                >
+                    <MoreVertical size={12} />
+                </button>
+            )}
+
+            {/* Context Menu */}
+            {showOptions && (
+                <div ref={optionsRef} className="absolute right-0 top-4 z-10 bg-white dark:bg-zinc-800 shadow-lg rounded-lg border border-slate-200 dark:border-zinc-700 py-1 min-w-[100px] overflow-hidden">
+                    {canEdit && (
+                        <button onClick={handleEdit} className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-zinc-700 text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                            <Edit2 size={12} /> Edit
+                        </button>
+                    )}
+                    {canDelete && (
+                        <button onClick={handleDelete} className="w-full text-left px-3 py-2 text-xs hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 flex items-center gap-2">
+                            <Trash2 size={12} /> Delete
+                        </button>
+                    )}
+                </div>
+            )}
         </div>
     );
 };
@@ -181,7 +282,7 @@ const MessagesPage: React.FC<{ activeConversationId: string | null }> = ({ activ
                                         {lastMessage && <p className="text-xs text-slate-500 dark:text-slate-400 shrink-0">{formatTimestamp(lastMessage.timestamp)}</p>}
                                     </div>
                                     <div className="flex justify-between items-start">
-                                        <p title={lastMessage?.text || 'No messages yet'} className="text-sm text-slate-600 dark:text-slate-300 truncate">{lastMessage?.text || 'No messages yet'}</p>
+                                        <p title={lastMessage?.isDeleted ? 'Message deleted' : (lastMessage?.text || 'No messages yet')} className="text-sm text-slate-600 dark:text-slate-300 truncate italic">{lastMessage?.isDeleted ? 'Message deleted' : (lastMessage?.text || 'No messages yet')}</p>
                                         {unreadCount > 0 && <span className="text-xs font-bold text-white bg-primary-600 rounded-full w-5 h-5 flex items-center justify-center shrink-0">{unreadCount}</span>}
                                     </div>
                                 </div>
@@ -219,7 +320,16 @@ const MessagesPage: React.FC<{ activeConversationId: string | null }> = ({ activ
                                     <div key={msg.id} className={`flex items-end gap-2 ${msg.senderId === user.id ? 'justify-end' : ''}`}>
                                         {msg.senderId !== user.id && <img src={usersMap.get(msg.senderId)?.avatarUrl} alt="sender" className="w-8 h-8 rounded-full" />}
                                         <div className={`max-w-[85%] md:max-w-md p-3 rounded-2xl min-w-0 ${msg.senderId === user.id ? 'bg-primary-500 text-white rounded-br-none' : 'bg-white dark:bg-zinc-700 text-slate-800 dark:text-white rounded-bl-none shadow-sm'}`}>
-                                            <MessageBubble text={msg.text} isSender={msg.senderId === user.id} />
+                                            <MessageBubble 
+                                                message={{
+                                                    id: msg.id,
+                                                    text: msg.text,
+                                                    timestamp: msg.timestamp,
+                                                    isDeleted: msg.isDeleted,
+                                                    editedAt: msg.editedAt
+                                                }} 
+                                                isSender={msg.senderId === user.id} 
+                                            />
                                             <div className={`flex items-center gap-1.5 mt-1 ${msg.senderId === user.id ? 'justify-end' : 'justify-start'}`}>
                                                 <span className={`text-xs ${msg.senderId === user.id ? 'opacity-70' : 'text-slate-400 dark:text-slate-400'}`}>{formatTimestamp(msg.timestamp)}</span>
                                                 {msg.senderId === user.id && <MessageStatusIcon status={msg.status} />}

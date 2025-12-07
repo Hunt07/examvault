@@ -1,4 +1,3 @@
-
 import React, { useContext, useState, useMemo, useRef, useEffect } from 'react';
 import type { ForumPost, ForumReply, Attachment } from '../../types';
 import { AppContext } from '../../App';
@@ -16,7 +15,7 @@ const ReplyComponent: React.FC<{
     const [upvotedReplies, setUpvotedReplies] = useState<Set<string>>(new Set());
     const [isReplying, setIsReplying] = useState(false);
     const [replyText, setReplyText] = useState('');
-    const [replyAttachment, setReplyAttachment] = useState<Attachment | undefined>(undefined);
+    const [replyFile, setReplyFile] = useState<File | undefined>(undefined);
     const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
     const replyTextareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -48,27 +47,21 @@ const ReplyComponent: React.FC<{
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            const type = file.type.startsWith('image/') ? 'image' : 'file';
-            const url = URL.createObjectURL(file);
-            const size = (file.size / 1024).toFixed(0) + ' KB';
-            setReplyAttachment({ type, url, name: file.name, size });
+            setReplyFile(file);
         }
     };
 
     const removeAttachment = () => {
-        if (replyAttachment) {
-            URL.revokeObjectURL(replyAttachment.url);
-            setReplyAttachment(undefined);
-            if (fileInputRef.current) fileInputRef.current.value = '';
-        }
+        setReplyFile(undefined);
+        if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
     const handleReplySubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if ((replyText.trim() || replyAttachment) && user) {
-            addReplyToPost(post.id, replyText, reply.id, replyAttachment);
+        if ((replyText.trim() || replyFile) && user) {
+            addReplyToPost(post.id, replyText, reply.id, replyFile);
             setReplyText('');
-            setReplyAttachment(undefined);
+            setReplyFile(undefined);
             setIsReplying(false);
         }
     };
@@ -192,11 +185,11 @@ const ReplyComponent: React.FC<{
                                 value={replyText}
                                 onValueChange={setReplyText}
                             />
-                            {replyAttachment && (
+                            {replyFile && (
                                 <div className="bg-slate-50 dark:bg-zinc-900 border-x border-slate-300 dark:border-zinc-700 px-4 py-2 flex items-center justify-between">
                                      <div className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-                                        {replyAttachment.type === 'image' ? <ImageIcon size={16}/> : <FileText size={16}/>}
-                                        <span className="truncate max-w-xs">{replyAttachment.name}</span>
+                                        {replyFile.type.startsWith('image/') ? <ImageIcon size={16}/> : <FileText size={16}/>}
+                                        <span className="truncate max-w-xs">{replyFile.name}</span>
                                      </div>
                                      <button type="button" onClick={removeAttachment} className="text-slate-500 hover:text-red-500">
                                         <X size={16} />
@@ -208,7 +201,7 @@ const ReplyComponent: React.FC<{
                                 value={replyText}
                                 onChange={(e) => setReplyText(e.target.value)}
                                 placeholder={`Replying to ${reply.author.name}...`}
-                                className={`w-full bg-slate-100 dark:bg-zinc-800 dark:text-white text-slate-900 placeholder:text-slate-500 dark:placeholder:text-slate-500 px-4 py-2 border border-slate-300 dark:border-zinc-700 ${replyAttachment ? 'border-t-0' : ''} rounded-b-lg focus:ring-primary-500 focus:border-primary-500 transition focus:outline-none`}
+                                className={`w-full bg-slate-100 dark:bg-zinc-800 dark:text-white text-slate-900 placeholder:text-slate-500 dark:placeholder:text-slate-500 px-4 py-2 border border-slate-300 dark:border-zinc-700 ${replyFile ? 'border-t-0' : ''} rounded-b-lg focus:ring-primary-500 focus:border-primary-500 transition focus:outline-none`}
                                 rows={2}
                                 autoFocus
                             />
@@ -246,7 +239,7 @@ const ForumPostDetailPage: React.FC<{ post: ForumPost }> = ({ post }) => {
     const { user, userRanks, setView, handlePostVote, addReplyToPost, goBack, deleteForumPost, scrollTargetId, setScrollTargetId } = useContext(AppContext);
     
     const [newReplyText, setNewReplyText] = useState('');
-    const [newReplyAttachment, setNewReplyAttachment] = useState<Attachment | undefined>(undefined);
+    const [newReplyFile, setNewReplyFile] = useState<File | undefined>(undefined);
     const [isPostUpvoted, setIsPostUpvoted] = useState(false);
     const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
     
@@ -302,27 +295,21 @@ const ForumPostDetailPage: React.FC<{ post: ForumPost }> = ({ post }) => {
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            const type = file.type.startsWith('image/') ? 'image' : 'file';
-            const url = URL.createObjectURL(file);
-            const size = (file.size / 1024).toFixed(0) + ' KB';
-            setNewReplyAttachment({ type, url, name: file.name, size });
+            setNewReplyFile(file);
         }
     };
 
     const removeAttachment = () => {
-        if (newReplyAttachment) {
-            URL.revokeObjectURL(newReplyAttachment.url);
-            setNewReplyAttachment(undefined);
-            if (mainFileInputRef.current) mainFileInputRef.current.value = '';
-        }
+        setNewReplyFile(undefined);
+        if (mainFileInputRef.current) mainFileInputRef.current.value = '';
     };
     
     const handlePostReply = (e: React.FormEvent) => {
         e.preventDefault();
-        if ((newReplyText.trim() || newReplyAttachment) && user) {
-            addReplyToPost(post.id, newReplyText, null, newReplyAttachment);
+        if ((newReplyText.trim() || newReplyFile) && user) {
+            addReplyToPost(post.id, newReplyText, null, newReplyFile);
             setNewReplyText('');
-            setNewReplyAttachment(undefined);
+            setNewReplyFile(undefined);
             if (mainFileInputRef.current) mainFileInputRef.current.value = '';
         }
     };
@@ -439,11 +426,11 @@ const ForumPostDetailPage: React.FC<{ post: ForumPost }> = ({ post }) => {
                                 value={newReplyText}
                                 onValueChange={setNewReplyText}
                             />
-                            {newReplyAttachment && (
+                            {newReplyFile && (
                                 <div className="bg-slate-50 dark:bg-zinc-900 border-x border-slate-300 dark:border-zinc-700 px-4 py-2 flex items-center justify-between">
                                      <div className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-                                        {newReplyAttachment.type === 'image' ? <ImageIcon size={16}/> : <FileText size={16}/>}
-                                        <span className="truncate max-w-xs">{newReplyAttachment.name}</span>
+                                        {newReplyFile.type.startsWith('image/') ? <ImageIcon size={16}/> : <FileText size={16}/>}
+                                        <span className="truncate max-w-xs">{newReplyFile.name}</span>
                                      </div>
                                      <button type="button" onClick={removeAttachment} className="text-slate-500 hover:text-red-500">
                                         <X size={16} />
@@ -455,7 +442,7 @@ const ForumPostDetailPage: React.FC<{ post: ForumPost }> = ({ post }) => {
                                 value={newReplyText}
                                 onChange={(e) => setNewReplyText(e.target.value)}
                                 placeholder="Add your reply..."
-                                className={`w-full bg-slate-100 dark:bg-zinc-800 dark:text-white text-slate-900 placeholder:text-slate-500 dark:placeholder:text-slate-500 px-4 py-2 border border-slate-300 dark:border-zinc-700 ${newReplyAttachment ? 'border-t-0' : ''} rounded-b-lg focus:ring-primary-500 focus:border-primary-500 transition focus:outline-none`}
+                                className={`w-full bg-slate-100 dark:bg-zinc-800 dark:text-white text-slate-900 placeholder:text-slate-500 dark:placeholder:text-slate-500 px-4 py-2 border border-slate-300 dark:border-zinc-700 ${newReplyFile ? 'border-t-0' : ''} rounded-b-lg focus:ring-primary-500 focus:border-primary-500 transition focus:outline-none`}
                                 rows={3}
                             />
                             <input 

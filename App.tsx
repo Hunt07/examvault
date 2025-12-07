@@ -1170,7 +1170,6 @@ const App: React.FC = () => {
                     timestamp: new Date().toISOString(),
                     status: MessageStatus.Sent 
                 });
-                // Send notification manually since we bypassed sendMessage
                 sendNotification(userId, user.id, NotificationType.NewMessage, `New message from ${user.name}`, { conversationId: docRef.id });
             }
             setView('messages', docRef.id);

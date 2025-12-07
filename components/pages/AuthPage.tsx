@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { BookOpen, AlertCircle, CheckCircle } from 'lucide-react';
+import { BookOpen, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { signInWithPopup, signOut, setPersistence, browserLocalPersistence } from "firebase/auth";
 import { auth, microsoftProvider } from "../../services/firebase";
 
@@ -12,6 +12,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState('');
   const [isTouched, setIsTouched] = useState(false);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // Validate university email
   const validateEmail = (value: string) => {
@@ -30,6 +31,11 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
 
   // Handle Microsoft SSO login
   const handleMicrosoftLogin = async () => {
+    if (isLoggingIn) return; // Prevent multiple clicks
+    
+    setIsLoggingIn(true);
+    setEmailError('');
+
     try {
       // FORCE Persistence: This ensures the user stays logged in on refresh
       await setPersistence(auth, browserLocalPersistence);
@@ -49,7 +55,19 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
       onLogin(loggedEmail);
     } catch (error: any) {
       console.error("Microsoft Login failed:", error);
-      alert("Login failed: " + (error.message || JSON.stringify(error)));
+      
+      // Handle specific error codes gracefully
+      if (error.code === 'auth/popup-closed-by-user') {
+        setEmailError('Login cancelled by user.');
+      } else if (error.code === 'auth/cancelled-popup-request') {
+        // This happens if multiple popups are triggered. The disabled button prevents this, 
+        // but if it happens, we just ignore it.
+        console.warn("Popup request cancelled due to conflict.");
+      } else {
+        alert("Login failed: " + (error.message || JSON.stringify(error)));
+      }
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -111,9 +129,19 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
           {/* Microsoft SSO Button */}
           <button
             onClick={handleMicrosoftLogin}
-            className="w-full bg-primary-600 text-white font-bold py-3.5 px-4 rounded-lg hover:bg-primary-700 active:bg-primary-800 transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
+            disabled={isLoggingIn}
+            className={`w-full bg-primary-600 text-white font-bold py-3.5 px-4 rounded-lg hover:bg-primary-700 active:bg-primary-800 transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5 flex items-center justify-center gap-2 ${
+                isLoggingIn ? 'opacity-75 cursor-not-allowed' : ''
+            }`}
           >
-            Sign in with Microsoft SSO
+            {isLoggingIn ? (
+                <>
+                    <Loader2 size={20} className="animate-spin" />
+                    Signing in...
+                </>
+            ) : (
+                "Sign in with Microsoft SSO"
+            )}
           </button>
 
           <div className="mt-6 pt-6 border-t border-slate-100 text-center">

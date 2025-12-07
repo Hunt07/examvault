@@ -19,8 +19,9 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
       setEmailError('Email is required');
       return false;
     }
-    if (!value.endsWith('@student.unimy.edu.my')) {
-      setEmailError('Access restricted to @unimy.edu.my accounts');
+    // Allow both @student.unimy.edu.my AND @unimy.edu.my (for lecturers)
+    if (!value.endsWith('unimy.edu.my')) {
+      setEmailError('Access restricted to University accounts (@unimy.edu.my)');
       return false;
     }
     setEmailError('');
@@ -67,7 +68,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
 
         {/* Login Card */}
         <div className="bg-white p-8 rounded-xl shadow-xl border border-slate-100">
-          <h2 className="text-2xl font-bold text-center text-slate-800 mb-6">Student Login</h2>
+          <h2 className="text-2xl font-bold text-center text-slate-800 mb-6">Student & Staff Login</h2>
 
           {/* Email Preview + Status */}
           <div className="mb-5">

@@ -295,6 +295,24 @@ const App: React.FC = () => {
   };
 
   // ------------------------------------------------------------------
+  // MESSAGE DELIVERY LOGIC (Sent -> Delivered)
+  // ------------------------------------------------------------------
+  useEffect(() => {
+      if (!user) return;
+      // Find messages sent TO the current user that are still 'Sent'
+      const incomingSentMessages = directMessages.filter(m => m.recipientId === user.id && m.status === MessageStatus.Sent);
+      
+      if (incomingSentMessages.length > 0) {
+          const batch = writeBatch(db);
+          incomingSentMessages.forEach(msg => {
+              const msgRef = doc(db, "directMessages", msg.id);
+              batch.update(msgRef, { status: MessageStatus.Delivered });
+          });
+          batch.commit();
+      }
+  }, [directMessages, user]);
+
+  // ------------------------------------------------------------------
   // TOUR LOGIC
   // ------------------------------------------------------------------
   useEffect(() => {
@@ -831,7 +849,7 @@ const App: React.FC = () => {
               status: ResourceRequestStatus.Open,
               ...reqData
           };
-          await addDoc(collection(db, "resourceRequests"), sanitizeForFirestore(newReq));
+          const docRef = await addDoc(collection(db, "resourceRequests"), sanitizeForFirestore(newReq));
           earnPoints(5, "Request posted successfully!");
 
           // Fan-out notification to followers
@@ -843,7 +861,7 @@ const App: React.FC = () => {
                       user.id, 
                       NotificationType.Subscription, 
                       `${user.name} made a new request: ${reqData.title}`,
-                      { forumPostId: undefined } // Can link to request board
+                      { forumPostId: undefined } 
                   );
               }
           });
@@ -1057,11 +1075,24 @@ const App: React.FC = () => {
   };
 
   const markMessagesAsRead = async (conversationId: string) => {
-      // Logic to mark all messages in convo as read for current user
-      // Skipped for brevity (requires batch update of message docs)
+      if (!user) return;
+      const unreadMessages = directMessages.filter(
+          m => m.conversationId === conversationId && m.recipientId === user.id && m.status !== MessageStatus.Read
+      );
+      
+      if (unreadMessages.length > 0) {
+          const batch = writeBatch(db);
+          unreadMessages.forEach(msg => {
+              batch.update(doc(db, "directMessages", msg.id), { status: MessageStatus.Read });
+          });
+          await batch.commit();
+      }
   };
 
-  const hasUnreadMessages = false;
+  const hasUnreadMessages = useMemo(() => {
+      return directMessages.some(m => m.recipientId === user?.id && m.status !== MessageStatus.Read);
+  }, [directMessages, user]);
+
   const hasUnreadDiscussions = false;
 
   if (isLoading) {

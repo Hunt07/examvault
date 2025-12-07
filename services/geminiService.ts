@@ -1,8 +1,9 @@
+
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 
-// Use Vite environment variable for Vercel deployment with safety check
+// Use Vite environment variable or fallback to the provided key
 // Cast to any to prevent TS error: Property 'env' does not exist on type 'ImportMeta'
-const apiKey = (import.meta as any).env?.VITE_API_KEY || "AIzaSyCuN5mDneFpeI9ZVaiD6DRahRvSPGKGHZs";
+const apiKey = (import.meta as any).env?.VITE_API_KEY || "AIzaSyCGWhxfkBqislZN-ab-xMayZ-VvEUebLS8";
 const genAI = new GoogleGenerativeAI(apiKey);
 
 // Using gemini-1.5-flash for best speed/cost ratio in production
@@ -48,7 +49,7 @@ Based on the following material, please provide the summary with these exact sec
     return response.text() || "No summary generated.";
   } catch (error) {
     console.error("Error generating summary with Gemini:", error);
-    return "Could not generate summary. Please check your VITE_API_KEY configuration.";
+    return "Could not generate summary. Please check your Internet connection or API Key quota.";
   }
 };
 

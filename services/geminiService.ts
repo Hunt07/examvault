@@ -1,4 +1,3 @@
-
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 
 // Use Vite environment variable or fallback to the provided key
@@ -6,8 +5,8 @@ import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 const apiKey = (import.meta as any).env?.VITE_API_KEY || "AIzaSyCGWhxfkBqislZN-ab-xMayZ-VvEUebLS8";
 const genAI = new GoogleGenerativeAI(apiKey);
 
-// Using gemini-1.5-flash for best speed/cost ratio in production
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+// Using gemini-2.5-flash as per latest guidelines for text tasks
+const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
 export const summarizeContent = async (
   content: string, 
@@ -119,7 +118,7 @@ export const generateStudySet = async (
 
     // Initialize a model with generation config for JSON
     const jsonModel = genAI.getGenerativeModel({
-        model: "gemini-1.5-flash",
+        model: "gemini-2.5-flash",
         generationConfig: {
             responseMimeType: "application/json",
             responseSchema: schema,

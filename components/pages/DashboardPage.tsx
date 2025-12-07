@@ -5,7 +5,7 @@ import type { Resource, User } from '../../types';
 import { ResourceType, SemesterIntake } from '../../types';
 import ResourceCard from '../ResourceCard';
 import UserCard from '../UserCard';
-import { Search, Filter, X, ChevronDown, ChevronUp, Database } from 'lucide-react';
+import { Search, Filter, X, ChevronDown, ChevronUp, Database, Loader2 } from 'lucide-react';
 
 interface ActiveFilters {
   resourceTypes: Set<ResourceType>;
@@ -16,7 +16,7 @@ interface ActiveFilters {
 }
 
 const DashboardPage: React.FC = () => {
-  const { resources, users, setView } = useContext(AppContext);
+  const { resources, users, setView, areResourcesLoading } = useContext(AppContext);
   const [searchTerm, setSearchTerm] = useState('');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>({
@@ -269,8 +269,16 @@ const DashboardPage: React.FC = () => {
         )}
       </div>
 
-      {/* Empty State / Database Setup */}
-      {isEmptyDatabase && !searchTerm && (
+      {/* Loading State */}
+      {areResourcesLoading && (
+        <div className="flex flex-col items-center justify-center py-20">
+            <Loader2 size={48} className="animate-spin text-primary-500 mb-4" />
+            <p className="text-slate-500 dark:text-slate-400 font-medium">Loading resources...</p>
+        </div>
+      )}
+
+      {/* Empty State / Database Setup - Only show if NOT loading */}
+      {isEmptyDatabase && !searchTerm && !areResourcesLoading && (
         <div className="bg-white dark:bg-dark-surface rounded-xl shadow-md p-8 text-center border border-dashed border-slate-300 dark:border-zinc-700">
             <Database size={48} className="mx-auto text-slate-400 dark:text-slate-500 mb-4" />
             <h3 className="text-xl font-bold text-slate-800 dark:text-white">Database is Empty</h3>
@@ -312,7 +320,7 @@ const DashboardPage: React.FC = () => {
             ))}
           </div>
         ) : (
-          !hasUserResults && !isEmptyDatabase && (
+          !hasUserResults && !isEmptyDatabase && !areResourcesLoading && (
             <div className="text-center py-20 bg-white dark:bg-dark-surface rounded-xl shadow-sm border border-slate-100 dark:border-zinc-700">
               <div className="inline-flex items-center justify-center w-16 h-16 bg-slate-100 dark:bg-zinc-800 rounded-full mb-4">
                 <Search size={32} className="text-slate-400" />

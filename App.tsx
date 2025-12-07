@@ -76,6 +76,7 @@ interface AppContextType {
   hasUnreadMessages: boolean;
   hasUnreadDiscussions: boolean;
   isLoading: boolean;
+  areResourcesLoading: boolean;
   scrollTargetId: string | null;
   setScrollTargetId: (id: string | null) => void;
 }
@@ -90,6 +91,7 @@ const sanitizeForFirestore = (obj: any): any => {
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [areResourcesLoading, setAreResourcesLoading] = useState(true);
   const [view, setViewState] = useState<View>('dashboard');
   const [viewHistory, setViewHistory] = useState<{ view: View; id?: string }[]>([]);
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
@@ -204,6 +206,8 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!user) return;
 
+    setAreResourcesLoading(true);
+
     // Listen to Users
     const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
       const fetchedUsers = snapshot.docs.map(d => d.data() as User);
@@ -217,6 +221,7 @@ const App: React.FC = () => {
     // Listen to Resources
     const unsubResources = onSnapshot(query(collection(db, "resources"), orderBy("uploadDate", "desc")), (snapshot) => {
       setResources(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Resource)));
+      setAreResourcesLoading(false);
     });
 
     // Listen to Forum Posts
@@ -1085,6 +1090,7 @@ const App: React.FC = () => {
       clearAllNotifications,
       goBack, hasUnreadMessages, hasUnreadDiscussions,
       isLoading, deleteResource,
+      areResourcesLoading,
       scrollTargetId, setScrollTargetId
     }}>
       <div className="min-h-screen bg-slate-50 dark:bg-dark-bg transition-colors duration-300">

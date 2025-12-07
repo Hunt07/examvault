@@ -45,6 +45,7 @@ const Header: React.FC<{ onUploadClick: () => void }> = ({ onUploadClick }) => {
   const { user, userRanks, logout, setView, notifications, markNotificationAsRead, markAllNotificationsAsRead, clearAllNotifications, savedResourceIds, resources, isDarkMode, toggleDarkMode, setScrollTargetId } = useContext(AppContext);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const notificationsRef = useRef<HTMLDivElement>(null);
+  const [isConfirmingClear, setIsConfirmingClear] = useState(false);
   
   const [isSavedOpen, setIsSavedOpen] = useState(false);
   const savedRef = useRef<HTMLDivElement>(null);
@@ -89,6 +90,7 @@ const Header: React.FC<{ onUploadClick: () => void }> = ({ onUploadClick }) => {
     const handleClickOutside = (event: MouseEvent) => {
       if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
         setIsNotificationsOpen(false);
+        setIsConfirmingClear(false);
       }
       if (savedRef.current && !savedRef.current.contains(event.target as Node)) {
         setIsSavedOpen(false);
@@ -166,8 +168,11 @@ const Header: React.FC<{ onUploadClick: () => void }> = ({ onUploadClick }) => {
   };
 
   const handleClearAll = () => {
-      if (window.confirm("Are you sure you want to clear all notifications?")) {
+      if (isConfirmingClear) {
           clearAllNotifications();
+          setIsConfirmingClear(false);
+      } else {
+          setIsConfirmingClear(true);
       }
   };
 
@@ -250,7 +255,10 @@ const Header: React.FC<{ onUploadClick: () => void }> = ({ onUploadClick }) => {
             </div>
 
             <div className="relative" ref={notificationsRef} id="tour-notifications">
-              <button onClick={() => setIsNotificationsOpen(prev => !prev)} className="relative p-2 rounded-full text-slate-500 dark:text-white hover:bg-slate-100 dark:hover:bg-zinc-800 hover:text-slate-800 dark:hover:text-primary-400 transition">
+              <button onClick={() => {
+                  setIsNotificationsOpen(prev => !prev);
+                  setIsConfirmingClear(false);
+              }} className="relative p-2 rounded-full text-slate-500 dark:text-white hover:bg-slate-100 dark:hover:bg-zinc-800 hover:text-slate-800 dark:hover:text-primary-400 transition">
                 <Bell size={22} />
                 {unreadCount > 0 && (
                    <span className="absolute top-0 right-0 block h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-0" />
@@ -267,8 +275,8 @@ const Header: React.FC<{ onUploadClick: () => void }> = ({ onUploadClick }) => {
                             </button>
                             )}
                             {userNotifications.length > 0 && (
-                                <button onClick={handleClearAll} className="text-xs text-red-500 hover:text-red-700 font-semibold">
-                                    Clear all
+                                <button onClick={handleClearAll} className={`text-xs font-semibold ${isConfirmingClear ? 'text-red-600 bg-red-50 dark:bg-red-900/30 px-2 py-0.5 rounded' : 'text-red-500 hover:text-red-700'}`}>
+                                    {isConfirmingClear ? 'Confirm Clear?' : 'Clear all'}
                                 </button>
                             )}
                         </div>

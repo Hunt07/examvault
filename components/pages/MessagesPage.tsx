@@ -3,7 +3,7 @@ import React, { useContext, useMemo, useState, useEffect, useRef } from 'react';
 import { AppContext } from '../../App';
 import type { User } from '../../types';
 import { MessageStatus } from '../../types';
-import { Send, Check, CheckCheck, MessageCircle, ArrowLeft, FileText, Notebook, ExternalLink, MoreVertical, Edit2, Trash2, X } from 'lucide-react';
+import { Send, Check, CheckCheck, MessageCircle, ArrowLeft, FileText, Notebook, ExternalLink, MoreVertical, Edit2, Trash2, X, Smile } from 'lucide-react';
 
 const formatTimestamp = (timestamp: string): string => {
     const date = new Date(timestamp);
@@ -21,7 +21,7 @@ const formatTimestamp = (timestamp: string): string => {
 const MessageStatusIcon: React.FC<{ status: MessageStatus }> = ({ status }) => {
     switch (status) {
         case MessageStatus.Read:
-            return <CheckCheck size={16} className="text-white" />;
+            return <CheckCheck size={16} className="text-blue-200" />;
         case MessageStatus.Delivered:
             return <CheckCheck size={16} className="text-white opacity-70" />;
         case MessageStatus.Sent:
@@ -36,6 +36,7 @@ interface MessageBubbleProps {
         id: string;
         text: string;
         timestamp: string;
+        status: MessageStatus;
         isDeleted?: boolean;
         editedAt?: string;
     };
@@ -208,9 +209,13 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isSender }) => {
 const MessagesPage: React.FC<{ activeConversationId: string | null }> = ({ activeConversationId }) => {
     const { user, users, conversations, directMessages, setView, sendMessage, markMessagesAsRead } = useContext(AppContext);
     const [newMessage, setNewMessage] = useState('');
+    const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const chatEndRef = useRef<HTMLDivElement>(null);
+    const emojiPickerRef = useRef<HTMLDivElement>(null);
 
     const usersMap = useMemo(() => new Map(users.map(u => [u.id, u])), [users]);
+
+    const emojis = ['😀', '😂', '😭', '😍', '🥰', '😎', '😊', '🤔', '😅', '🙌', '👍', '👎', '🎉', '🔥', '❤️', '💔'];
 
     const userConversations = useMemo(() => {
         if (!user) return [];
@@ -244,12 +249,28 @@ const MessagesPage: React.FC<{ activeConversationId: string | null }> = ({ activ
         chatEndRef.current?.scrollIntoView();
     }, [activeChatMessages, activeConversationId]);
 
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target as Node)) {
+                setShowEmojiPicker(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
     const handleSendMessage = (e: React.FormEvent) => {
         e.preventDefault();
         if (newMessage.trim() && activeConversationId) {
             sendMessage(activeConversationId, newMessage);
             setNewMessage('');
+            setShowEmojiPicker(false);
         }
+    };
+
+    const addEmoji = (emoji: string) => {
+        setNewMessage(prev => prev + emoji);
+        setShowEmojiPicker(false);
     };
     
     if (!user) return null;
@@ -325,6 +346,7 @@ const MessagesPage: React.FC<{ activeConversationId: string | null }> = ({ activ
                                                     id: msg.id,
                                                     text: msg.text,
                                                     timestamp: msg.timestamp,
+                                                    status: msg.status,
                                                     isDeleted: msg.isDeleted,
                                                     editedAt: msg.editedAt
                                                 }} 
@@ -340,8 +362,18 @@ const MessagesPage: React.FC<{ activeConversationId: string | null }> = ({ activ
                                 <div ref={chatEndRef} />
                             </div>
                         </div>
-                        <div className="p-4 bg-white dark:bg-dark-surface border-t border-slate-200 dark:border-zinc-700 w-full">
-                            <form onSubmit={handleSendMessage} className="flex items-center gap-4 w-full">
+                        <div className="p-4 bg-white dark:bg-dark-surface border-t border-slate-200 dark:border-zinc-700 w-full relative">
+                            {showEmojiPicker && (
+                                <div ref={emojiPickerRef} className="absolute bottom-20 left-4 bg-white dark:bg-zinc-800 shadow-xl rounded-lg p-2 border border-slate-200 dark:border-zinc-700 grid grid-cols-4 gap-2 z-20">
+                                    {emojis.map(emoji => (
+                                        <button key={emoji} onClick={() => addEmoji(emoji)} className="text-xl p-1 hover:bg-slate-100 dark:hover:bg-zinc-700 rounded transition">{emoji}</button>
+                                    ))}
+                                </div>
+                            )}
+                            <form onSubmit={handleSendMessage} className="flex items-center gap-2 w-full">
+                                <button type="button" onClick={() => setShowEmojiPicker(!showEmojiPicker)} className="p-2 text-slate-500 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 transition">
+                                    <Smile size={24} />
+                                </button>
                                 <input
                                     type="text"
                                     value={newMessage}

@@ -174,6 +174,14 @@ const App: React.FC = () => {
                 hasUpdates = true;
             }
 
+            // Migration for Legacy Avatars (Dicebear/Picsum) to Initials
+            if (userData.avatarUrl && (userData.avatarUrl.includes('dicebear') || userData.avatarUrl.includes('picsum'))) {
+                const newAvatar = generateDefaultAvatar(userData.name);
+                userData.avatarUrl = newAvatar;
+                updates.avatarUrl = newAvatar;
+                hasUpdates = true;
+            }
+
             if (hasUpdates) {
                 await updateDoc(userRef, updates);
             }
@@ -188,7 +196,7 @@ const App: React.FC = () => {
               id: firebaseUser.uid,
               name: displayName,
               email: firebaseUser.email || "",
-              avatarUrl: defaultAvatar, // Use generated initial avatar
+              avatarUrl: defaultAvatar, 
               joinDate: new Date().toISOString(),
               bio: "I am a student at UNIMY.",
               points: 0,
@@ -1073,7 +1081,7 @@ const App: React.FC = () => {
       const msgRef = doc(db, "directMessages", messageId);
       await updateDoc(msgRef, {
           isDeleted: true,
-          text: "" // Clear text content for privacy
+          text: ""
       });
   };
   

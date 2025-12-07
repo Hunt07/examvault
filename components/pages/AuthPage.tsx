@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BookOpen, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { signInWithPopup, signOut, setPersistence, browserLocalPersistence } from "firebase/auth";
 import { auth, microsoftProvider } from "../../services/firebase";
@@ -13,6 +13,13 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
   const [emailError, setEmailError] = useState('');
   const [isTouched, setIsTouched] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  // Set persistence immediately on mount to avoid delaying the click handler later
+  useEffect(() => {
+    setPersistence(auth, browserLocalPersistence).catch(err => 
+      console.error("Failed to set persistence:", err)
+    );
+  }, []);
 
   // Validate university email
   const validateEmail = (value: string) => {
@@ -31,16 +38,15 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
 
   // Handle Microsoft SSO login
   const handleMicrosoftLogin = async () => {
-    if (isLoggingIn) return; // Prevent multiple clicks
+    if (isLoggingIn) return; 
     
     setIsLoggingIn(true);
     setEmailError('');
 
     try {
-      // FORCE Persistence: This ensures the user stays logged in on refresh
-      await setPersistence(auth, browserLocalPersistence);
-
+      // Direct call to popup to satisfy browser "User Interaction" requirements
       const result = await signInWithPopup(auth, microsoftProvider);
+      
       const loggedEmail = result.user?.email || "";
       setEmail(loggedEmail);
       setIsTouched(true);
@@ -48,23 +54,23 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
       const isValid = validateEmail(loggedEmail);
       if (!isValid) {
         await signOut(auth);
-        alert("Restricted to University Email only!");
-        return;
+        // We do not alert here, the UI shows the red error text via emailError
+        return; 
       }
 
       onLogin(loggedEmail);
     } catch (error: any) {
       console.error("Microsoft Login failed:", error);
       
-      // Handle specific error codes gracefully
       if (error.code === 'auth/popup-closed-by-user') {
-        setEmailError('Login cancelled by user.');
+        // User closed the window manually. Reset state silently.
+        setEmailError(''); 
       } else if (error.code === 'auth/cancelled-popup-request') {
-        // This happens if multiple popups are triggered. The disabled button prevents this, 
-        // but if it happens, we just ignore it.
-        console.warn("Popup request cancelled due to conflict.");
+        // Multiple clicks. Ignore.
+      } else if (error.code === 'auth/popup-blocked') {
+        setEmailError('Popup blocked. Please allow popups for this site.');
       } else {
-        alert("Login failed: " + (error.message || JSON.stringify(error)));
+        setEmailError('Login failed. Please try again.');
       }
     } finally {
       setIsLoggingIn(false);

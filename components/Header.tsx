@@ -42,7 +42,7 @@ function timeAgo(dateString: string): string {
 }
 
 const Header: React.FC<{ onUploadClick: () => void }> = ({ onUploadClick }) => {
-  const { user, userRanks, logout, setView, notifications, markNotificationAsRead, markAllNotificationsAsRead, savedResourceIds, resources, isDarkMode, toggleDarkMode, setScrollTargetId } = useContext(AppContext);
+  const { user, userRanks, logout, setView, notifications, markNotificationAsRead, markAllNotificationsAsRead, clearAllNotifications, savedResourceIds, resources, isDarkMode, toggleDarkMode, setScrollTargetId } = useContext(AppContext);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const notificationsRef = useRef<HTMLDivElement>(null);
   
@@ -165,6 +165,12 @@ const Header: React.FC<{ onUploadClick: () => void }> = ({ onUploadClick }) => {
       markAllNotificationsAsRead();
   };
 
+  const handleClearAll = () => {
+      if (window.confirm("Are you sure you want to clear all notifications?")) {
+          clearAllNotifications();
+      }
+  };
+
   const getNotificationIcon = (type: NotificationType) => {
     switch (type) {
       case NotificationType.Subscription:
@@ -252,13 +258,20 @@ const Header: React.FC<{ onUploadClick: () => void }> = ({ onUploadClick }) => {
               </button>
               {isNotificationsOpen && (
                  <div className="absolute right-0 mt-2 w-80 md:w-96 bg-white dark:bg-dark-surface rounded-lg shadow-xl z-30 border border-slate-200 dark:border-dark-border">
-                    <div className="p-3 border-b dark:border-dark-border flex justify-between items-center">
+                    <div className="p-3 border-b dark:border-dark-border flex justify-between items-center bg-slate-50 dark:bg-zinc-800/50">
                         <h3 className="font-bold text-slate-800 dark:text-white">Notifications</h3>
-                        {unreadCount > 0 && (
-                          <button onClick={handleMarkAllRead} className="text-sm text-primary-600 dark:text-primary-400 font-semibold hover:text-primary-800 dark:hover:text-primary-300">
-                              Mark all as read
-                          </button>
-                        )}
+                        <div className="flex gap-3">
+                            {unreadCount > 0 && (
+                            <button onClick={handleMarkAllRead} className="text-xs text-primary-600 dark:text-primary-400 font-semibold hover:text-primary-800 dark:hover:text-primary-300">
+                                Mark all read
+                            </button>
+                            )}
+                            {userNotifications.length > 0 && (
+                                <button onClick={handleClearAll} className="text-xs text-red-500 hover:text-red-700 font-semibold">
+                                    Clear all
+                                </button>
+                            )}
+                        </div>
                     </div>
                     <div className="max-h-96 overflow-y-auto">
                         {userNotifications.length > 0 ? (
@@ -266,13 +279,13 @@ const Header: React.FC<{ onUploadClick: () => void }> = ({ onUploadClick }) => {
                                 <button
                                     key={notification.id}
                                     onClick={() => handleNotificationClick(notification)}
-                                    className={`w-full text-left p-3 flex items-start gap-3 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors ${!notification.isRead ? 'bg-primary-50 dark:bg-primary-900/20' : ''}`}
+                                    className={`w-full text-left p-3 flex items-start gap-3 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors border-b border-slate-100 dark:border-zinc-800 last:border-0 ${!notification.isRead ? 'bg-primary-50 dark:bg-primary-900/20' : ''}`}
                                 >
                                     <div className="mt-1 flex-shrink-0">
                                       {getNotificationIcon(notification.type)}
                                     </div>
                                     <div className="flex-1">
-                                        <p className="text-sm text-slate-700 dark:text-slate-300">{notification.message}</p>
+                                        <p className="text-sm text-slate-700 dark:text-slate-300 line-clamp-2">{notification.message}</p>
                                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{timeAgo(notification.timestamp)}</p>
                                     </div>
                                 </button>

@@ -22,7 +22,7 @@ import { auth, db, storage } from './services/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { 
   collection, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, getDocs,
-  onSnapshot, query, orderBy, serverTimestamp, arrayUnion, increment, where, arrayRemove, deleteField 
+  onSnapshot, query, orderBy, serverTimestamp, arrayUnion, increment, where, arrayRemove, deleteField, writeBatch 
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { Loader2 } from 'lucide-react';
@@ -69,6 +69,7 @@ interface AppContextType {
   sendDirectMessageToUser: (userId: string, text: string) => void;
   markNotificationAsRead: (id: string) => void;
   markAllNotificationsAsRead: () => void;
+  clearAllNotifications: () => void;
   markMessagesAsRead: (conversationId: string) => void;
   goBack: () => void;
   deleteResource: (resourceId: string, fileUrl: string, previewUrl?: string) => Promise<void>;
@@ -261,7 +262,7 @@ const App: React.FC = () => {
   // HELPER: CREATE NOTIFICATION
   // ------------------------------------------------------------------
   const sendNotification = async (recipientId: string, senderId: string, type: NotificationType, message: string, linkIds?: { resourceId?: string, forumPostId?: string, conversationId?: string, commentId?: string, replyId?: string }) => {
-      if (recipientId === senderId) return; // Don't notify self
+      if (recipientId === user?.id) return; // Don't notify self
 
       // Check for duplicates in client-side state to avoid spamming
       const isDuplicate = notifications.some(n => 
@@ -827,6 +828,21 @@ const App: React.FC = () => {
           };
           await addDoc(collection(db, "resourceRequests"), sanitizeForFirestore(newReq));
           earnPoints(5, "Request posted successfully!");
+
+          // Fan-out notification to followers
+          users.forEach(u => {
+              if (u.id === user.id) return;
+              if (u.subscriptions?.users?.includes(user.id)) {
+                  sendNotification(
+                      u.id, 
+                      user.id, 
+                      NotificationType.Subscription, 
+                      `${user.name} made a new request: ${reqData.title}`,
+                      { forumPostId: undefined } // Can link to request board
+                  );
+              }
+          });
+
       } catch (error) {
           console.error("Failed to add request", error);
           setToast({ message: "Failed to post request.", type: 'error' });
@@ -1024,6 +1040,19 @@ const App: React.FC = () => {
       });
   };
 
+  const clearAllNotifications = async () => {
+      if (!user) return;
+      // Get all user notifications
+      const q = query(collection(db, "notifications"), where("recipientId", "==", user.id));
+      const querySnapshot = await getDocs(q);
+      const batch = writeBatch(db);
+      querySnapshot.forEach((doc) => {
+          batch.delete(doc.ref);
+      });
+      await batch.commit();
+      setNotifications([]);
+  };
+
   const markMessagesAsRead = async (conversationId: string) => {
       // Logic to mark all messages in convo as read for current user
       // Skipped for brevity (requires batch update of message docs)
@@ -1053,6 +1082,7 @@ const App: React.FC = () => {
       addResourceRequest, deleteResourceRequest, openUploadForRequest,
       toggleUserSubscription, toggleLecturerSubscription, toggleCourseCodeSubscription,
       updateUserProfile, sendMessage, startConversation, sendDirectMessageToUser, markNotificationAsRead, markAllNotificationsAsRead, markMessagesAsRead,
+      clearAllNotifications,
       goBack, hasUnreadMessages, hasUnreadDiscussions,
       isLoading, deleteResource,
       scrollTargetId, setScrollTargetId

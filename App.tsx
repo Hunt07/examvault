@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import type { User, Resource, ForumPost, Comment, ForumReply, Notification, Conversation, DirectMessage, ResourceRequest, Attachment } from './types';
 import { NotificationType, MessageStatus, ResourceRequestStatus } from './types';
@@ -45,15 +46,15 @@ interface AppContextType {
   userRanks: Map<string, number>;
   savedResourceIds: string[];
   toggleSaveResource: (resourceId: string) => void;
-  handleVote: (resourceId: string, type: 'upvote' | 'downvote' | 'undo_upvote' | 'undo_downvote') => void;
+  handleVote: (resourceId: string, action: 'up' | 'down') => void;
   addCommentToResource: (resourceId: string, text: string, parentId: string | null) => void;
-  handleCommentVote: (resourceId: string, commentId: string, type: 'upvote' | 'undo_upvote') => void;
+  handleCommentVote: (resourceId: string, commentId: string) => void;
   deleteCommentFromResource: (resourceId: string, comment: Comment) => Promise<void>;
   addForumPost: (post: { title: string; courseCode: string; body: string; tags: string[] }) => void;
-  handlePostVote: (postId: string, type: 'upvote' | 'undo_upvote') => void;
+  handlePostVote: (postId: string, action: 'up' | 'down') => void;
   deleteForumPost: (postId: string) => Promise<void>;
   addReplyToPost: (postId: string, text: string, parentId: string | null, file?: File) => void;
-  handleReplyVote: (postId: string, replyId: string, type: 'upvote' | 'undo_upvote') => void;
+  handleReplyVote: (postId: string, replyId: string) => void;
   deleteReplyFromPost: (postId: string, reply: ForumReply) => Promise<void>;
   toggleVerifiedAnswer: (postId: string, replyId: string) => void;
   addResourceRequest: (req: { title: string; courseCode: string; details: string }) => void;
@@ -192,7 +193,6 @@ const App: React.FC = () => {
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
   const [scrollTargetId, setScrollTargetId] = useState<string | null>(null);
   
-  // Initialize dark mode from local storage or system preference
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const savedTheme = localStorage.getItem('examvault_theme');
     if (savedTheme) {
@@ -201,7 +201,6 @@ const App: React.FC = () => {
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
   
-  // Real Data Containers
   const [users, setUsers] = useState<User[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
   const [forumPosts, setForumPosts] = useState<ForumPost[]>([]);
@@ -213,16 +212,11 @@ const App: React.FC = () => {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [fulfillingRequest, setFulfillingRequest] = useState<ResourceRequest | undefined>(undefined);
 
-  // Toast State
   const [toast, setToast] = useState<{ message: string; points?: number; type?: 'success' | 'error' | 'info' } | null>(null);
 
-  // Tour State
   const [runTour, setRunTour] = useState(false);
   const [tourStep, setTourStep] = useState(0);
 
-  // ------------------------------------------------------------------
-  // 1. AUTHENTICATION PERSISTENCE & USER CREATION
-  // ------------------------------------------------------------------
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
@@ -231,10 +225,7 @@ const App: React.FC = () => {
           const userSnap = await getDoc(userRef);
 
           if (userSnap.exists()) {
-            // Existing user - load profile
             const userData = userSnap.data() as User;
-            
-            // Auto-repair missing fields in Firestore if they don't exist
             let hasUpdates = false;
             const updates: any = {};
 
@@ -255,7 +246,6 @@ const App: React.FC = () => {
                 hasUpdates = true;
             }
 
-            // Legacy avatar check on login
             const isLegacyAvatar = !userData.avatarUrl || 
                                    (!userData.avatarUrl.startsWith('data:') && !userData.avatarUrl.includes('firebasestorage'));
 
@@ -268,7 +258,6 @@ const App: React.FC = () => {
 
             if (hasUpdates) {
                 await updateDoc(userRef, updates);
-                // Also propagate to all other collections if avatar changed
                 if (updates.avatarUrl) {
                     propagateUserUpdates(userData.id, { avatarUrl: updates.avatarUrl });
                 }
@@ -276,7 +265,6 @@ const App: React.FC = () => {
 
             setUser(userData);
           } else {
-            // New user - Create profile in Firestore
             const displayName = firebaseUser.displayName || "Student";
             const defaultAvatar = generateDefaultAvatar(displayName);
 
@@ -284,7 +272,7 @@ const App: React.FC = () => {
               id: firebaseUser.uid,
               name: displayName,
               email: firebaseUser.email || "",
-              avatarUrl: defaultAvatar, // Use Initial-based SVG
+              avatarUrl: defaultAvatar,
               joinDate: new Date().toISOString(),
               bio: "I am a student at UNIMY.",
               points: 0,
@@ -313,15 +301,11 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  // ------------------------------------------------------------------
-  // 2. REAL-TIME DATA LISTENERS (FIRESTORE)
-  // ------------------------------------------------------------------
   useEffect(() => {
     if (!user) return;
 
     setAreResourcesLoading(true);
 
-    // Listen to Users
     const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
       const fetchedUsers: User[] = [];
       const batch = writeBatch(db);
@@ -330,15 +314,12 @@ const App: React.FC = () => {
 
       snapshot.docs.forEach((docSnap) => {
         const u = docSnap.data() as User;
-        
-        // GLOBAL MIGRATION CHECK
-        // Identify any avatar that is NOT a Data URI (SVG) AND NOT a Firebase Storage URL
         const isLegacy = !u.avatarUrl || 
                          (!u.avatarUrl.startsWith('data:') && !u.avatarUrl.includes('firebasestorage.googleapis.com'));
         
         if (isLegacy) {
             const newAvatar = generateDefaultAvatar(u.name);
-            u.avatarUrl = newAvatar; // Optimistic update for UI state
+            u.avatarUrl = newAvatar;
             const ref = doc(db, "users", u.id);
             batch.update(ref, { avatarUrl: newAvatar });
             needsCommit = true;
@@ -349,7 +330,6 @@ const App: React.FC = () => {
 
       if (needsCommit) {
           batch.commit().then(() => {
-              // After batch update users, trigger deep propagation for corrected users
               usersToPropagate.forEach(u => propagateUserUpdates(u.id, { avatarUrl: u.avatarUrl }));
           }).catch(e => console.error("Avatar migration failed", e));
       }
@@ -361,36 +341,46 @@ const App: React.FC = () => {
       }
     });
 
-    // Listen to Resources
     const unsubResources = onSnapshot(query(collection(db, "resources"), orderBy("uploadDate", "desc")), (snapshot) => {
-      setResources(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Resource)));
+      setResources(snapshot.docs.map(d => {
+          const data = d.data();
+          return { 
+              id: d.id, 
+              ...data,
+              upvotedBy: data.upvotedBy || [],
+              downvotedBy: data.downvotedBy || [],
+          } as Resource;
+      }));
       setAreResourcesLoading(false);
     });
 
-    // Listen to Forum Posts
     const unsubPosts = onSnapshot(query(collection(db, "forumPosts"), orderBy("timestamp", "desc")), (snapshot) => {
-      setForumPosts(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ForumPost)));
+      setForumPosts(snapshot.docs.map(d => {
+          const data = d.data();
+          return {
+              id: d.id,
+              ...data,
+              upvotedBy: data.upvotedBy || [],
+              downvotedBy: data.downvotedBy || [],
+              replies: (data.replies || []).map((r: any) => ({...r, upvotedBy: r.upvotedBy || []}))
+          } as ForumPost;
+      }));
     });
 
-    // Listen to Requests
     const unsubRequests = onSnapshot(query(collection(db, "resourceRequests"), orderBy("timestamp", "desc")), (snapshot) => {
       setResourceRequests(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ResourceRequest)));
     });
 
-    // Listen to Conversations
     const unsubConvos = onSnapshot(query(collection(db, "conversations"), where("participants", "array-contains", user.id)), (snapshot) => {
       setConversations(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Conversation)));
     });
 
-    // Listen to Direct Messages
     const unsubMessages = onSnapshot(query(collection(db, "directMessages"), orderBy("timestamp", "asc")), (snapshot) => {
         setDirectMessages(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as DirectMessage)));
     });
 
-    // Listen to Notifications
     const unsubNotifs = onSnapshot(query(collection(db, "notifications"), where("recipientId", "==", user.id)), (snapshot) => {
       const fetchedNotifs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Notification));
-      // Sort client-side
       fetchedNotifs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       setNotifications(fetchedNotifs);
     });
@@ -406,13 +396,9 @@ const App: React.FC = () => {
     };
   }, [user?.id]);
 
-  // ------------------------------------------------------------------
-  // HELPER: CREATE NOTIFICATION
-  // ------------------------------------------------------------------
   const sendNotification = async (recipientId: string, senderId: string, type: NotificationType, message: string, linkIds?: { resourceId?: string, forumPostId?: string, conversationId?: string, commentId?: string, replyId?: string, requestId?: string }) => {
-      if (recipientId === user?.id) return; // Don't notify self
+      if (recipientId === user?.id) return;
 
-      // Check for duplicates in client-side state to avoid spamming
       const isDuplicate = notifications.some(n => 
           n.recipientId === recipientId &&
           n.senderId === senderId &&
@@ -438,12 +424,8 @@ const App: React.FC = () => {
       });
   };
 
-  // ------------------------------------------------------------------
-  // MESSAGE DELIVERY LOGIC (Sent -> Delivered)
-  // ------------------------------------------------------------------
   useEffect(() => {
       if (!user) return;
-      // Find messages sent TO the current user that are still 'Sent'
       const incomingSentMessages = directMessages.filter(m => m.recipientId === user.id && m.status === MessageStatus.Sent);
       
       if (incomingSentMessages.length > 0) {
@@ -461,9 +443,6 @@ const App: React.FC = () => {
       }
   }, [directMessages, user]);
 
-  // ------------------------------------------------------------------
-  // TOUR LOGIC
-  // ------------------------------------------------------------------
   useEffect(() => {
     if (user && !isLoading) {
       const hasSeenTour = localStorage.getItem(`examvault_tour_${user.id}`);
@@ -505,9 +484,6 @@ const App: React.FC = () => {
     }
   }, [isDarkMode]);
 
-  // ------------------------------------------------------------------
-  // NAVIGATION
-  // ------------------------------------------------------------------
   const setView = (newView: View, id?: string, options?: { replace?: boolean }) => {
     if (!options?.replace) {
         setViewHistory(prev => [...prev, { view: newView, id }]);
@@ -531,9 +507,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleLogin = (email: string) => {
-    // Handled by AuthPage
-  };
+  const handleLogin = (email: string) => {};
 
   const logout = async () => {
     await signOut(auth);
@@ -554,7 +528,6 @@ const App: React.FC = () => {
     }
   };
 
-  // Helper to award points
   const earnPoints = async (amount: number, message: string) => {
     if (!user) return;
     const userRef = doc(db, "users", user.id);
@@ -562,7 +535,6 @@ const App: React.FC = () => {
         points: increment(amount),
         weeklyPoints: increment(amount)
     });
-    // Dynamically set toast type based on positive/negative points
     const toastType = amount > 0 ? 'success' : 'info';
     setToast({ message, points: amount, type: toastType });
   };
@@ -573,10 +545,6 @@ const App: React.FC = () => {
     sorted.forEach((u, index) => ranks.set(u.id, index));
     return ranks;
   }, [users]);
-
-  // ------------------------------------------------------------------
-  // ACTIONS (UPLOADING, POSTING, DELETING)
-  // ------------------------------------------------------------------
 
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -600,6 +568,8 @@ const App: React.FC = () => {
           uploadDate: new Date().toISOString(),
           upvotes: 0,
           downvotes: 0,
+          upvotedBy: [],
+          downvotedBy: [],
           comments: [],
           fileUrl: '#',
           fileName: file.name,
@@ -637,10 +607,12 @@ const App: React.FC = () => {
 
           const newResource: Omit<Resource, 'id'> = {
               ...resourceData,
-              author: sanitizeForFirestore(user), // Sanitize user object
+              author: sanitizeForFirestore(user), 
               uploadDate: new Date().toISOString(),
               upvotes: 0,
               downvotes: 0,
+              upvotedBy: [],
+              downvotedBy: [],
               comments: [],
               fileUrl: downloadURL,
               fileName: file.name,
@@ -677,10 +649,8 @@ const App: React.FC = () => {
                await updateDoc(userRef, { uploadCount: increment(1) });
                earnPoints(25, "Resource uploaded successfully!");
                
-               // Fan-out notifications to subscribers
                users.forEach(u => {
                    if (u.id === user.id) return;
-                   
                    let shouldNotify = false;
                    let msg = '';
 
@@ -710,7 +680,6 @@ const App: React.FC = () => {
   const deleteResource = async (resourceId: string, fileUrl: string, previewUrl?: string) => {
       if (!user) return;
       
-      // Optimistic navigation
       setViewState('dashboard');
       setSelectedId(undefined);
       
@@ -738,7 +707,6 @@ const App: React.FC = () => {
           const userRef = doc(db, "users", user.id);
           await updateDoc(userRef, { uploadCount: increment(-1) });
 
-          // Deduct points based on whether it fulfilled a request
           const fulfilledReq = resourceRequests.find(req => req.fulfillment?.resourceId === resourceId);
           if (fulfilledReq) {
               const reqRef = doc(db, "resourceRequests", fulfilledReq.id);
@@ -757,15 +725,52 @@ const App: React.FC = () => {
       }
   };
 
-  const handleVote = async (resourceId: string, type: 'upvote' | 'downvote' | 'undo_upvote' | 'undo_downvote') => {
+  const handleVote = async (resourceId: string, action: 'up' | 'down') => {
+    if (!user) return;
+    const resource = resources.find(r => r.id === resourceId);
+    if (!resource) return;
+
     const resourceRef = doc(db, "resources", resourceId);
-    let updates = {};
-    switch (type) {
-        case 'upvote': updates = { upvotes: increment(1) }; break;
-        case 'undo_upvote': updates = { upvotes: increment(-1) }; break;
-        case 'downvote': updates = { downvotes: increment(1) }; break;
-        case 'undo_downvote': updates = { downvotes: increment(-1) }; break;
+    const userId = user.id;
+
+    // Check current status
+    const isUpvoted = resource.upvotedBy?.includes(userId);
+    const isDownvoted = resource.downvotedBy?.includes(userId);
+
+    const updates: any = {};
+
+    if (action === 'up') {
+        if (isUpvoted) {
+            // Toggle off
+            updates.upvotes = increment(-1);
+            updates.upvotedBy = arrayRemove(userId);
+        } else {
+            // Add upvote
+            updates.upvotes = increment(1);
+            updates.upvotedBy = arrayUnion(userId);
+            if (isDownvoted) {
+                // Remove existing downvote
+                updates.downvotes = increment(-1);
+                updates.downvotedBy = arrayRemove(userId);
+            }
+        }
+    } else {
+        if (isDownvoted) {
+            // Toggle off
+            updates.downvotes = increment(-1);
+            updates.downvotedBy = arrayRemove(userId);
+        } else {
+            // Add downvote
+            updates.downvotes = increment(1);
+            updates.downvotedBy = arrayUnion(userId);
+            if (isUpvoted) {
+                // Remove existing upvote
+                updates.upvotes = increment(-1);
+                updates.upvotedBy = arrayRemove(userId);
+            }
+        }
     }
+
     await updateDoc(resourceRef, updates);
   };
 
@@ -775,11 +780,12 @@ const App: React.FC = () => {
         const commentId = `c-${Date.now()}`;
         const newComment: Comment = {
             id: commentId,
-            author: sanitizeForFirestore(user), // Sanitize user to avoid undefined fields
+            author: sanitizeForFirestore(user),
             text,
             timestamp: new Date().toISOString(),
             parentId,
-            upvotes: 0
+            upvotes: 0,
+            upvotedBy: []
         };
         
         const resRef = doc(db, "resources", resourceId);
@@ -787,7 +793,6 @@ const App: React.FC = () => {
             comments: arrayUnion(sanitizeForFirestore(newComment))
         });
 
-        // 1. Notify resource author
         const resource = resources.find(r => r.id === resourceId);
         if (resource && resource.author.id !== user.id) {
             sendNotification(
@@ -799,7 +804,6 @@ const App: React.FC = () => {
             );
         }
 
-        // 2. Notify parent comment author (if reply)
         if (parentId) {
             const parentComment = resource?.comments.find(c => c.id === parentId);
             if (parentComment && parentComment.author.id !== user.id && parentComment.author.id !== resource?.author.id) {
@@ -822,9 +826,7 @@ const App: React.FC = () => {
   const deleteCommentFromResource = async (resourceId: string, comment: Comment) => {
       try {
           const resRef = doc(db, "resources", resourceId);
-          await updateDoc(resRef, {
-              comments: arrayRemove(comment)
-          });
+          await updateDoc(resRef, { comments: arrayRemove(comment) });
           setToast({ message: "Comment deleted.", type: 'success' });
       } catch (error) {
           console.error("Failed to delete comment", error);
@@ -832,14 +834,31 @@ const App: React.FC = () => {
       }
   };
 
-  const handleCommentVote = async (resourceId: string, commentId: string, type: 'upvote' | 'undo_upvote') => {
+  const handleCommentVote = async (resourceId: string, commentId: string) => {
+     if (!user) return;
      const resRef = doc(db, "resources", resourceId);
      const snap = await getDoc(resRef);
      if (snap.exists()) {
          const data = snap.data() as Resource;
+         const userId = user.id;
+         
          const updatedComments = data.comments.map(c => {
              if (c.id === commentId) {
-                 return { ...c, upvotes: c.upvotes + (type === 'upvote' ? 1 : -1) };
+                 const upvotedBy = c.upvotedBy || [];
+                 const isUpvoted = upvotedBy.includes(userId);
+                 
+                 let newUpvotes = c.upvotes;
+                 let newUpvotedBy = [...upvotedBy];
+
+                 if (isUpvoted) {
+                     newUpvotes--;
+                     newUpvotedBy = newUpvotedBy.filter(id => id !== userId);
+                 } else {
+                     newUpvotes++;
+                     newUpvotedBy.push(userId);
+                 }
+
+                 return { ...c, upvotes: newUpvotes, upvotedBy: newUpvotedBy };
              }
              return c;
          });
@@ -855,12 +874,14 @@ const App: React.FC = () => {
               author: sanitizeForFirestore(user),
               timestamp: new Date().toISOString(),
               upvotes: 0,
+              downvotes: 0,
+              upvotedBy: [],
+              downvotedBy: [],
               replies: []
           };
           const docRef = await addDoc(collection(db, "forumPosts"), sanitizeForFirestore(newPost));
           earnPoints(10, "Discussion posted successfully!");
 
-          // Notification Logic
           users.forEach(u => {
               if (u.id === user.id) return;
               let shouldNotify = false;
@@ -896,11 +917,43 @@ const App: React.FC = () => {
       }
   };
 
-  const handlePostVote = async (postId: string, type: 'upvote' | 'undo_upvote') => {
+  const handlePostVote = async (postId: string, action: 'up' | 'down') => {
+      if (!user) return;
       const postRef = doc(db, "forumPosts", postId);
-      await updateDoc(postRef, {
-          upvotes: increment(type === 'upvote' ? 1 : -1)
-      });
+      const post = forumPosts.find(p => p.id === postId);
+      if (!post) return;
+      const userId = user.id;
+
+      const isUpvoted = post.upvotedBy?.includes(userId);
+      const isDownvoted = post.downvotedBy?.includes(userId);
+      const updates: any = {};
+
+      if (action === 'up') {
+          if (isUpvoted) {
+              updates.upvotes = increment(-1);
+              updates.upvotedBy = arrayRemove(userId);
+          } else {
+              updates.upvotes = increment(1);
+              updates.upvotedBy = arrayUnion(userId);
+              if (isDownvoted) {
+                  updates.downvotes = increment(-1);
+                  updates.downvotedBy = arrayRemove(userId);
+              }
+          }
+      } else {
+          if (isDownvoted) {
+              updates.downvotes = increment(-1);
+              updates.downvotedBy = arrayRemove(userId);
+          } else {
+              updates.downvotes = increment(1);
+              updates.downvotedBy = arrayUnion(userId);
+              if (isUpvoted) {
+                  updates.upvotes = increment(-1);
+                  updates.upvotedBy = arrayRemove(userId);
+              }
+          }
+      }
+      await updateDoc(postRef, updates);
   };
 
   const addReplyToPost = async (postId: string, text: string, parentId: string | null, file?: File) => {
@@ -914,6 +967,7 @@ const App: React.FC = () => {
               text,
               timestamp: new Date().toISOString(),
               upvotes: 0,
+              upvotedBy: [],
               isVerified: false,
               parentId
           };
@@ -935,7 +989,6 @@ const App: React.FC = () => {
               replies: arrayUnion(sanitizeForFirestore(newReply))
           });
 
-          // 1. Notify post author
           const post = forumPosts.find(p => p.id === postId);
           if (post && post.author.id !== user.id) {
               sendNotification(
@@ -947,7 +1000,6 @@ const App: React.FC = () => {
               );
           }
 
-          // 2. Notify parent reply author
           if (parentId) {
               const parentReply = post?.replies.find(r => r.id === parentId);
               if (parentReply && parentReply.author.id !== user.id && parentReply.author.id !== post?.author.id) {
@@ -970,9 +1022,7 @@ const App: React.FC = () => {
   const deleteReplyFromPost = async (postId: string, reply: ForumReply) => {
       try {
           const postRef = doc(db, "forumPosts", postId);
-          await updateDoc(postRef, {
-              replies: arrayRemove(reply)
-          });
+          await updateDoc(postRef, { replies: arrayRemove(reply) });
           setToast({ message: "Reply deleted.", type: 'success' });
       } catch (error) {
           console.error("Delete reply failed", error);
@@ -980,14 +1030,31 @@ const App: React.FC = () => {
       }
   };
 
-  const handleReplyVote = async (postId: string, replyId: string, type: 'upvote' | 'undo_upvote') => {
+  const handleReplyVote = async (postId: string, replyId: string) => {
+      if (!user) return;
       const postRef = doc(db, "forumPosts", postId);
       const snap = await getDoc(postRef);
       if (snap.exists()) {
           const data = snap.data() as ForumPost;
+          const userId = user.id;
+
           const updatedReplies = data.replies.map(r => {
               if (r.id === replyId) {
-                  return { ...r, upvotes: r.upvotes + (type === 'upvote' ? 1 : -1) };
+                  const upvotedBy = r.upvotedBy || [];
+                  const isUpvoted = upvotedBy.includes(userId);
+                  
+                  let newUpvotes = r.upvotes;
+                  let newUpvotedBy = [...upvotedBy];
+
+                  if (isUpvoted) {
+                      newUpvotes--;
+                      newUpvotedBy = newUpvotedBy.filter(id => id !== userId);
+                  } else {
+                      newUpvotes++;
+                      newUpvotedBy.push(userId);
+                  }
+
+                  return { ...r, upvotes: newUpvotes, upvotedBy: newUpvotedBy };
               }
               return r;
           });
@@ -1024,26 +1091,14 @@ const App: React.FC = () => {
           const docRef = await addDoc(collection(db, "resourceRequests"), sanitizeForFirestore(newReq));
           earnPoints(5, "Request posted successfully!");
 
-          // Fan-out notification to followers
           users.forEach(u => {
               if (u.id === user.id) return;
-              let shouldNotify = false;
-              let msg = '';
-              
               if (u.subscriptions?.users?.includes(user.id)) {
-                  shouldNotify = true;
-                  msg = `${user.name} made a new request: ${reqData.title}`;
-              } else if (u.subscriptions?.courseCodes?.includes(reqData.courseCode)) {
-                  shouldNotify = true;
-                  msg = `New request in ${reqData.courseCode}: ${reqData.title}`;
-              }
-              
-              if (shouldNotify) {
                   sendNotification(
                       u.id, 
                       user.id, 
                       NotificationType.NewRequest, 
-                      msg,
+                      `${user.name} made a new request: ${reqData.title}`,
                       { requestId: docRef.id } 
                   );
               }
@@ -1113,15 +1168,12 @@ const App: React.FC = () => {
   const updateUserProfile = async (data: Partial<User>) => {
       if (!user) return;
       
-      // 1. Update the main user document
       const userRef = doc(db, "users", user.id);
       await updateDoc(userRef, data);
       
-      // Optimistic update locally
       const updatedUser = { ...user, ...data };
       setUser(updatedUser);
 
-      // Use the new helper for deep propagation
       if (data.name || data.avatarUrl || data.course) {
           propagateUserUpdates(user.id, sanitizeForFirestore(data));
       }
@@ -1168,7 +1220,7 @@ const App: React.FC = () => {
           text: ""
       });
   };
-  
+
   const startConversation = async (userId: string, initialMessage?: string) => {
     if (!user) return;
     
@@ -1220,7 +1272,6 @@ const App: React.FC = () => {
   };
 
   const markAllNotificationsAsRead = async () => {
-      // In a real app with many notifs, use a batch write
       notifications.filter(n => !n.isRead).forEach(async (n) => {
           const notifRef = doc(db, "notifications", n.id);
           await updateDoc(notifRef, { isRead: true });
@@ -1229,7 +1280,6 @@ const App: React.FC = () => {
 
   const clearAllNotifications = async () => {
       if (!user) return;
-      // Get all user notifications
       const q = query(collection(db, "notifications"), where("recipientId", "==", user.id));
       const querySnapshot = await getDocs(q);
       const batch = writeBatch(db);

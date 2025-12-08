@@ -1,7 +1,8 @@
+
 import React, { useContext, useState, useMemo, useRef, useEffect } from 'react';
 import type { ForumPost, ForumReply, Attachment } from '../../types';
 import { AppContext } from '../../App';
-import { ArrowLeft, ThumbsUp, CheckCircle, MessageCircle, Paperclip, Image as ImageIcon, X, FileText, Download, Trash2 } from 'lucide-react';
+import { ArrowLeft, ThumbsUp, ThumbsDown, CheckCircle, MessageCircle, Paperclip, Image as ImageIcon, X, FileText, Download, Trash2 } from 'lucide-react';
 import MarkdownRenderer from '../MarkdownRenderer';
 import MarkdownToolbar from '../MarkdownToolbar';
 import UserRankBadge from '../UserRankBadge';
@@ -12,7 +13,6 @@ const ReplyComponent: React.FC<{
     children: React.ReactNode;
 }> = ({ reply, post, children }) => {
     const { user, userRanks, setView, handleReplyVote, toggleVerifiedAnswer, addReplyToPost, deleteReplyFromPost } = useContext(AppContext);
-    const [upvotedReplies, setUpvotedReplies] = useState<Set<string>>(new Set());
     const [isReplying, setIsReplying] = useState(false);
     const [replyText, setReplyText] = useState('');
     const [replyFile, setReplyFile] = useState<File | undefined>(undefined);
@@ -22,7 +22,7 @@ const ReplyComponent: React.FC<{
 
     const authorRank = userRanks.get(reply.author.id);
     const isPostAuthor = user?.id === post.author.id;
-    const isUpvoted = upvotedReplies.has(reply.id);
+    const isUpvoted = reply.upvotedBy?.includes(user?.id || '');
     const isOwnReply = user?.id === reply.author.id;
 
     const handleUserClick = (userId: string) => {
@@ -34,14 +34,8 @@ const ReplyComponent: React.FC<{
     };
 
     const handleVoteForReply = () => {
-        if (isOwnReply) return;
-        const action = isUpvoted ? 'undo_upvote' : 'upvote';
-        handleReplyVote(post.id, reply.id, action);
-        setUpvotedReplies(prev => {
-            const newSet = new Set(prev);
-            isUpvoted ? newSet.delete(reply.id) : newSet.add(reply.id);
-            return newSet;
-        });
+        if (isOwnReply || !user) return;
+        handleReplyVote(post.id, reply.id);
     };
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -240,13 +234,14 @@ const ForumPostDetailPage: React.FC<{ post: ForumPost }> = ({ post }) => {
     
     const [newReplyText, setNewReplyText] = useState('');
     const [newReplyFile, setNewReplyFile] = useState<File | undefined>(undefined);
-    const [isPostUpvoted, setIsPostUpvoted] = useState(false);
     const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
     
     const mainReplyTextareaRef = useRef<HTMLTextAreaElement>(null);
     const mainFileInputRef = useRef<HTMLInputElement>(null);
     
     const isOwnPost = user?.id === post.author.id;
+    const isUpvoted = post.upvotedBy?.includes(user?.id || '');
+    const isDownvoted = post.downvotedBy?.includes(user?.id || '');
     
     const authorRank = userRanks.get(post.author.id);
     const repliesByParentId = useMemo(() => {
@@ -286,10 +281,14 @@ const ForumPostDetailPage: React.FC<{ post: ForumPost }> = ({ post }) => {
         }
     }, [scrollTargetId, post.id]);
 
-    const handleVoteForPost = () => {
-        if (isOwnPost) return;
-        handlePostVote(post.id, isPostUpvoted ? 'undo_upvote' : 'upvote');
-        setIsPostUpvoted(!isPostUpvoted);
+    const handleUpvote = () => {
+        if (isOwnPost || !user) return;
+        handlePostVote(post.id, 'up');
+    };
+
+    const handleDownvote = () => {
+        if (isOwnPost || !user) return;
+        handlePostVote(post.id, 'down');
     };
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -393,10 +392,10 @@ const ForumPostDetailPage: React.FC<{ post: ForumPost }> = ({ post }) => {
 
                 <div className="pt-6 border-t border-slate-200 dark:border-zinc-700 flex items-center gap-4">
                      <button
-                        onClick={handleVoteForPost}
+                        onClick={handleUpvote}
                         disabled={isOwnPost}
                         className={`flex items-center gap-2 p-3 rounded-lg transition font-semibold ${
-                            isPostUpvoted
+                            isUpvoted
                                 ? 'bg-primary-600 text-white'
                                 : isOwnPost
                                 ? 'bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-slate-500 cursor-not-allowed'
@@ -406,7 +405,21 @@ const ForumPostDetailPage: React.FC<{ post: ForumPost }> = ({ post }) => {
                         <ThumbsUp size={18} />
                         <span>Upvote{post.upvotes > 0 ? ` (${post.upvotes})` : ''}</span>
                     </button>
-                    <div className="flex items-center gap-2">
+                    <button
+                        onClick={handleDownvote}
+                        disabled={isOwnPost}
+                        className={`flex items-center gap-2 p-3 rounded-lg transition font-semibold ${
+                            isDownvoted
+                                ? 'bg-red-600 text-white'
+                                : isOwnPost
+                                ? 'bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                                : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50'
+                        }`}
+                    >
+                        <ThumbsDown size={18} />
+                        {post.downvotes > 0 && <span>{post.downvotes}</span>}
+                    </button>
+                    <div className="flex items-center gap-2 ml-auto">
                         {post.tags.map(tag => (
                             <span key={tag} className="text-xs font-medium text-primary-700 dark:text-primary-300 bg-primary-100 dark:bg-primary-900/30 px-2 py-1 rounded-full">{tag}</span>
                         ))}

@@ -6,7 +6,7 @@ import { X, UploadCloud, Image as ImageIcon, Info } from 'lucide-react';
 
 interface UploadModalProps {
   onClose: () => void;
-  onUpload: (resource: Omit<Resource, 'id' | 'author' | 'uploadDate' | 'upvotes' | 'downvotes' | 'comments' | 'fileUrl' | 'fileName' | 'previewImageUrl' | 'contentForAI' | 'fileBase64' | 'mimeType'>, file: File, coverImageFile: File | null) => void;
+  onUpload: (resource: Omit<Resource, 'id' | 'author' | 'uploadDate' | 'upvotes' | 'downvotes' | 'upvotedBy' | 'downvotedBy' | 'comments' | 'fileUrl' | 'fileName' | 'previewImageUrl' | 'contentForAI' | 'fileBase64' | 'mimeType'>, file: File, coverImageFile: File | null) => void;
   fulfillingRequest?: ResourceRequest;
 }
 

@@ -46,6 +46,7 @@ export interface Comment {
   timestamp: string;
   parentId?: string | null;
   upvotes: number;
+  upvotedBy: string[];
 }
 
 export interface Resource {
@@ -68,6 +69,8 @@ export interface Resource {
   uploadDate: string;
   upvotes: number;
   downvotes: number;
+  upvotedBy: string[];
+  downvotedBy: string[];
   comments: Comment[];
   contentForAI: string; // Mock text content for Gemini (fallback)
 }
@@ -85,6 +88,7 @@ export interface ForumReply {
   text: string;
   timestamp: string;
   upvotes: number;
+  upvotedBy: string[];
   isVerified: boolean;
   parentId?: string | null;
   attachment?: Attachment;
@@ -99,6 +103,9 @@ export interface ForumPost {
   body: string;
   tags: string[];
   upvotes: number;
+  downvotes: number;
+  upvotedBy: string[];
+  downvotedBy: string[];
   replies: ForumReply[];
 }
 

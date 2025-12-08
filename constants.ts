@@ -128,9 +128,11 @@ export const mockResources: Resource[] = [
     uploadDate: '2024-01-10T09:00:00Z',
     upvotes: 152,
     downvotes: 5,
+    upvotedBy: [],
+    downvotedBy: [],
     comments: [
-        { id: 'c-1', author: mockUser2, text: 'This was a lifesaver for the formatting!', timestamp: '2024-01-11T12:00:00Z', parentId: null, upvotes: 15 },
-        { id: 'c-1-1', author: mockUser3, text: "Glad I could help!", timestamp: '2024-01-11T12:35:00Z', parentId: 'c-1', upvotes: 5 },
+        { id: 'c-1', author: mockUser2, text: 'This was a lifesaver for the formatting!', timestamp: '2024-01-11T12:00:00Z', parentId: null, upvotes: 15, upvotedBy: [] },
+        { id: 'c-1-1', author: mockUser3, text: "Glad I could help!", timestamp: '2024-01-11T12:35:00Z', parentId: 'c-1', upvotes: 5, upvotedBy: [] },
     ],
     contentForAI: `
     Industrial Workshop (BCCS2033) - Project Guidelines
@@ -170,6 +172,8 @@ export const mockResources: Resource[] = [
     uploadDate: '2024-03-22T15:45:00Z',
     upvotes: 210,
     downvotes: 3,
+    upvotedBy: [],
+    downvotedBy: [],
     comments: [],
     contentForAI: `
     Thermodynamics I Cheat Sheet
@@ -197,6 +201,8 @@ export const mockResources: Resource[] = [
     uploadDate: '2024-04-05T11:20:00Z',
     upvotes: 98,
     downvotes: 1,
+    upvotedBy: [],
+    downvotedBy: [],
     comments: [],
     contentForAI: `
     Compiler & Program Analysis (BCCS2093) - Midterm
@@ -231,6 +237,8 @@ export const mockResources: Resource[] = [
     uploadDate: '2023-11-15T14:00:00Z',
     upvotes: 75,
     downvotes: 0,
+    upvotedBy: [],
+    downvotedBy: [],
     comments: [],
     contentForAI: `
     Professional Communication (BGEN2012) - Key Concepts
@@ -267,6 +275,8 @@ export const mockResources: Resource[] = [
     uploadDate: '2023-06-01T09:00:00Z',
     upvotes: 130,
     downvotes: 2,
+    upvotedBy: [],
+    downvotedBy: [],
     comments: [],
     contentForAI: `
     New Venture Creation (MPU3233) Final Exam
@@ -298,6 +308,8 @@ export const mockResources: Resource[] = [
     uploadDate: '2024-03-10T16:20:00Z',
     upvotes: 88,
     downvotes: 1,
+    upvotedBy: [],
+    downvotedBy: [],
     comments: [],
     contentForAI: `
     Mathematics II (BGMT2033) - Chapter Summaries
@@ -336,6 +348,8 @@ export const mockResources: Resource[] = [
     uploadDate: '2023-10-25T11:00:00Z',
     upvotes: 115,
     downvotes: 4,
+    upvotedBy: [],
+    downvotedBy: [],
     comments: [],
     contentForAI: `
     Artificial Intelligence (BCCS3033) Midterm Exam
@@ -365,8 +379,11 @@ export const mockForumPosts: ForumPost[] = [
     body: 'I am struggling to understand admissable heuristics for the A* search algorithm. Can someone explain why the heuristic must never overestimate the cost to reach the goal?',
     tags: ['ai', 'algorithms', 'help-wanted'],
     upvotes: 42,
+    downvotes: 0,
+    upvotedBy: [],
+    downvotedBy: [],
     replies: [
-      { id: 'reply-1-1', author: mockUser2, text: 'If the heuristic overestimates, A* might find a path that it thinks is cheaper but is actually longer than the optimal path. Admissibility guarantees optimality!', timestamp: '2024-05-10T14:30:00Z', upvotes: 15, isVerified: true },
+      { id: 'reply-1-1', author: mockUser2, text: 'If the heuristic overestimates, A* might find a path that it thinks is cheaper but is actually longer than the optimal path. Admissibility guarantees optimality!', timestamp: '2024-05-10T14:30:00Z', upvotes: 15, upvotedBy: [], isVerified: true },
     ]
   },
   {
@@ -378,6 +395,9 @@ export const mockForumPosts: ForumPost[] = [
     body: 'Hi all, the final for Compilers is coming up. I want to go over parsing tables and LL(1) grammars. Anyone interested in joining a study group at the library?',
     tags: ['studying', 'final-exam'],
     upvotes: 68,
+    downvotes: 0,
+    upvotedBy: [],
+    downvotedBy: [],
     replies: []
   },
   {
@@ -389,8 +409,11 @@ export const mockForumPosts: ForumPost[] = [
     body: 'I have my pitch next week for the New Venture Creation module. Does anyone have tips on what Sir Faizol looks for specifically in the financial slides?',
     tags: ['entrepreneurship', 'presentation'],
     upvotes: 25,
+    downvotes: 0,
+    upvotedBy: [],
+    downvotedBy: [],
     replies: [
-        { id: 'reply-3-1', author: mockUser6, text: 'Make sure your break-even analysis is solid. He loves detailed cost structures.', timestamp: '2024-05-14T10:00:00Z', upvotes: 10, isVerified: false }
+        { id: 'reply-3-1', author: mockUser6, text: 'Make sure your break-even analysis is solid. He loves detailed cost structures.', timestamp: '2024-05-14T10:00:00Z', upvotes: 10, upvotedBy: [], isVerified: false }
     ]
   }
 ];

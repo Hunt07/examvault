@@ -20,14 +20,13 @@ const CommentComponent: React.FC<{
   children: React.ReactNode;
 }> = ({ comment, resourceId, children }) => {
   const { user, userRanks, setView, handleCommentVote, addCommentToResource, deleteCommentFromResource } = useContext(AppContext);
-  const [upvotedComments, setUpvotedComments] = useState<Set<string>>(new Set());
   const [isReplying, setIsReplying] = useState(false);
   const [replyText, setReplyText] = useState('');
   const replyTextareaRef = useRef<HTMLTextAreaElement>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   
   const authorRank = userRanks.get(comment.author.id);
-  const isUpvoted = upvotedComments.has(comment.id);
+  const isUpvoted = comment.upvotedBy?.includes(user?.id || '');
   const isOwnComment = user?.id === comment.author.id;
 
   const handleUserClick = (userId: string) => {
@@ -39,14 +38,8 @@ const CommentComponent: React.FC<{
   };
 
   const handleVoteForComment = () => {
-    if (isOwnComment) return;
-    const action = isUpvoted ? 'undo_upvote' : 'upvote';
-    handleCommentVote(resourceId, comment.id, action);
-    setUpvotedComments(prev => {
-      const newSet = new Set(prev);
-      isUpvoted ? newSet.delete(comment.id) : newSet.add(comment.id);
-      return newSet;
-    });
+    if (isOwnComment || !user) return;
+    handleCommentVote(resourceId, comment.id);
   };
 
   const handleReplySubmit = (e: React.FormEvent) => {
@@ -181,8 +174,6 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   const [summary, setSummary] = useState('');
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [newComment, setNewComment] = useState('');
-  // We keep userVote local for optimistic UI, but effect will sync
-  const [userVote, setUserVote] = useState<'upvoted' | 'downvoted' | null>(null);
   const [isReporting, setIsReporting] = useState(false);
   const [reportReason, setReportReason] = useState('');
   const [hasReported, setHasReported] = useState(false);
@@ -191,12 +182,9 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [relatedStartIndex, setRelatedStartIndex] = useState(0);
-
   const [aiGeneratedPreview, setAiGeneratedPreview] = useState('');
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
-
   const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
-  
   const [studySet, setStudySet] = useState<(Flashcard[] | QuizQuestion[]) | null>(null);
   const [studySetType, setStudySetType] = useState<'flashcards' | 'quiz' | null>(null);
   const [isGeneratingStudySet, setIsGeneratingStudySet] = useState(false);
@@ -206,6 +194,9 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   const isFollowingCourse = user?.subscriptions.courseCodes.includes(resource.courseCode);
   const isSaved = savedResourceIds.includes(resource.id);
   const isAuthor = user?.id === resource.author.id;
+
+  const isUpvoted = resource.upvotedBy?.includes(user?.id || '');
+  const isDownvoted = resource.downvotedBy?.includes(user?.id || '');
 
   // Handle Deep Linking / Scrolling
   useEffect(() => {
@@ -225,7 +216,6 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
       }
   }, [scrollTargetId, resource.id]);
 
-  // Reset state when resource changes
   useEffect(() => {
     setSummary('');
     setIsSummarizing(false);
@@ -233,7 +223,6 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     setStudySetType(null);
     setIsGeneratingStudySet(false);
     setNewComment('');
-    setUserVote(null);
     setIsReporting(false);
     setReportReason('');
     setHasReported(false);
@@ -350,29 +339,13 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   };
 
   const handleUpvoteClick = () => {
-    if (userVote === 'upvoted') {
-      handleVote(resource.id, 'undo_upvote');
-      setUserVote(null);
-    } else {
-      if (userVote === 'downvoted') {
-        handleVote(resource.id, 'undo_downvote');
-      }
-      handleVote(resource.id, 'upvote');
-      setUserVote('upvoted');
-    }
+    if (!user) return;
+    handleVote(resource.id, 'up');
   };
 
   const handleDownvoteClick = () => {
-    if (userVote === 'downvoted') {
-      handleVote(resource.id, 'undo_downvote');
-      setUserVote(null);
-    } else {
-      if (userVote === 'upvoted') {
-        handleVote(resource.id, 'undo_upvote');
-      }
-      handleVote(resource.id, 'downvote');
-      setUserVote('downvoted');
-    }
+    if (!user) return;
+    handleVote(resource.id, 'down');
   };
   
   const handleSubmitReport = async () => {
@@ -758,14 +731,14 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
                 <div className="flex items-center gap-2">
                     <button 
                       onClick={handleUpvoteClick}
-                      className={`flex items-center gap-2 p-3 rounded-lg transition font-medium ${userVote === 'upvoted' ? 'bg-green-600 text-white' : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50'}`}
+                      className={`flex items-center gap-2 p-3 rounded-lg transition font-medium ${isUpvoted ? 'bg-green-600 text-white' : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50'}`}
                     >
                         <ThumbsUp size={18} />
                         {resource.upvotes > 0 && <span>{resource.upvotes}</span>}
                     </button>
                     <button
                       onClick={handleDownvoteClick}
-                      className={`flex items-center gap-2 p-3 rounded-lg transition font-medium ${userVote === 'downvoted' ? 'bg-red-600 text-white' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50'}`}
+                      className={`flex items-center gap-2 p-3 rounded-lg transition font-medium ${isDownvoted ? 'bg-red-600 text-white' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50'}`}
                     >
                         <ThumbsDown size={18} />
                         {resource.downvotes > 0 && <span>{resource.downvotes}</span>}

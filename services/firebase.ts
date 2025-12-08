@@ -7,7 +7,7 @@ import { getStorage } from "firebase/storage";
 
 // 🔹 Your Firebase config
 const firebaseConfig = {
-  apiKey: "AIzaSyDgJ3zCBpYfyj-JwYiWFLBSDnWYT03I2HA",
+  apiKey: "AIzaSyCuN5mDneFpeI9ZVaiD6DRahRvSPGKGHZs",
   authDomain: "examvault-live-07.firebaseapp.com",
   projectId: "examvault-live-07",
   storageBucket: "examvault-live-07.firebasestorage.app",

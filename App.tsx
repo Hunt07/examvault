@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import type { User, Resource, ForumPost, Comment, ForumReply, Notification, Conversation, DirectMessage, ResourceRequest, Attachment } from './types';
 import { NotificationType, MessageStatus, ResourceRequestStatus } from './types';
@@ -858,8 +857,27 @@ const App: React.FC = () => {
               upvotes: 0,
               replies: []
           };
-          await addDoc(collection(db, "forumPosts"), sanitizeForFirestore(newPost));
+          const docRef = await addDoc(collection(db, "forumPosts"), sanitizeForFirestore(newPost));
           earnPoints(10, "Discussion posted successfully!");
+
+          // Notification Logic
+          users.forEach(u => {
+              if (u.id === user.id) return;
+              let shouldNotify = false;
+              let msg = '';
+              if (u.subscriptions?.users?.includes(user.id)) {
+                  shouldNotify = true;
+                  msg = `${user.name} posted a new discussion: ${postData.title}`;
+              } else if (u.subscriptions?.courseCodes?.includes(postData.courseCode)) {
+                  shouldNotify = true;
+                  msg = `New discussion in ${postData.courseCode}: ${postData.title}`;
+              }
+
+              if (shouldNotify) {
+                  sendNotification(u.id, user.id, NotificationType.NewForumPost, msg, { forumPostId: docRef.id });
+              }
+          });
+
       } catch (error) {
           console.error("Failed to add post", error);
           setToast({ message: "Failed to post discussion.", type: 'error' });
@@ -1009,13 +1027,24 @@ const App: React.FC = () => {
           // Fan-out notification to followers
           users.forEach(u => {
               if (u.id === user.id) return;
+              let shouldNotify = false;
+              let msg = '';
+              
               if (u.subscriptions?.users?.includes(user.id)) {
+                  shouldNotify = true;
+                  msg = `${user.name} made a new request: ${reqData.title}`;
+              } else if (u.subscriptions?.courseCodes?.includes(reqData.courseCode)) {
+                  shouldNotify = true;
+                  msg = `New request in ${reqData.courseCode}: ${reqData.title}`;
+              }
+              
+              if (shouldNotify) {
                   sendNotification(
                       u.id, 
                       user.id, 
-                      NotificationType.Subscription, 
-                      `${user.name} made a new request: ${reqData.title}`,
-                      { forumPostId: undefined, requestId: docRef.id, resourceId: undefined } 
+                      NotificationType.NewRequest, 
+                      msg,
+                      { requestId: docRef.id } 
                   );
               }
           });
@@ -1139,7 +1168,7 @@ const App: React.FC = () => {
           text: ""
       });
   };
-
+  
   const startConversation = async (userId: string, initialMessage?: string) => {
     if (!user) return;
     
@@ -1170,6 +1199,7 @@ const App: React.FC = () => {
                     timestamp: new Date().toISOString(),
                     status: MessageStatus.Sent 
                 });
+                // Send notification manually since we bypassed sendMessage
                 sendNotification(userId, user.id, NotificationType.NewMessage, `New message from ${user.name}`, { conversationId: docRef.id });
             }
             setView('messages', docRef.id);

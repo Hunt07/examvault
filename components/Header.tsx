@@ -1,7 +1,7 @@
 
 import React, { useContext, useState, useMemo, useRef, useEffect } from 'react';
 import { AppContext } from '../App';
-import { BookOpen, PlusCircle, Bell, User, LogOut, FileText, Mail, MessageSquare, Gift, Bookmark, Sun, Moon } from 'lucide-react';
+import { BookOpen, PlusCircle, Bell, User, LogOut, FileText, Mail, MessageSquare, Gift, Bookmark, Sun, Moon, HelpCircle } from 'lucide-react';
 import type { Notification } from '../types';
 import UserRankBadge from './UserRankBadge';
 import { NotificationType } from '../types';
@@ -158,6 +158,9 @@ const Header: React.FC<{ onUploadClick: () => void }> = ({ onUploadClick }) => {
                 setView('resourceDetail', notification.resourceId);
             }
             break;
+        case NotificationType.NewRequest:
+            setView('requests');
+            break;
     }
 
     setIsNotificationsOpen(false);
@@ -189,6 +192,8 @@ const Header: React.FC<{ onUploadClick: () => void }> = ({ onUploadClick }) => {
         return <MessageSquare size={16} className="text-purple-500" />;
       case NotificationType.RequestFulfilled:
         return <Gift size={16} className="text-teal-500" />;
+      case NotificationType.NewRequest:
+        return <HelpCircle size={16} className="text-amber-500" />;
       default:
         return null;
     }

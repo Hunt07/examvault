@@ -360,7 +360,7 @@ const MessagesPage: React.FC<{ activeConversationId: string | null }> = ({ activ
                             </button>
                         </div>
 
-                        <div className="flex-grow p-4 md:p-6 overflow-y-auto bg-slate-50 dark:bg-black/20 w-full" key={activeConversationId}>
+                        <div className="flex-grow p-4 md:p-6 overflow-y-auto overflow-x-hidden bg-slate-50 dark:bg-black/20 w-full custom-scrollbar" key={activeConversationId}>
                             <div className="space-y-4">
                                 {activeChatMessages.map(msg => (
                                     <div key={msg.id} className={`flex items-end gap-2 ${msg.senderId === user.id ? 'justify-end' : ''}`}>

@@ -375,7 +375,23 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   
   const handleSubmitReport = () => {
     if (reportReason.trim() !== "") {
-      console.log(`Report submitted for resource ${resource.id} with reason: ${reportReason}`);
+      const subject = encodeURIComponent(`[Report] Resource: ${resource.title}`);
+      const body = encodeURIComponent(`
+Report Details
+--------------------------------------------------
+Resource Title: ${resource.title}
+Resource ID: ${resource.id}
+Uploader: ${resource.author.name} (ID: ${resource.author.id})
+--------------------------------------------------
+Reporter: ${user?.name || 'Anonymous'} (ID: ${user?.id || 'N/A'})
+Date: ${new Date().toLocaleString()}
+--------------------------------------------------
+Reason for Report:
+${reportReason}
+`);
+
+      window.location.href = `mailto:examvaultreport@outlook.my?subject=${subject}&body=${body}`;
+
       setIsReporting(false);
       setReportReason('');
       setHasReported(true);

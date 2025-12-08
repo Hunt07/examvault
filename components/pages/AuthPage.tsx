@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { BookOpen, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
-import { signInWithPopup, signOut, setPersistence, browserLocalPersistence } from "firebase/auth";
+import * as firebaseAuth from "firebase/auth";
 import { auth, microsoftProvider } from "../../services/firebase";
 
 interface AuthPageProps {
@@ -16,7 +16,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
 
   // Set persistence immediately on mount to avoid delaying the click handler later
   useEffect(() => {
-    setPersistence(auth, browserLocalPersistence).catch(err => 
+    firebaseAuth.setPersistence(auth, firebaseAuth.browserLocalPersistence).catch(err => 
       console.error("Failed to set persistence:", err)
     );
   }, []);
@@ -45,7 +45,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
 
     try {
       // Direct call to popup to satisfy browser "User Interaction" requirements
-      const result = await signInWithPopup(auth, microsoftProvider);
+      const result = await firebaseAuth.signInWithPopup(auth, microsoftProvider);
       
       const loggedEmail = result.user?.email || "";
       setEmail(loggedEmail);
@@ -53,7 +53,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
 
       const isValid = validateEmail(loggedEmail);
       if (!isValid) {
-        await signOut(auth);
+        await firebaseAuth.signOut(auth);
         // We do not alert here, the UI shows the red error text via emailError
         return; 
       }

@@ -1,13 +1,13 @@
 
 // services/firebase.ts
 import { initializeApp } from "firebase/app";
-import { getAuth, OAuthProvider } from "firebase/auth";
+import * as firebaseAuth from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
 // 🔹 Your Firebase config
 const firebaseConfig = {
-  apiKey: "AIzaSyCuN5mDneFpeI9ZVaiD6DRahRvSPGKGHZs",
+  apiKey: "AIzaSyDgJ3zCBpYfyj-JwYiWFLBSDnWYT03I2HA",
   authDomain: "examvault-live-07.firebaseapp.com",
   projectId: "examvault-live-07",
   storageBucket: "examvault-live-07.firebasestorage.app",
@@ -19,10 +19,10 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 // 🔹 Auth
-export const auth = getAuth(app);
+export const auth = firebaseAuth.getAuth(app);
 
 // 🔹 Microsoft SSO Provider
-export const microsoftProvider = new OAuthProvider("microsoft.com");
+export const microsoftProvider = new firebaseAuth.OAuthProvider("microsoft.com");
 
 // Required scopes & parameters for SSO
 microsoftProvider.setCustomParameters({ prompt: "select_account" });

@@ -132,7 +132,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isSender }) => {
                                         {resource.type === 'Past Paper' ? <FileText size={20}/> : <Notebook size={20}/>}
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                        <p className={`text-sm font-bold truncate ${isSender ? 'text-white' : 'text-slate-900 dark:text-white'}`}>{resource.title}</p>
+                                        <p className="text-sm font-bold truncate">{resource.title}</p>
                                         <p className={`text-xs truncate ${isSender ? 'text-blue-100' : 'text-slate-500 dark:text-slate-400'}`}>
                                         {resource.courseCode} • {resource.type}
                                         </p>
@@ -361,11 +361,11 @@ const MessagesPage: React.FC<{ activeConversationId: string | null }> = ({ activ
                         </div>
 
                         <div className="flex-grow p-4 md:p-6 overflow-y-auto overflow-x-hidden bg-slate-50 dark:bg-black/20 w-full custom-scrollbar" key={activeConversationId}>
-                            <div className="space-y-4">
+                            <div className="flex flex-col gap-2">
                                 {activeChatMessages.map(msg => (
-                                    <div key={msg.id} className={`flex items-end gap-2 ${msg.senderId === user.id ? 'justify-end' : ''}`}>
-                                        {msg.senderId !== user.id && <img src={usersMap.get(msg.senderId)?.avatarUrl} alt="sender" className="w-8 h-8 rounded-full" />}
-                                        <div className={`max-w-[85%] md:max-w-md p-3 rounded-2xl min-w-0 ${msg.senderId === user.id ? 'bg-primary-500 text-white rounded-br-none' : 'bg-white dark:bg-zinc-700 text-slate-800 dark:text-white rounded-bl-none shadow-sm'}`}>
+                                    <div key={msg.id} className={`flex items-end gap-2 w-full ${msg.senderId === user.id ? 'justify-end' : ''}`}>
+                                        {msg.senderId !== user.id && <img src={usersMap.get(msg.senderId)?.avatarUrl} alt="sender" className="w-8 h-8 rounded-full mb-1" />}
+                                        <div className={`max-w-[85%] sm:max-w-[70%] p-3 rounded-2xl shadow-sm relative text-sm md:text-base break-words overflow-hidden ${msg.senderId === user.id ? 'bg-primary-500 text-white rounded-br-none' : 'bg-white dark:bg-zinc-700 text-slate-800 dark:text-white rounded-bl-none'}`}>
                                             <MessageBubble 
                                                 message={{
                                                     id: msg.id,
@@ -378,7 +378,7 @@ const MessagesPage: React.FC<{ activeConversationId: string | null }> = ({ activ
                                                 isSender={msg.senderId === user.id} 
                                             />
                                             <div className={`flex items-center gap-1.5 mt-1 ${msg.senderId === user.id ? 'justify-end' : 'justify-start'}`}>
-                                                <span className={`text-xs ${msg.senderId === user.id ? 'opacity-70' : 'text-slate-400 dark:text-slate-400'}`}>{formatTimestamp(msg.timestamp)}</span>
+                                                <span className={`text-[10px] ${msg.senderId === user.id ? 'opacity-70' : 'text-slate-400 dark:text-slate-400'}`}>{formatTimestamp(msg.timestamp)}</span>
                                                 {msg.senderId === user.id && <MessageStatusIcon status={msg.status} />}
                                             </div>
                                         </div>

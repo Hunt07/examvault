@@ -19,7 +19,7 @@ import ToastNotification from './components/ToastNotification';
 
 // Firebase Imports
 import { auth, db, storage } from './services/firebase';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+import * as firebaseAuth from 'firebase/auth';
 import { 
   collection, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, getDocs,
   onSnapshot, query, orderBy, serverTimestamp, arrayUnion, increment, where, arrayRemove, deleteField, writeBatch 
@@ -218,7 +218,7 @@ const App: React.FC = () => {
   const [tourStep, setTourStep] = useState(0);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    const unsubscribe = firebaseAuth.onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         try {
           const userRef = doc(db, "users", firebaseUser.uid);
@@ -510,7 +510,7 @@ const App: React.FC = () => {
   const handleLogin = (email: string) => {};
 
   const logout = async () => {
-    await signOut(auth);
+    await firebaseAuth.signOut(auth);
     setUser(null);
     setViewState('dashboard');
     setViewHistory([]);

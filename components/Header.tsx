@@ -5,6 +5,7 @@ import { BookOpen, PlusCircle, Bell, User, LogOut, FileText, Mail, MessageSquare
 import type { Notification } from '../types';
 import UserRankBadge from './UserRankBadge';
 import { NotificationType } from '../types';
+import Avatar from './Avatar';
 
 function timeAgo(dateString: string): string {
   const date = new Date(dateString);
@@ -322,9 +323,9 @@ const Header: React.FC<{ onUploadClick: () => void }> = ({ onUploadClick }) => {
 
             <div id="tour-profile-menu" className="relative group">
               <button className="flex items-center gap-2">
-                <img
+                <Avatar
                   src={user?.avatarUrl}
-                  alt={user?.name}
+                  name={user?.name || ''}
                   className="w-10 h-10 rounded-full border-2 border-slate-200 dark:border-slate-700"
                 />
               </button>

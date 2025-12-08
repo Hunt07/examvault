@@ -13,6 +13,7 @@ import ShareModal from '../ShareModal';
 import ResourceCard from '../ResourceCard';
 import { db } from '../../services/firebase';
 import { collection, addDoc } from 'firebase/firestore';
+import Avatar from '../Avatar';
 
 const CommentComponent: React.FC<{
   comment: Comment;
@@ -60,106 +61,95 @@ const CommentComponent: React.FC<{
     <div id={comment.id} className="mt-4 scroll-mt-24 transition-colors duration-1000 p-2 rounded-lg">
       <div className="flex gap-4 items-start">
         <button onClick={() => handleUserClick(comment.author.id)} className="shrink-0">
-          <img src={comment.author.avatarUrl} alt={comment.author.name} className="w-10 h-10 rounded-full" />
+          <Avatar src={comment.author.avatarUrl} name={comment.author.name} className="w-10 h-10 rounded-full" />
         </button>
-        <div className="flex-grow bg-slate-50 dark:bg-zinc-800/50 p-4 rounded-lg">
-          <div className="flex justify-between items-start">
-            <div className="flex flex-col">
-              <div className="flex items-center gap-2">
-                 <button onClick={() => handleUserClick(comment.author.id)} className="font-bold text-slate-900 dark:text-slate-100 hover:text-primary-600 dark:hover:text-primary-400 text-sm hover:underline">{comment.author.name}</button>
-                 <UserRankBadge rank={authorRank} size={14} />
-                 <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-200 dark:bg-zinc-700 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded border border-slate-300 dark:border-zinc-600">
-                    {comment.author.course}
-                 </span>
-              </div>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                {new Date(comment.timestamp).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-              </p>
+        <div className="flex-grow bg-slate-50 dark:bg-zinc-900/50 p-4 rounded-lg border border-transparent dark:border-zinc-700">
+           <div className="flex justify-between items-start">
+                <div className="flex items-center">
+                    <button onClick={() => handleUserClick(comment.author.id)} className="font-semibold text-slate-800 dark:text-white hover:text-primary-600 dark:hover:text-primary-400">{comment.author.name}</button>
+                    <UserRankBadge rank={authorRank} size={16} />
+                    <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">{new Date(comment.timestamp).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span>
+                </div>
             </div>
-          </div>
-          <div className="mt-2 dark:text-slate-200">
-            <MarkdownRenderer content={comment.text} />
-          </div>
-          <div className="flex items-center gap-3 mt-3">
-            <button
-              onClick={handleVoteForComment}
-              disabled={isOwnComment}
-              className={`flex items-center p-2 text-sm font-semibold rounded-lg transition-colors ${
-                isUpvoted
-                  ? 'bg-primary-600 text-white'
-                  : isOwnComment
-                  ? 'bg-slate-100 dark:bg-zinc-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'
-                  : 'bg-white dark:bg-zinc-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-zinc-600'
-              }`}
-            >
-              <ThumbsUp size={14} />
-              {comment.upvotes > 0 && <span className="ml-1.5">{comment.upvotes}</span>}
-            </button>
-            {user && user.id !== comment.author.id && (
-              <button
-                onClick={() => setIsReplying(!isReplying)}
-                className="flex items-center gap-1.5 p-2 text-sm font-semibold text-slate-600 dark:text-slate-300 bg-white dark:bg-zinc-700 hover:bg-slate-200 dark:hover:bg-zinc-600 rounded-lg transition-colors"
-              >
-                <MessageCircle size={14} /> Reply
-              </button>
-            )}
-            {isOwnComment && (
-               <>
-                <button
-                    onClick={() => setIsDeleteConfirmOpen(true)}
-                    className="flex items-center gap-1.5 p-2 text-sm font-semibold text-red-500 bg-white dark:bg-zinc-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+            <div className="mt-2 text-slate-700 dark:text-slate-200">
+                {comment.text}
+            </div>
+            
+            <div className="flex items-center gap-3 mt-3">
+                 <button
+                    onClick={handleVoteForComment}
+                    disabled={isOwnComment}
+                    className={`flex items-center p-2 text-sm font-semibold rounded-lg transition-colors ${
+                        isUpvoted
+                            ? 'bg-primary-600 text-white'
+                            : isOwnComment
+                            ? 'bg-slate-100 dark:bg-zinc-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                            : 'bg-white dark:bg-zinc-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-zinc-600'
+                    }`}
                 >
-                    <Trash2 size={14} />
+                    <ThumbsUp size={14} />
+                    {comment.upvotes > 0 && <span className="ml-1.5">{comment.upvotes}</span>}
                 </button>
-                {isDeleteConfirmOpen && (
-                    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in">
-                        <div className="bg-white dark:bg-zinc-800 p-6 rounded-xl shadow-xl max-w-sm w-full border dark:border-zinc-700">
-                            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Delete Comment?</h3>
-                            <p className="text-slate-500 dark:text-slate-400 mb-6">Are you sure you want to delete this comment?</p>
-                            <div className="flex gap-3 w-full">
-                                <button onClick={() => setIsDeleteConfirmOpen(false)} className="flex-1 py-2 bg-slate-100 dark:bg-zinc-700 text-slate-700 dark:text-slate-200 font-semibold rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-600 transition">Cancel</button>
-                                <button onClick={handleDelete} className="flex-1 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition">Delete</button>
-                            </div>
-                        </div>
-                    </div>
+                {user && user.id !== comment.author.id && (
+                    <button
+                        onClick={() => setIsReplying(!isReplying)}
+                        className="flex items-center gap-1.5 p-2 text-sm font-semibold text-slate-600 dark:text-slate-300 bg-white dark:bg-zinc-700 hover:bg-slate-200 dark:hover:bg-zinc-600 rounded-lg transition-colors"
+                    >
+                        <MessageCircle size={14} /> Reply
+                    </button>
                 )}
-               </>
-            )}
-          </div>
+                {isOwnComment && (
+                    <>
+                        <button 
+                            onClick={() => setIsDeleteConfirmOpen(true)}
+                            className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition"
+                        >
+                            <Trash2 size={14} />
+                        </button>
+                         {isDeleteConfirmOpen && (
+                            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in">
+                                <div className="bg-white dark:bg-zinc-800 p-6 rounded-xl shadow-xl max-w-sm w-full border dark:border-zinc-700">
+                                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Delete Comment?</h3>
+                                    <p className="text-slate-500 dark:text-slate-400 mb-6">Are you sure you want to delete this comment?</p>
+                                    <div className="flex gap-3 w-full">
+                                        <button onClick={() => setIsDeleteConfirmOpen(false)} className="flex-1 py-2 bg-slate-100 dark:bg-zinc-700 text-slate-700 dark:text-slate-200 font-semibold rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-600 transition">Cancel</button>
+                                        <button onClick={handleDelete} className="flex-1 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition">Delete</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </>
+                )}
+            </div>
         </div>
       </div>
-
-      {isReplying && (
+      
+       {isReplying && (
         <div className="ml-14 mt-4">
-          <form onSubmit={handleReplySubmit} className="flex gap-4 items-start">
-            <img src={user?.avatarUrl} alt={user?.name} className="w-8 h-8 rounded-full" />
-            <div className="flex-grow">
-              <MarkdownToolbar
-                textareaRef={replyTextareaRef}
-                value={replyText}
-                onValueChange={setReplyText}
-              />
-              <textarea
-                ref={replyTextareaRef}
-                value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-                placeholder={`Replying to ${comment.author.name}...`}
-                className="w-full bg-slate-100 dark:bg-zinc-800 dark:text-white text-slate-900 placeholder:text-slate-500 dark:placeholder:text-slate-500 px-4 py-2 border border-slate-300 dark:border-zinc-700 rounded-b-lg focus:ring-primary-500 focus:border-primary-500 transition focus:outline-none"
-                rows={2}
-                autoFocus
-              />
-              <div className="flex gap-2 mt-2">
-                <button type="submit" className="bg-primary-600 text-white font-semibold py-1 px-3 rounded-lg hover:bg-primary-700 transition text-sm">
-                  Post Reply
-                </button>
-                <button type="button" onClick={() => setIsReplying(false)} className="bg-slate-200 dark:bg-zinc-700 text-slate-700 dark:text-slate-300 font-semibold py-1 px-3 rounded-lg hover:bg-slate-300 dark:hover:bg-zinc-600 transition text-sm">
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </form>
+            <form onSubmit={handleReplySubmit} className="flex gap-4 items-start">
+                <Avatar src={user?.avatarUrl || ''} name={user?.name || ''} className="w-8 h-8 rounded-full" />
+                <div className="flex-grow">
+                    <textarea
+                        ref={replyTextareaRef}
+                        value={replyText}
+                        onChange={(e) => setReplyText(e.target.value)}
+                        placeholder={`Replying to ${comment.author.name}...`}
+                        className="w-full bg-slate-100 dark:bg-zinc-800 dark:text-white text-slate-900 placeholder:text-slate-500 dark:placeholder:text-slate-500 px-4 py-2 border border-slate-300 dark:border-zinc-700 rounded-lg focus:ring-primary-500 focus:border-primary-500 transition focus:outline-none"
+                        rows={2}
+                        autoFocus
+                    />
+                    <div className="flex gap-2 mt-2 items-center justify-end">
+                        <button type="button" onClick={() => setIsReplying(false)} className="bg-slate-200 dark:bg-zinc-700 text-slate-700 dark:text-slate-300 font-semibold py-1 px-3 rounded-lg hover:bg-slate-300 dark:hover:bg-zinc-600 transition text-sm">
+                            Cancel
+                        </button>
+                        <button type="submit" className="bg-primary-600 text-white font-semibold py-1 px-3 rounded-lg hover:bg-primary-700 transition text-sm">
+                            Post Reply
+                        </button>
+                    </div>
+                </div>
+            </form>
         </div>
-      )}
+       )}
 
       <div className="pl-8 border-l-2 border-slate-200 dark:border-zinc-700 ml-5">
         {children}
@@ -168,725 +158,389 @@ const CommentComponent: React.FC<{
   );
 };
 
-
 const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
-  const { user, userRanks, setView, handleVote, addCommentToResource, goBack, toggleLecturerSubscription, toggleCourseCodeSubscription, savedResourceIds, toggleSaveResource, resources, deleteResource, scrollTargetId, setScrollTargetId } = useContext(AppContext);
-  const [summary, setSummary] = useState('');
-  const [isSummarizing, setIsSummarizing] = useState(false);
-  const [newComment, setNewComment] = useState('');
-  const [isReporting, setIsReporting] = useState(false);
-  const [reportReason, setReportReason] = useState('');
-  const [hasReported, setHasReported] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
-  const [relatedStartIndex, setRelatedStartIndex] = useState(0);
-  const [aiGeneratedPreview, setAiGeneratedPreview] = useState('');
-  const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
-  const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
-  const [studySet, setStudySet] = useState<(Flashcard[] | QuizQuestion[]) | null>(null);
-  const [studySetType, setStudySetType] = useState<'flashcards' | 'quiz' | null>(null);
-  const [isGeneratingStudySet, setIsGeneratingStudySet] = useState(false);
+    const { user, userRanks, setView, toggleSaveResource, handleVote, addCommentToResource, goBack, deleteResource, savedResourceIds, scrollTargetId, setScrollTargetId } = useContext(AppContext);
+    
+    const [summary, setSummary] = useState<string | null>(null);
+    const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+    
+    const [flashcards, setFlashcards] = useState<Flashcard[] | null>(null);
+    const [isGeneratingFlashcards, setIsGeneratingFlashcards] = useState(false);
+    
+    const [quiz, setQuiz] = useState<QuizQuestion[] | null>(null);
+    const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
+    
+    const [commentText, setCommentText] = useState('');
+    const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+    const [isDeleteResourceConfirmOpen, setIsDeleteResourceConfirmOpen] = useState(false);
 
-  const authorRank = userRanks.get(resource.author.id);
-  const isFollowingLecturer = user?.subscriptions.lecturers.includes(resource.lecturer || '');
-  const isFollowingCourse = user?.subscriptions.courseCodes.includes(resource.courseCode);
-  const isSaved = savedResourceIds.includes(resource.id);
-  const isAuthor = user?.id === resource.author.id;
+    const isSaved = savedResourceIds.includes(resource.id);
+    const isUpvoted = resource.upvotedBy?.includes(user?.id || '');
+    const isDownvoted = resource.downvotedBy?.includes(user?.id || '');
+    const isOwner = user?.id === resource.author.id;
+    const authorRank = userRanks.get(resource.author.id);
 
-  const isUpvoted = resource.upvotedBy?.includes(user?.id || '');
-  const isDownvoted = resource.downvotedBy?.includes(user?.id || '');
-
-  // Handle Deep Linking / Scrolling
-  useEffect(() => {
-      if (scrollTargetId) {
-          // Allow DOM to render
-          setTimeout(() => {
-              const targetElement = document.getElementById(scrollTargetId);
-              if (targetElement) {
-                  targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                  targetElement.classList.add('bg-yellow-100', 'dark:bg-yellow-900/20', 'rounded-lg');
-                  setTimeout(() => {
-                      targetElement.classList.remove('bg-yellow-100', 'dark:bg-yellow-900/20', 'rounded-lg');
-                      setScrollTargetId(null);
-                  }, 2000);
-              }
-          }, 500);
-      }
-  }, [scrollTargetId, resource.id]);
-
-  useEffect(() => {
-    setSummary('');
-    setIsSummarizing(false);
-    setStudySet(null);
-    setStudySetType(null);
-    setIsGeneratingStudySet(false);
-    setNewComment('');
-    setIsReporting(false);
-    setReportReason('');
-    setHasReported(false);
-    setIsPreviewOpen(false);
-    setRelatedStartIndex(0);
-    setAiGeneratedPreview('');
-    setIsGeneratingPreview(false);
-  }, [resource.id]);
-
-  const commentsByParentId = useMemo(() => {
-    const group: Record<string, Comment[]> = {};
-    for (const comment of resource.comments) {
-        const parentId = comment.parentId || 'root';
-        if (!group[parentId]) {
-            group[parentId] = [];
+    // Deep linking scroll
+    useEffect(() => {
+        if (scrollTargetId) {
+            setTimeout(() => {
+                const targetElement = document.getElementById(scrollTargetId);
+                if (targetElement) {
+                    targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    targetElement.classList.add('bg-yellow-100', 'dark:bg-yellow-900/20', 'rounded-lg');
+                    setTimeout(() => {
+                        targetElement.classList.remove('bg-yellow-100', 'dark:bg-yellow-900/20', 'rounded-lg');
+                        setScrollTargetId(null);
+                    }, 2000);
+                }
+            }, 500);
         }
-        group[parentId].push(comment);
-    }
-    for (const parentId in group) {
-        group[parentId].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-    }
-    return group;
-  }, [resource.comments]);
+    }, [scrollTargetId, resource.id]);
 
-  const relatedResources = useMemo(() => {
-    // Filter out the current resource
-    const candidates = resources.filter(r => r.id !== resource.id);
+    const handleGenerateSummary = async () => {
+        setIsGeneratingSummary(true);
+        const result = await summarizeContent(resource.contentForAI, resource.fileBase64, resource.mimeType);
+        setSummary(result);
+        setIsGeneratingSummary(false);
+    };
+
+    const handleGenerateFlashcards = async () => {
+        setIsGeneratingFlashcards(true);
+        const result = await generateStudySet(resource.contentForAI, 'flashcards', resource.fileBase64, resource.mimeType);
+        setFlashcards(result);
+        setIsGeneratingFlashcards(false);
+    };
+
+    const handleGenerateQuiz = async () => {
+        setIsGeneratingQuiz(true);
+        const result = await generateStudySet(resource.contentForAI, 'quiz', resource.fileBase64, resource.mimeType);
+        setQuiz(result);
+        setIsGeneratingQuiz(false);
+    };
     
-    // 1. Priority: Same Course Code
-    let matches = candidates.filter(r => r.courseCode === resource.courseCode);
-    
-    // 2. Fallback: Same Subject Area
-    if (matches.length < 8) {
-        const subjectMatch = resource.courseCode.match(/^[A-Za-z]+/);
-        if (subjectMatch) {
-            const subject = subjectMatch[0];
-            const subjectMatches = candidates.filter(r => 
-                r.courseCode.startsWith(subject) && !matches.includes(r)
-            );
-            matches = [...matches, ...subjectMatches];
+    const handleCommentSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (commentText.trim()) {
+            addCommentToResource(resource.id, commentText, null);
+            setCommentText('');
         }
-    }
+    };
 
-    // 3. Fallback: Same Resource Type
-    if (matches.length < 8) {
-        const typeMatches = candidates.filter(r => 
-            r.type === resource.type && !matches.includes(r)
-        );
-        matches = [...matches, ...typeMatches];
-    }
-    
-    // 4. Fallback: Any other resources
-    if (matches.length < 8) {
-        const otherMatches = candidates.filter(r => !matches.includes(r));
-        matches = [...matches, ...otherMatches];
-    }
+    const handleDeleteResource = async () => {
+        await deleteResource(resource.id, resource.fileUrl, resource.previewImageUrl);
+    };
 
-    return matches.slice(0, 8);
-  }, [resources, resource]);
+    // Organize comments hierarchically
+    const commentsByParentId = useMemo(() => {
+        const group: Record<string, Comment[]> = {};
+        if (resource.comments) {
+            for (const comment of resource.comments) {
+                const parentId = comment.parentId || 'root';
+                if (!group[parentId]) {
+                    group[parentId] = [];
+                }
+                group[parentId].push(comment);
+            }
+        }
+        // Sort by timestamp
+        for (const key in group) {
+            group[key].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+        }
+        return group;
+    }, [resource.comments]);
 
-  const handleUserClick = (userId: string) => {
-    if (userId === user?.id) {
-        setView('profile');
-    } else {
-        setView('publicProfile', userId);
-    }
-  };
-  
-  const handleAuthorClick = (authorId: string) => {
-    if (authorId === user?.id) {
-        setView('profile');
-    } else {
-        setView('publicProfile', authorId);
-    }
-  };
-
-  const handleGenerateSummary = async () => {
-    setIsSummarizing(true);
-    setSummary('');
-    // Pass the base64 content and mimeType if available
-    const result = await summarizeContent(resource.contentForAI, resource.fileBase64, resource.mimeType);
-    setSummary(result);
-    setIsSummarizing(false);
-  };
-  
-  const handleGeneratePreview = async () => {
-    if (!resource.fileBase64) return;
-    setIsGeneratingPreview(true);
-    const result = await summarizeContent(resource.contentForAI, resource.fileBase64, resource.mimeType);
-    setAiGeneratedPreview(result);
-    setIsGeneratingPreview(false);
-  };
-  
-  const handleGenerateStudySet = async (type: 'flashcards' | 'quiz') => {
-    setIsGeneratingStudySet(true);
-    setStudySet(null);
-    setStudySetType(type);
-    const result = await generateStudySet(resource.contentForAI, type, resource.fileBase64, resource.mimeType);
-    setStudySet(result);
-    setIsGeneratingStudySet(false);
-  };
-
-  const resetStudySet = () => {
-      setStudySet(null);
-      setStudySetType(null);
-  };
-
-  const handlePostComment = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newComment.trim() && user) {
-      addCommentToResource(resource.id, newComment, null);
-      setNewComment('');
-    }
-  };
-
-  const handleUpvoteClick = () => {
-    if (!user) return;
-    handleVote(resource.id, 'up');
-  };
-
-  const handleDownvoteClick = () => {
-    if (!user) return;
-    handleVote(resource.id, 'down');
-  };
-  
-  const handleSubmitReport = async () => {
-    if (reportReason.trim() !== "") {
-      try {
-        await addDoc(collection(db, "reports"), {
-          resourceId: resource.id,
-          resourceTitle: resource.title,
-          uploaderId: resource.author.id,
-          uploaderName: resource.author.name,
-          reporterId: user?.id || 'anonymous',
-          reporterName: user?.name || 'Anonymous',
-          reason: reportReason,
-          timestamp: new Date().toISOString(),
-          status: 'pending'
-        });
-
-        setIsReporting(false);
-        setReportReason('');
-        setHasReported(true);
-      } catch (error) {
-        console.error("Error submitting report:", error);
-        alert("Failed to submit report. Please try again.");
-      }
-    } else {
-      alert("A reason is required to submit a report.");
-    }
-  };
-
-  const confirmDelete = () => {
-      deleteResource(resource.id, resource.fileUrl, resource.previewImageUrl);
-      setIsDeleteConfirmOpen(false);
-  };
-
-  const handleDownloadClick = () => {
-      setIsDownloading(true);
-      setTimeout(() => setIsDownloading(false), 2000);
-  };
-
-  const renderComments = (parentId: string | null) => {
-    const comments = commentsByParentId[parentId || 'root'] || [];
-    return comments.map(comment => (
-        <CommentComponent key={comment.id} comment={comment} resourceId={resource.id}>
-            {renderComments(comment.id)}
-        </CommentComponent>
-    ));
-  };
-
-
-  const fileType = resource.fileName.split('.').pop()?.toUpperCase();
-
-  const InfoTag: React.FC<{ label: string; value: string | number }> = ({ label, value }) => (
-    <div className="bg-slate-100 dark:bg-zinc-800 p-3 rounded-lg">
-      <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{label}</p>
-      <p className="text-sm text-slate-800 dark:text-slate-200 font-semibold">{value}</p>
-    </div>
-  );
-
-  const renderPreviewContent = () => {
-    const isMock = resource.fileUrl === '#';
-    const ext = resource.fileName.split('.').pop()?.toLowerCase();
-    const isPdf = ext === 'pdf';
-    const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext || '');
-
-    if (isMock) {
-        return (
-            <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-                <AlertCircle size={64} className="text-amber-400 mb-4" />
-                <h3 className="text-xl font-bold text-slate-800 mb-2">Preview Simulated</h3>
-                <p className="text-slate-600 mb-6 max-w-md">
-                    This is a mock resource entry. In a real application, the file would be displayed here.
-                    Below is the extracted text content associated with this resource.
-                </p>
-                <div className="w-full max-w-3xl bg-white rounded-lg border border-slate-200 p-6 text-left h-96 overflow-y-auto shadow-inner">
-                    <MarkdownRenderer content={resource.contentForAI} />
-                </div>
-            </div>
-        );
-    }
-
-    if (isImage) {
-        return <img src={resource.fileUrl} alt="Preview" className="max-w-full max-h-full object-contain" />;
-    }
-
-    if (isPdf) {
-        return <iframe src={resource.fileUrl} className="w-full h-full" title="PDF Preview"></iframe>;
-    }
-
-    // Fallback for unsupported types
-    const isPlaceholderContent = resource.contentForAI === "Content is in the file..." || !resource.contentForAI;
-    const contentToDisplay = aiGeneratedPreview || (isPlaceholderContent ? null : resource.contentForAI);
+    const renderComments = (parentId: string | null) => {
+        const comments = commentsByParentId[parentId || 'root'] || [];
+        return comments.map(comment => (
+            <CommentComponent key={comment.id} comment={comment} resourceId={resource.id}>
+                {renderComments(comment.id)}
+            </CommentComponent>
+        ));
+    };
 
     return (
-        <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-            <FileType size={64} className="text-slate-400 mb-4" />
-            <h3 className="text-xl font-bold text-slate-800 mb-2">Preview Unavailable</h3>
-            <p className="text-slate-600 mb-6 max-w-md">
-                This file type (<strong>.{ext}</strong>) cannot be displayed directly in the browser. 
-                You can download it to view it locally, or use AI to generate a content summary below.
-            </p>
-            
-            <div className="w-full max-w-3xl bg-white rounded-lg border border-slate-200 p-6 text-left h-96 overflow-y-auto shadow-inner relative flex flex-col">
-                <div className="mb-4 pb-2 border-b border-slate-100 flex items-center justify-between shrink-0">
-                    <div className="flex items-center gap-2">
-                        <FileText size={16} className="text-slate-400" />
-                        <span className="text-sm font-semibold text-slate-500">Content Overview</span>
-                    </div>
-                     {!contentToDisplay && resource.fileBase64 && !isGeneratingPreview && (
-                        <button 
-                            onClick={handleGeneratePreview}
-                            className="text-xs bg-primary-50 text-primary-600 px-2 py-1 rounded hover:bg-primary-100 font-semibold transition flex items-center gap-1"
-                        >
-                            <BrainCircuit size={12} />
-                            Generate with AI
-                        </button>
-                    )}
-                </div>
-                
-                <div className="flex-grow overflow-y-auto">
-                    {isGeneratingPreview ? (
-                         <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                            <Loader2 size={32} className="animate-spin mb-2 text-primary-500" />
-                            <p className="text-sm">Analyzing document...</p>
+        <div className="max-w-6xl mx-auto animate-in fade-in duration-300">
+            <div className="flex justify-between items-center mb-6">
+                <button onClick={goBack} className="flex items-center gap-2 text-primary-600 dark:text-primary-400 font-semibold hover:text-primary-800 dark:hover:text-primary-300 transition">
+                    <ArrowLeft size={20} />
+                    Back
+                </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Left Column: Resource Info & Preview */}
+                <div className="lg:col-span-2 space-y-6">
+                    <div className="bg-white dark:bg-dark-surface rounded-xl shadow-md overflow-hidden border border-transparent dark:border-zinc-700">
+                        <div className="relative h-64 md:h-80 bg-slate-100 dark:bg-zinc-800 flex items-center justify-center overflow-hidden group">
+                             <div className="absolute inset-0 bg-cover bg-center blur-sm opacity-50" style={{ backgroundImage: `url(${resource.previewImageUrl})` }}></div>
+                             <img 
+                                src={resource.previewImageUrl} 
+                                alt={resource.title} 
+                                className="relative z-10 h-full w-auto object-contain shadow-lg transition-transform duration-300 group-hover:scale-105" 
+                             />
                         </div>
-                    ) : contentToDisplay ? (
-                        <MarkdownRenderer content={contentToDisplay} />
-                    ) : (
-                        <div className="flex flex-col items-center justify-center h-full text-slate-400 py-12">
-                            <p className="italic mb-4">No text preview available.</p>
-                            {resource.fileBase64 ? (
-                                 <button 
-                                    onClick={handleGeneratePreview}
-                                    className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition font-semibold text-sm shadow-sm"
+                        
+                        <div className="p-6 md:p-8">
+                            <div className="flex flex-col md:flex-row justify-between items-start gap-4 mb-6">
+                                <div>
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${resource.type === 'Past Paper' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'}`}>
+                                            {resource.type}
+                                        </span>
+                                        <span className="px-3 py-1 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-slate-300 text-xs font-bold uppercase tracking-wider">
+                                            {resource.courseCode}
+                                        </span>
+                                    </div>
+                                    <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">{resource.title}</h1>
+                                    <p className="text-lg text-slate-600 dark:text-slate-300">{resource.courseName}</p>
+                                </div>
+                                <div className="flex gap-2 shrink-0">
+                                    <button 
+                                        onClick={() => toggleSaveResource(resource.id)} 
+                                        className={`p-3 rounded-lg transition border ${isSaved ? 'bg-primary-600 text-white border-primary-600' : 'bg-white dark:bg-zinc-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-700'}`}
+                                        title={isSaved ? "Unsave" : "Save"}
+                                    >
+                                        {isSaved ? <BookmarkCheck size={20} /> : <Bookmark size={20} />}
+                                    </button>
+                                    <button 
+                                        onClick={() => setIsShareModalOpen(true)}
+                                        className="p-3 rounded-lg bg-white dark:bg-zinc-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-700 transition"
+                                        title="Share"
+                                    >
+                                        <Share2 size={20} />
+                                    </button>
+                                    {isOwner && (
+                                        <button 
+                                            onClick={() => setIsDeleteResourceConfirmOpen(true)}
+                                            className="p-3 rounded-lg bg-white dark:bg-zinc-800 text-red-600 dark:text-red-400 border border-slate-200 dark:border-zinc-700 hover:bg-red-50 dark:hover:bg-red-900/20 transition"
+                                            title="Delete"
+                                        >
+                                            <Trash2 size={20} />
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                             {isDeleteResourceConfirmOpen && (
+                                <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900 rounded-lg flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in">
+                                    <div className="flex items-center gap-3 text-red-800 dark:text-red-200">
+                                        <AlertCircle size={24} />
+                                        <p className="font-semibold">Are you sure you want to delete this resource?</p>
+                                    </div>
+                                    <div className="flex gap-3">
+                                        <button onClick={() => setIsDeleteResourceConfirmOpen(false)} className="px-4 py-2 bg-white dark:bg-zinc-800 text-slate-700 dark:text-slate-200 font-semibold rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-700 transition">Cancel</button>
+                                        <button onClick={handleDeleteResource} className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition">Delete</button>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                                <div className="p-3 bg-slate-50 dark:bg-zinc-800 rounded-lg">
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold mb-1">Year</p>
+                                    <p className="font-semibold text-slate-800 dark:text-white">{resource.year}</p>
+                                </div>
+                                <div className="p-3 bg-slate-50 dark:bg-zinc-800 rounded-lg">
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold mb-1">Semester</p>
+                                    <p className="font-semibold text-slate-800 dark:text-white">{resource.semester}</p>
+                                </div>
+                                {resource.lecturer && (
+                                    <div className="p-3 bg-slate-50 dark:bg-zinc-800 rounded-lg col-span-2 md:col-span-1">
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold mb-1">Lecturer</p>
+                                        <p className="font-semibold text-slate-800 dark:text-white truncate" title={resource.lecturer}>{resource.lecturer}</p>
+                                    </div>
+                                )}
+                                {resource.examType && (
+                                    <div className="p-3 bg-slate-50 dark:bg-zinc-800 rounded-lg col-span-2 md:col-span-1">
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold mb-1">Exam Type</p>
+                                        <p className="font-semibold text-slate-800 dark:text-white">{resource.examType}</p>
+                                    </div>
+                                )}
+                            </div>
+                            
+                            <div className="prose dark:prose-invert max-w-none mb-8">
+                                <h3 className="text-lg font-bold mb-2 text-slate-800 dark:text-white">Description</h3>
+                                <p className="text-slate-600 dark:text-slate-300 leading-relaxed">{resource.description}</p>
+                            </div>
+
+                            <div className="flex flex-col sm:flex-row items-center gap-4 pt-6 border-t border-slate-100 dark:border-zinc-700">
+                                <a 
+                                    href={resource.fileUrl} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="w-full sm:w-auto bg-primary-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-primary-700 transition flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                                 >
-                                    <BrainCircuit size={16} />
-                                    Generate AI Summary
+                                    <Download size={20} />
+                                    Download File
+                                </a>
+                                <div className="flex items-center gap-4 w-full sm:w-auto justify-center">
+                                    <button 
+                                        onClick={() => handleVote(resource.id, 'up')}
+                                        className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-semibold transition ${isUpvoted ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-zinc-700'}`}
+                                    >
+                                        <ThumbsUp size={20} className={isUpvoted ? 'fill-current' : ''} />
+                                        <span>{resource.upvotes}</span>
+                                    </button>
+                                    <button 
+                                        onClick={() => handleVote(resource.id, 'down')}
+                                        className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-semibold transition ${isDownvoted ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-zinc-700'}`}
+                                    >
+                                        <ThumbsDown size={20} className={isDownvoted ? 'fill-current' : ''} />
+                                        {resource.downvotes > 0 && <span>{resource.downvotes}</span>}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {/* Comments Section */}
+                    <div className="bg-white dark:bg-dark-surface rounded-xl shadow-md p-6 md:p-8 border border-transparent dark:border-zinc-700">
+                        <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-6 flex items-center gap-2">
+                            <MessageSquare size={24} className="text-primary-600 dark:text-primary-400" />
+                            Discussion ({resource.comments?.length || 0})
+                        </h3>
+                        
+                        <form onSubmit={handleCommentSubmit} className="mb-8">
+                            <div className="flex gap-4">
+                                <Avatar src={user?.avatarUrl || ''} name={user?.name || ''} className="w-10 h-10 rounded-full" />
+                                <div className="flex-grow">
+                                    <textarea
+                                        value={commentText}
+                                        onChange={(e) => setCommentText(e.target.value)}
+                                        placeholder="Add a comment or ask a question..."
+                                        className="w-full bg-slate-100 dark:bg-zinc-800 dark:text-white text-slate-900 placeholder:text-slate-500 dark:placeholder:text-slate-500 px-4 py-3 border border-slate-300 dark:border-zinc-700 rounded-lg focus:ring-primary-500 focus:border-primary-500 transition focus:outline-none"
+                                        rows={3}
+                                    />
+                                    <div className="flex justify-end mt-2">
+                                        <button 
+                                            type="submit" 
+                                            disabled={!commentText.trim()}
+                                            className="bg-primary-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            Post Comment
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+
+                        <div className="space-y-6">
+                            {renderComments(null)}
+                            {(!resource.comments || resource.comments.length === 0) && (
+                                <div className="text-center py-8 text-slate-500 dark:text-slate-400 italic">
+                                    No comments yet. Be the first to start the discussion!
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Right Column: AI Tools & Author */}
+                <div className="space-y-6">
+                    {/* Author Card */}
+                    <div className="bg-white dark:bg-dark-surface rounded-xl shadow-md p-6 border border-transparent dark:border-zinc-700">
+                        <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Uploaded By</h3>
+                        <div className="flex items-center gap-4">
+                            <button onClick={() => setView(user?.id === resource.author.id ? 'profile' : 'publicProfile', resource.author.id)}>
+                                <Avatar src={resource.author.avatarUrl} name={resource.author.name} className="w-14 h-14 rounded-full border-2 border-slate-100 dark:border-zinc-700" />
+                            </button>
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <button onClick={() => setView(user?.id === resource.author.id ? 'profile' : 'publicProfile', resource.author.id)} className="font-bold text-slate-900 dark:text-white hover:underline">
+                                        {resource.author.name}
+                                    </button>
+                                    <UserRankBadge rank={authorRank} size={18} />
+                                </div>
+                                <p className="text-sm text-slate-500 dark:text-slate-400">{resource.author.course}</p>
+                                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                                    Joined {new Date(resource.author.joinDate).toLocaleDateString()}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* AI Tools */}
+                    <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-xl shadow-lg p-6 text-white relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-4 opacity-10">
+                            <BrainCircuit size={100} />
+                        </div>
+                        <div className="relative z-10">
+                            <h3 className="text-xl font-bold mb-2 flex items-center gap-2">
+                                <BrainCircuit size={24} />
+                                AI Study Companion
+                            </h3>
+                            <p className="text-indigo-100 text-sm mb-6">Enhance your learning with AI-generated summaries and quizzes based on this resource.</p>
+                            
+                            <div className="space-y-3">
+                                <button 
+                                    onClick={handleGenerateSummary}
+                                    disabled={isGeneratingSummary}
+                                    className="w-full bg-white/20 hover:bg-white/30 border border-white/30 backdrop-blur-sm text-white font-semibold py-3 px-4 rounded-lg transition flex items-center justify-center gap-2"
+                                >
+                                    {isGeneratingSummary ? <Loader2 className="animate-spin" size={20} /> : <FileText size={20} />}
+                                    {summary ? "Regenerate Summary" : "Generate Summary"}
                                 </button>
-                            ) : (
-                                <p className="text-xs text-slate-400">Upload a file with content to enable AI features.</p>
+                                
+                                <button 
+                                    onClick={handleGenerateFlashcards}
+                                    disabled={isGeneratingFlashcards}
+                                    className="w-full bg-white/20 hover:bg-white/30 border border-white/30 backdrop-blur-sm text-white font-semibold py-3 px-4 rounded-lg transition flex items-center justify-center gap-2"
+                                >
+                                    {isGeneratingFlashcards ? <Loader2 className="animate-spin" size={20} /> : <BookCopy size={20} />}
+                                    {flashcards ? "Regenerate Flashcards" : "Create Flashcards"}
+                                </button>
+
+                                <button 
+                                    onClick={handleGenerateQuiz}
+                                    disabled={isGeneratingQuiz}
+                                    className="w-full bg-white/20 hover:bg-white/30 border border-white/30 backdrop-blur-sm text-white font-semibold py-3 px-4 rounded-lg transition flex items-center justify-center gap-2"
+                                >
+                                    {isGeneratingQuiz ? <Loader2 className="animate-spin" size={20} /> : <HelpCircle size={20} />}
+                                    {quiz ? "Regenerate Quiz" : "Generate Quiz"}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* AI Output Area */}
+                    {(summary || flashcards || quiz) && (
+                        <div className="bg-white dark:bg-dark-surface rounded-xl shadow-md p-6 border border-transparent dark:border-zinc-700 animate-in slide-in-from-bottom-4 duration-500">
+                             {summary && (
+                                <div className="mb-8">
+                                    <div className="flex justify-between items-center mb-4">
+                                        <h4 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                                            <FileText size={20} className="text-indigo-600 dark:text-indigo-400" />
+                                            Key Takeaways
+                                        </h4>
+                                    </div>
+                                    <div className="prose dark:prose-invert prose-sm max-w-none bg-slate-50 dark:bg-zinc-800/50 p-4 rounded-lg">
+                                        <MarkdownRenderer content={summary} />
+                                    </div>
+                                </div>
+                            )}
+
+                            {flashcards && (
+                                <div className="mb-8 border-t border-slate-100 dark:border-zinc-700 pt-6">
+                                    <FlashcardViewer flashcards={flashcards} onReset={handleGenerateFlashcards} />
+                                </div>
+                            )}
+
+                            {quiz && (
+                                <div className="border-t border-slate-100 dark:border-zinc-700 pt-6">
+                                    <QuizComponent questions={quiz} onReset={handleGenerateQuiz} />
+                                </div>
                             )}
                         </div>
                     )}
                 </div>
             </div>
+
+            <ShareModal 
+                isOpen={isShareModalOpen} 
+                onClose={() => setIsShareModalOpen(false)} 
+                resource={resource}
+            />
         </div>
     );
-  };
-
-  return (
-    <div>
-      <button onClick={goBack} className="flex items-center gap-2 text-primary-600 dark:text-primary-400 font-semibold hover:text-primary-800 dark:hover:text-primary-300 transition mb-6">
-        <ArrowLeft size={20} />
-        Back to all resources
-      </button>
-      
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2">
-          <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md transition-colors duration-300 border border-transparent dark:border-zinc-700">
-            <div className="flex items-center gap-3 mb-4">
-              <span className={`flex items-center gap-2 text-sm font-semibold px-3 py-1 rounded-full ${resource.type === 'Past Paper' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300' : 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'}`}>
-                {resource.type === 'Past Paper' ? <FileText size={16}/> : <Notebook size={16}/>}
-                {resource.type}
-              </span>
-              <span className="text-sm font-bold text-slate-800 dark:text-white px-3 py-1 bg-slate-100 dark:bg-zinc-800 rounded-full">{resource.courseCode}</span>
-            </div>
-            
-            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">{resource.title}</h1>
-            <p className="text-lg text-slate-600 dark:text-slate-300 mt-1">{resource.courseName}</p>
-            <p className="text-sm text-slate-500 dark:text-slate-200 mt-4">{resource.description}</p>
-            
-            <div className="mt-6 grid grid-cols-2 md:grid-cols-5 gap-4">
-                <InfoTag label="Year" value={resource.year} />
-                <InfoTag label="Semester" value={resource.semester} />
-                {resource.lecturer && <InfoTag label="Lecturer" value={resource.lecturer} />}
-                {resource.examType && <InfoTag label="Paper Type" value={resource.examType} />}
-                {fileType && <InfoTag label="File Type" value={fileType} />}
-            </div>
-
-            <div className="mt-6 pt-6 border-t border-slate-200 dark:border-dark-border space-y-4">
-                <div>
-                    <h4 className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">Stay Updated</h4>
-                    <div className="flex gap-2">
-                        <button 
-                            onClick={() => toggleCourseCodeSubscription(resource.courseCode)}
-                            className={`flex items-center gap-2 text-sm font-semibold px-3 py-2 rounded-lg transition ${isFollowingCourse ? 'bg-primary-600 text-white hover:bg-primary-700' : 'bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-zinc-700'}`}
-                        >
-                            {isFollowingCourse ? <BellOff size={16} /> : <Bell size={16} />}
-                            <span>{isFollowingCourse ? 'Unfollow Course' : 'Follow Course'}</span>
-                        </button>
-                        {resource.lecturer && (
-                             <button 
-                                onClick={() => toggleLecturerSubscription(resource.lecturer!)}
-                                className={`flex items-center gap-2 text-sm font-semibold px-3 py-2 rounded-lg transition ${isFollowingLecturer ? 'bg-primary-600 text-white hover:bg-primary-700' : 'bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-zinc-700'}`}
-                             >
-                                {isFollowingLecturer ? <BellOff size={16} /> : <Bell size={16} />}
-                                <span>{isFollowingLecturer ? 'Unfollow Lecturer' : 'Follow Lecturer'}</span>
-                            </button>
-                        )}
-                    </div>
-                </div>
-                
-                <div className="flex flex-col gap-3 !mt-6">
-                    <button
-                        onClick={() => setIsPreviewOpen(true)}
-                        className="w-full flex items-center justify-center gap-2 font-bold py-3 px-4 rounded-lg transition-all duration-200 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-zinc-700 hover:text-primary-700 dark:hover:text-primary-400 border border-slate-200 dark:border-zinc-700"
-                    >
-                        <Eye size={18} />
-                        Preview File
-                    </button>
-                    <a 
-                        href={resource.fileUrl} 
-                        download={resource.fileName}
-                        onClick={handleDownloadClick}
-                        className={`w-full flex items-center justify-center gap-2 font-bold py-3 px-4 rounded-lg transition-all duration-200 ${
-                            isDownloading 
-                            ? 'bg-primary-700 text-primary-100 cursor-wait' 
-                            : 'bg-primary-600 text-white hover:bg-primary-700 hover:-translate-y-0.5 shadow-md hover:shadow-lg'
-                        }`}
-                    >
-                        {isDownloading ? (
-                            <>
-                                <Loader2 size={18} className="animate-spin" />
-                                Downloading...
-                            </>
-                        ) : (
-                            <>
-                                <Download size={18} />
-                                Download
-                            </>
-                        )}
-                    </a>
-                </div>
-                
-                {hasReported ? (
-                     <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800 text-center flex flex-col items-center gap-2">
-                        <CheckCircle className="text-green-600 dark:text-green-400" size={24}/>
-                        <div>
-                            <h4 className="font-bold text-green-800 dark:text-green-200">Report Submitted</h4>
-                            <p className="text-sm text-green-700 dark:text-green-300 mt-1">Thank you. Our moderators will review this shortly.</p>
-                        </div>
-                    </div>
-                ) : !isReporting ? (
-                    <div className="flex flex-col gap-2">
-                         <button
-                            onClick={() => setIsReporting(true)}
-                            className="w-full flex items-center justify-center gap-2 text-slate-500 dark:text-slate-400 font-semibold py-2 px-4 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 hover:text-slate-700 dark:hover:text-slate-200 transition text-sm"
-                        >
-                            <Flag size={16} className="text-red-500"/>
-                            Report this resource
-                        </button>
-                    </div>
-                ) : (
-                    <div className="p-4 bg-slate-50 dark:bg-zinc-800/50 rounded-lg border border-slate-200 dark:border-zinc-700">
-                        <h4 className="font-bold text-slate-700 dark:text-slate-200 mb-2">Report Resource</h4>
-                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Please provide a reason for reporting this content. Your report is anonymous.</p>
-                        <textarea
-                            value={reportReason}
-                            onChange={(e) => setReportReason(e.target.value)}
-                            placeholder="e.g., Incorrect information, offensive content, spam..."
-                            className="w-full bg-white dark:bg-zinc-900 text-slate-900 dark:text-white placeholder:text-slate-500 dark:placeholder:text-slate-500 px-4 py-2 border border-slate-300 dark:border-zinc-700 rounded-lg focus:ring-primary-500 focus:border-primary-500 transition focus:outline-none"
-                            rows={3}
-                            autoFocus
-                        />
-                        <div className="flex justify-end gap-2 mt-4">
-                            <button 
-                                onClick={() => setIsReporting(false)}
-                                className="bg-slate-200 dark:bg-zinc-700 text-slate-700 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-zinc-600 transition"
-                            >
-                                Cancel
-                            </button>
-                            <button 
-                                onClick={handleSubmitReport}
-                                className="bg-red-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-red-700 transition"
-                            >
-                                Submit Report
-                            </button>
-                        </div>
-                    </div>
-                )}
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md mt-8 transition-colors duration-300 border border-transparent dark:border-zinc-700">
-            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4">AI Summary</h3>
-            {!summary && !isSummarizing && (
-              <div className="border-2 border-dashed border-slate-300 dark:border-zinc-700 rounded-lg p-6 text-center">
-                  <BrainCircuit className="mx-auto h-12 w-12 text-slate-400 dark:text-slate-500" />
-                  <p className="mt-2 text-slate-600 dark:text-slate-400">Get a quick overview of this document.</p>
-                  <button onClick={handleGenerateSummary} className="mt-4 inline-flex items-center gap-2 bg-primary-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-primary-700 transition">
-                      <BrainCircuit size={18} />
-                      Generate with Gemini
-                  </button>
-              </div>
-            )}
-            {isSummarizing && (
-               <div className="border border-slate-200 dark:border-zinc-700 rounded-lg p-6 text-center">
-                  <Loader2 className="mx-auto h-12 w-12 text-primary-500 animate-spin" />
-                  <p className="mt-4 text-slate-600 dark:text-slate-300 font-medium">Gemini is thinking...</p>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Generating a summary for you.</p>
-              </div>
-            )}
-            {summary && (
-              <div className="bg-slate-50 dark:bg-zinc-800/50 border border-slate-200 dark:border-zinc-700 rounded-lg p-4 sm:p-6 dark:text-slate-200">
-                  <MarkdownRenderer content={summary} />
-              </div>
-            )}
-          </div>
-          
-          <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md mt-8 transition-colors duration-300 border border-transparent dark:border-zinc-700">
-            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4">AI Study Tools</h3>
-            {isGeneratingStudySet && (
-                <div className="border border-slate-200 dark:border-zinc-700 rounded-lg p-6 text-center">
-                    <Loader2 className="mx-auto h-12 w-12 text-primary-500 animate-spin" />
-                    <p className="mt-4 text-slate-600 dark:text-slate-300 font-medium">Gemini is thinking...</p>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Generating {studySetType === 'flashcards' ? 'flashcards' : 'a quiz'} for you.</p>
-                </div>
-            )}
-            {!isGeneratingStudySet && !studySet && (
-                <div className="border-2 border-dashed border-slate-300 dark:border-zinc-700 rounded-lg p-6 text-center">
-                    <div className="flex justify-center gap-4">
-                        <button onClick={() => handleGenerateStudySet('flashcards')} className="flex-1 inline-flex flex-col items-center gap-2 bg-slate-50 dark:bg-zinc-800 text-slate-700 dark:text-slate-200 font-bold py-4 px-4 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-700 transition border border-slate-200 dark:border-zinc-700">
-                            <BookCopy size={24} />
-                            Generate Flashcards
-                        </button>
-                        <button onClick={() => handleGenerateStudySet('quiz')} className="flex-1 inline-flex flex-col items-center gap-2 bg-slate-50 dark:bg-zinc-800 text-slate-700 dark:text-slate-200 font-bold py-4 px-4 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-700 transition border border-slate-200 dark:border-zinc-700">
-                            <HelpCircle size={24} />
-                            Generate Practice Quiz
-                        </button>
-                    </div>
-                </div>
-            )}
-            {!isGeneratingStudySet && studySet && studySet.length > 0 && (
-                <div className="bg-slate-50 dark:bg-zinc-800/50 border border-slate-200 dark:border-zinc-700 rounded-lg p-4 sm:p-6">
-                    {studySetType === 'flashcards' && <FlashcardViewer flashcards={studySet as Flashcard[]} onReset={resetStudySet} />}
-                    {studySetType === 'quiz' && <QuizComponent questions={studySet as QuizQuestion[]} onReset={resetStudySet} />}
-                </div>
-            )}
-            {!isGeneratingStudySet && studySet && studySet.length === 0 && (
-                 <div className="p-4 text-center bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                    <p className="text-red-700 dark:text-red-300 font-semibold">Could not generate study set.</p>
-                    <p className="text-red-600 dark:text-red-400 text-sm">Please try again later.</p>
-                    <button onClick={resetStudySet} className="mt-2 text-sm text-primary-600 dark:text-primary-400 font-semibold hover:text-primary-800 dark:hover:text-primary-300">Try again</button>
-                </div>
-            )}
-          </div>
-
-          <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md mt-8 transition-colors duration-300 border border-transparent dark:border-zinc-700">
-            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-                <MessageSquare size={22}/>
-                Discussion ({resource.comments.length})
-            </h3>
-            <form onSubmit={handlePostComment} className="flex gap-4 items-start pb-6 mb-6 border-b border-slate-200 dark:border-zinc-700">
-              <img src={user?.avatarUrl} alt={user?.name} className="w-10 h-10 rounded-full shrink-0" />
-              <div className="w-full">
-                <MarkdownToolbar
-                    textareaRef={commentTextareaRef}
-                    value={newComment}
-                    onValueChange={setNewComment}
-                />
-                <textarea
-                    ref={commentTextareaRef}
-                    value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
-                    placeholder="Add a comment..."
-                    className="w-full bg-slate-100 dark:bg-zinc-800 dark:text-white text-slate-900 placeholder:text-slate-500 dark:placeholder:text-slate-500 px-4 py-2 border border-slate-300 dark:border-zinc-700 rounded-b-lg focus:ring-primary-500 focus:border-primary-500 transition focus:outline-none"
-                    rows={3}
-                />
-                 <div className="flex justify-end mt-2">
-                    <button type="submit" className="bg-primary-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-primary-700 transition">Post</button>
-                </div>
-              </div>
-            </form>
-            <div className="mt-6">
-                {renderComments(null)}
-            </div>
-          </div>
-        </div>
-
-        <div className="lg:col-span-1">
-            <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md lg:sticky top-24 transition-colors duration-300 border border-transparent dark:border-zinc-700">
-                <img src={resource.previewImageUrl} alt={resource.title} className="w-full h-80 object-cover rounded-lg mb-6" />
-                
-                <div className="flex items-center gap-2">
-                    <button 
-                      onClick={handleUpvoteClick}
-                      className={`flex items-center gap-2 p-3 rounded-lg transition font-medium ${isUpvoted ? 'bg-green-600 text-white' : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50'}`}
-                    >
-                        <ThumbsUp size={18} />
-                        {resource.upvotes > 0 && <span>{resource.upvotes}</span>}
-                    </button>
-                    <button
-                      onClick={handleDownvoteClick}
-                      className={`flex items-center gap-2 p-3 rounded-lg transition font-medium ${isDownvoted ? 'bg-red-600 text-white' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50'}`}
-                    >
-                        <ThumbsDown size={18} />
-                        {resource.downvotes > 0 && <span>{resource.downvotes}</span>}
-                    </button>
-                    <button 
-                        onClick={() => toggleSaveResource(resource.id)}
-                        title={isSaved ? "Unsave" : "Save for later"}
-                        className={`p-3 rounded-lg transition font-medium ${isSaved ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-zinc-700'}`}
-                    >
-                        {isSaved ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
-                    </button>
-                     <button 
-                        onClick={() => setIsShareModalOpen(true)}
-                        title="Share"
-                        className="p-3 rounded-lg transition font-medium bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-zinc-700"
-                    >
-                        <Share2 size={18} />
-                    </button>
-                    {isAuthor && (
-                        <button 
-                            onClick={() => setIsDeleteConfirmOpen(true)}
-                            title="Delete Resource"
-                            className="p-3 rounded-lg transition font-medium bg-slate-100 dark:bg-zinc-800 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30"
-                        >
-                            <Trash2 size={18} />
-                        </button>
-                    )}
-                </div>
-
-                <div className="mt-6 pt-6 border-t border-slate-200 dark:border-dark-border">
-                    <p className="text-sm font-semibold text-slate-800 dark:text-white mb-3">Uploaded by</p>
-                    <button onClick={() => handleAuthorClick(resource.author.id)} className="flex items-center gap-3 w-full text-left hover:bg-slate-50 dark:hover:bg-zinc-800 p-2 rounded-lg transition-colors">
-                        <img src={resource.author.avatarUrl} alt={resource.author.name} className="w-12 h-12 rounded-full" />
-                        <div>
-                            <div className="flex items-center">
-                              <p className="font-bold text-slate-900 dark:text-slate-100">{resource.author.name}</p>
-                              <UserRankBadge rank={authorRank} />
-                            </div>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                                <span className="font-semibold">{resource.author.course}</span> • Joined on {new Date(resource.author.joinDate).toLocaleDateString()}
-                            </p>
-                        </div>
-                    </button>
-                </div>
-            </div>
-        </div>
-      </div>
-      
-      {relatedResources.length > 0 && (
-        <div className="mt-12 border-t border-slate-200 dark:border-zinc-700 pt-8">
-            <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-6">Related Resources</h2>
-            <div className="relative group px-4">
-                
-                {relatedStartIndex > 0 && (
-                    <button 
-                        onClick={() => setRelatedStartIndex(prev => Math.max(0, prev - 1))}
-                        className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-20 bg-white dark:bg-zinc-800 text-slate-700 dark:text-slate-200 p-3 rounded-full shadow-lg border border-slate-100 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-700 hover:text-primary-600 hover:scale-110 transition-all duration-200 flex items-center justify-center"
-                        aria-label="Previous"
-                    >
-                        <ArrowLeft size={24} />
-                    </button>
-                )}
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
-                    {relatedResources.slice(relatedStartIndex, relatedStartIndex + 4).map(related => (
-                        <ResourceCard 
-                            key={related.id}
-                            resource={related}
-                            onSelect={() => setView('resourceDetail', related.id)}
-                            onAuthorClick={handleAuthorClick}
-                            compact={true}
-                        />
-                    ))}
-                </div>
-
-                {relatedStartIndex < relatedResources.length - 4 && (
-                    <button 
-                        onClick={() => setRelatedStartIndex(prev => Math.min(Math.max(0, relatedResources.length - 4), prev + 1))}
-                        className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-20 bg-white dark:bg-zinc-800 text-slate-700 dark:text-slate-200 p-3 rounded-full shadow-lg border border-slate-100 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-700 hover:text-primary-600 hover:scale-110 transition-all duration-200 flex items-center justify-center"
-                        aria-label="Next"
-                    >
-                        <ArrowRight size={24} />
-                    </button>
-                )}
-            </div>
-        </div>
-      )}
-
-      {isDeleteConfirmOpen && (
-            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in">
-                <div className="bg-white dark:bg-zinc-800 p-6 rounded-xl shadow-xl max-w-sm w-full border dark:border-zinc-700">
-                    <div className="flex flex-col items-center text-center">
-                        <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-full text-red-600 dark:text-red-400 mb-4">
-                            <Trash2 size={32} />
-                        </div>
-                        <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Delete Resource?</h3>
-                        <p className="text-slate-500 dark:text-slate-400 mb-6">
-                            Are you sure you want to delete <strong>{resource.title}</strong>? This action cannot be undone.
-                        </p>
-                        <div className="flex gap-3 w-full">
-                            <button onClick={() => setIsDeleteConfirmOpen(false)} className="flex-1 py-2.5 bg-slate-100 dark:bg-zinc-700 text-slate-700 dark:text-slate-200 font-semibold rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-600 transition">Cancel</button>
-                            <button onClick={confirmDelete} className="flex-1 py-2.5 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition">Delete</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-      )}
-
-      {isPreviewOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-             <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col relative animate-in zoom-in-95 duration-200">
-                <div className="p-4 border-b flex justify-between items-center bg-slate-50 rounded-t-xl">
-                    <div className="flex items-center gap-3 overflow-hidden">
-                         <div className={`p-2 rounded-lg ${resource.type === 'Past Paper' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
-                            {resource.type === 'Past Paper' ? <FileText size={20}/> : <Notebook size={20}/>}
-                        </div>
-                        <div className="overflow-hidden">
-                             <h3 className="font-bold text-slate-800 truncate text-lg leading-tight">{resource.title}</h3>
-                             <p className="text-xs text-slate-500 truncate">{resource.fileName}</p>
-                        </div>
-                    </div>
-                     <div className="flex items-center gap-2 shrink-0">
-                        <a 
-                            href={resource.fileUrl} 
-                            download={resource.fileName}
-                            className="p-2 rounded-full hover:bg-slate-200 text-slate-600 transition"
-                            title="Download"
-                        >
-                            <Download size={20} />
-                        </a>
-                        <button onClick={() => setIsPreviewOpen(false)} className="p-2 rounded-full hover:bg-red-100 text-slate-500 hover:text-red-600 transition">
-                            <X size={24} />
-                        </button>
-                    </div>
-                </div>
-                <div className="flex-grow bg-slate-200 overflow-hidden flex items-center justify-center rounded-b-xl relative">
-                    {renderPreviewContent()}
-                </div>
-            </div>
-        </div>
-    )}
-    <ShareModal 
-        isOpen={isShareModalOpen}
-        onClose={() => setIsShareModalOpen(false)}
-        resource={resource}
-    />
-    </div>
-  );
 };
 
 export default ResourceDetailPage;

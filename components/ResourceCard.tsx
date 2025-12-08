@@ -4,6 +4,7 @@ import type { Resource } from '../types';
 import { ThumbsUp, MessageSquare, FileText, Notebook } from 'lucide-react';
 import { AppContext } from '../App';
 import UserRankBadge from './UserRankBadge';
+import Avatar from './Avatar';
 
 interface ResourceCardProps {
   resource: Resource;
@@ -50,7 +51,7 @@ const ResourceCard: React.FC<ResourceCardProps> = ({ resource, onSelect, onAutho
             }}
             className="flex items-center gap-2 rounded-md p-1 -ml-1 hover:bg-slate-100 dark:hover:bg-zinc-700 max-w-[70%]"
           >
-            <img src={resource.author.avatarUrl} alt={resource.author.name} className={`${compact ? 'w-5 h-5' : 'w-6 h-6'} rounded-full`} />
+            <Avatar src={resource.author.avatarUrl} name={resource.author.name} className={`${compact ? 'w-5 h-5 text-xs' : 'w-6 h-6 text-xs'} rounded-full`} />
             <div className="flex items-center min-w-0">
                 <span className="truncate text-slate-700 dark:text-white">{resource.author.name}</span>
                 <UserRankBadge rank={authorRank} size={compact ? 10 : 14} />

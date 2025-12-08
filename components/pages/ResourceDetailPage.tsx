@@ -11,6 +11,8 @@ import FlashcardViewer from '../FlashcardViewer';
 import QuizComponent from '../QuizComponent';
 import ShareModal from '../ShareModal';
 import ResourceCard from '../ResourceCard';
+import { db } from '../../services/firebase';
+import { collection, addDoc } from 'firebase/firestore';
 
 const CommentComponent: React.FC<{
   comment: Comment;
@@ -373,28 +375,28 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     }
   };
   
-  const handleSubmitReport = () => {
+  const handleSubmitReport = async () => {
     if (reportReason.trim() !== "") {
-      const subject = encodeURIComponent(`[Report] Resource: ${resource.title}`);
-      const body = encodeURIComponent(`
-Report Details
---------------------------------------------------
-Resource Title: ${resource.title}
-Resource ID: ${resource.id}
-Uploader: ${resource.author.name} (ID: ${resource.author.id})
---------------------------------------------------
-Reporter: ${user?.name || 'Anonymous'} (ID: ${user?.id || 'N/A'})
-Date: ${new Date().toLocaleString()}
---------------------------------------------------
-Reason for Report:
-${reportReason}
-`);
+      try {
+        await addDoc(collection(db, "reports"), {
+          resourceId: resource.id,
+          resourceTitle: resource.title,
+          uploaderId: resource.author.id,
+          uploaderName: resource.author.name,
+          reporterId: user?.id || 'anonymous',
+          reporterName: user?.name || 'Anonymous',
+          reason: reportReason,
+          timestamp: new Date().toISOString(),
+          status: 'pending'
+        });
 
-      window.location.href = `mailto:examvaultreport@outlook.my?subject=${subject}&body=${body}`;
-
-      setIsReporting(false);
-      setReportReason('');
-      setHasReported(true);
+        setIsReporting(false);
+        setReportReason('');
+        setHasReported(true);
+      } catch (error) {
+        console.error("Error submitting report:", error);
+        alert("Failed to submit report. Please try again.");
+      }
     } else {
       alert("A reason is required to submit a report.");
     }

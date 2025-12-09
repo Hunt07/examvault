@@ -1,8 +1,9 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import type { Resource, ResourceRequest } from '../types';
 import { ResourceType, ExamType, SemesterIntake } from '../types';
 import { X, UploadCloud, Image as ImageIcon, Info } from 'lucide-react';
+import { AppContext } from '../App';
 
 interface UploadModalProps {
   onClose: () => void;
@@ -98,6 +99,7 @@ export const generateFilePreview = (fileName: string): string => {
 };
 
 const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, fulfillingRequest }) => {
+  const { showToast } = useContext(AppContext);
   const [title, setTitle] = useState('');
   const [courseCode, setCourseCode] = useState('');
   const [courseName, setCourseName] = useState('');
@@ -148,7 +150,7 @@ const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, fulfilling
             setCoverImageFile(selectedFile);
             setCoverImagePreviewUrl(URL.createObjectURL(selectedFile));
         } else {
-            alert('Cover image must be an image file (e.g., PNG, JPG).');
+            showToast('Cover image must be an image file (e.g., PNG, JPG).', 'error');
         }
     }
   };
@@ -214,7 +216,7 @@ const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, fulfilling
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!file) {
-      alert('Please select a file to upload.');
+      showToast('Please select a file to upload.', 'error');
       return;
     }
     const newResource = {

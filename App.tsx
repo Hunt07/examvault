@@ -81,6 +81,7 @@ interface AppContextType {
   areResourcesLoading: boolean;
   scrollTargetId: string | null;
   setScrollTargetId: (id: string | null) => void;
+  showToast: (message: string, type?: 'success' | 'error' | 'info', points?: number) => void;
 }
 
 export const AppContext = React.createContext<AppContextType>({} as AppContextType);
@@ -213,6 +214,10 @@ const App: React.FC = () => {
   const [fulfillingRequest, setFulfillingRequest] = useState<ResourceRequest | undefined>(undefined);
 
   const [toast, setToast] = useState<{ message: string; points?: number; type?: 'success' | 'error' | 'info' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info', points?: number) => {
+      setToast({ message, type, points });
+  };
 
   const [runTour, setRunTour] = useState(false);
   const [tourStep, setTourStep] = useState(0);
@@ -1336,7 +1341,8 @@ const App: React.FC = () => {
       goBack, hasUnreadMessages, hasUnreadDiscussions,
       isLoading, deleteResource,
       areResourcesLoading,
-      scrollTargetId, setScrollTargetId
+      scrollTargetId, setScrollTargetId,
+      showToast
     }}>
       <div className="min-h-screen bg-slate-50 dark:bg-dark-bg transition-colors duration-300">
         <Header onUploadClick={() => { setFulfillingRequest(undefined); setIsUploadModalOpen(true); }} />

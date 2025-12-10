@@ -34,14 +34,12 @@ const Avatar: React.FC<AvatarProps> = ({ src, name, className = "", onClick }) =
     let active = true;
     const defaultAvatar = generateDefaultAvatar(name);
 
-    // If no src, show default immediately
     if (!src || src === '') {
         setImgSrc(defaultAvatar);
         setIsLoading(false);
         return;
     }
 
-    // Check if image is already cached/loaded to avoid flicker
     const img = new Image();
     img.src = src;
 
@@ -51,7 +49,6 @@ const Avatar: React.FC<AvatarProps> = ({ src, name, className = "", onClick }) =
         return;
     }
 
-    // Only set loading if not cached
     setIsLoading(true);
 
     img.onload = () => {

@@ -1,9 +1,9 @@
-
 import React, { useContext, useMemo, useState, useEffect, useRef } from 'react';
 import { AppContext } from '../../App';
-import type { User } from '../../types';
+import type { User, Conversation, DirectMessage } from '../../types';
 import { MessageStatus } from '../../types';
-import { Send, Check, CheckCheck, MessageCircle, ArrowLeft, FileText, Notebook, ExternalLink, MoreVertical, Edit2, Trash2, X, Smile } from 'lucide-react';
+import { Send, Check, CheckCheck, MessageCircle, ArrowLeft, FileText, Notebook, ExternalLink, MoreVertical, Edit2, Trash2, X, Search } from 'lucide-react';
+import Avatar from '../Avatar';
 
 const formatTimestamp = (timestamp: string): string => {
     const date = new Date(timestamp);
@@ -205,23 +205,14 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isSender }) => {
                     )}
                 </div>
             )}
-
-            {/* Delete Confirmation Modal */}
-            {isDeleteConfirmOpen && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in cursor-default">
-                    <div className="bg-white dark:bg-zinc-800 p-6 rounded-xl shadow-xl max-w-sm w-full border dark:border-zinc-700">
-                        <div className="flex flex-col items-center text-center">
-                            <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-full text-red-600 dark:text-red-400 mb-4">
-                                <Trash2 size={32} />
-                            </div>
-                            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Delete Message?</h3>
-                            <p className="text-slate-500 dark:text-slate-400 mb-6 text-sm">
-                                Are you sure you want to delete this message? This action cannot be undone.
-                            </p>
-                            <div className="flex gap-3 w-full">
-                                <button onClick={() => setIsDeleteConfirmOpen(false)} className="flex-1 py-2 bg-slate-100 dark:bg-zinc-700 text-slate-700 dark:text-slate-200 font-semibold rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-600 transition">Cancel</button>
-                                <button onClick={confirmDelete} className="flex-1 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition">Delete</button>
-                            </div>
+             
+             {isDeleteConfirmOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                    <div className="bg-white dark:bg-zinc-800 p-4 rounded-lg shadow-xl max-w-xs w-full border dark:border-zinc-700">
+                        <p className="text-sm font-bold text-slate-800 dark:text-white mb-4">Delete this message?</p>
+                        <div className="flex justify-end gap-2">
+                             <button onClick={() => setIsDeleteConfirmOpen(false)} className="px-3 py-1 text-sm bg-slate-100 dark:bg-zinc-700 text-slate-700 dark:text-slate-200 rounded hover:bg-slate-200 dark:hover:bg-zinc-600">Cancel</button>
+                             <button onClick={confirmDelete} className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700">Delete</button>
                         </div>
                     </div>
                 </div>
@@ -230,36 +221,37 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isSender }) => {
     );
 };
 
-
 const MessagesPage: React.FC<{ activeConversationId: string | null }> = ({ activeConversationId }) => {
-    const { user, users, conversations, directMessages, setView, sendMessage, markMessagesAsRead } = useContext(AppContext);
+    const { user, users, conversations, directMessages, sendMessage, markMessagesAsRead, setView } = useContext(AppContext);
     const [newMessage, setNewMessage] = useState('');
-    const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-    const chatEndRef = useRef<HTMLDivElement>(null);
-    const emojiPickerRef = useRef<HTMLDivElement>(null);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const [searchTerm, setSearchTerm] = useState('');
 
-    const usersMap = useMemo(() => new Map(users.map(u => [u.id, u])), [users]);
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+    };
 
-    const emojis = ['😀', '😂', '😭', '😍', '🥰', '😎', '😊', '🤔', '😅', '🙌', '👍', '👎', '🎉', '🔥', '❤️', '💔'];
-
-    const userConversations = useMemo(() => {
+    const sortedConversations = useMemo(() => {
         if (!user) return [];
         return conversations
             .filter(c => c.participants.includes(user.id))
             .sort((a, b) => new Date(b.lastMessageTimestamp).getTime() - new Date(a.lastMessageTimestamp).getTime());
     }, [conversations, user]);
 
+    const filteredConversations = useMemo(() => {
+        if (!searchTerm) return sortedConversations;
+        return sortedConversations.filter(c => {
+            const otherUserId = c.participants.find(id => id !== user?.id);
+            const otherUser = users.find(u => u.id === otherUserId);
+            return otherUser?.name.toLowerCase().includes(searchTerm.toLowerCase());
+        });
+    }, [sortedConversations, users, user, searchTerm]);
+
     const activeConversation = useMemo(() => {
         return conversations.find(c => c.id === activeConversationId);
     }, [conversations, activeConversationId]);
-    
-    const otherParticipant = useMemo(() => {
-        if (!activeConversation || !user) return null;
-        const otherParticipantId = activeConversation.participants.find(pId => pId !== user.id);
-        return otherParticipantId ? usersMap.get(otherParticipantId) : null;
-    }, [activeConversation, user, usersMap]);
 
-    const activeChatMessages = useMemo(() => {
+    const currentMessages = useMemo(() => {
         if (!activeConversationId) return [];
         return directMessages.filter(m => m.conversationId === activeConversationId);
     }, [directMessages, activeConversationId]);
@@ -267,160 +259,187 @@ const MessagesPage: React.FC<{ activeConversationId: string | null }> = ({ activ
     useEffect(() => {
         if (activeConversationId) {
             markMessagesAsRead(activeConversationId);
+            setTimeout(scrollToBottom, 100);
         }
-    }, [activeConversationId, markMessagesAsRead]);
-
-    useEffect(() => {
-        chatEndRef.current?.scrollIntoView();
-    }, [activeChatMessages, activeConversationId]);
-
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target as Node)) {
-                setShowEmojiPicker(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
+    }, [activeConversationId, currentMessages.length]);
 
     const handleSendMessage = (e: React.FormEvent) => {
         e.preventDefault();
-        if (newMessage.trim() && activeConversationId) {
+        if (activeConversationId && newMessage.trim()) {
             sendMessage(activeConversationId, newMessage);
             setNewMessage('');
-            setShowEmojiPicker(false);
         }
     };
 
-    const addEmoji = (emoji: string) => {
-        setNewMessage(prev => prev + emoji);
-        setShowEmojiPicker(false);
+    const getOtherParticipant = (conversation: Conversation) => {
+        const otherId = conversation.participants.find((p) => p !== user?.id);
+        return users.find(u => u.id === otherId);
     };
-    
-    if (!user) return null;
+
+    const getLastMessage = (conversationId: string) => {
+        const msgs = directMessages.filter(m => m.conversationId === conversationId);
+        return msgs.length > 0 ? msgs[msgs.length - 1] : null;
+    };
+
+    const getUnreadCount = (conversationId: string) => {
+        if (!user) return 0;
+        return directMessages.filter(
+            m => m.conversationId === conversationId && m.recipientId === user.id && m.status !== MessageStatus.Read
+        ).length;
+    };
 
     return (
-        <div className="bg-white dark:bg-dark-surface rounded-xl shadow-md h-[calc(100vh-10rem)] flex overflow-hidden w-full transition-colors duration-300 border border-transparent dark:border-dark-border">
-            <aside className={`w-full md:w-1/3 border-r border-slate-200 dark:border-zinc-700 flex-col shrink-0 ${activeConversationId ? 'hidden md:flex' : 'flex'}`}>
+        <div className="flex h-[calc(100vh-6rem)] bg-white dark:bg-dark-surface rounded-xl shadow-md overflow-hidden border border-transparent dark:border-zinc-700">
+            {/* Sidebar List */}
+            <div className={`${activeConversationId ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-96 flex-col border-r border-slate-200 dark:border-zinc-700`}>
                 <div className="p-4 border-b border-slate-200 dark:border-zinc-700">
-                    <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Messages</h1>
+                    <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-4">Messages</h2>
+                    <div className="relative">
+                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                         <input 
+                            type="text" 
+                            placeholder="Search conversations..." 
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full bg-slate-100 dark:bg-zinc-800 dark:text-white text-slate-900 pl-10 pr-4 py-2 rounded-lg border-none focus:ring-2 focus:ring-primary-500"
+                         />
+                    </div>
                 </div>
                 <div className="flex-grow overflow-y-auto">
-                    {userConversations.map(convo => {
-                        const otherParticipantId = convo.participants.find(pId => pId !== user.id);
-                        const otherParticipant = otherParticipantId ? usersMap.get(otherParticipantId) : null;
-                        const lastMessage = directMessages.filter(m => m.conversationId === convo.id).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
-                        const unreadCount = directMessages.filter(m => m.conversationId === convo.id && m.recipientId === user.id && m.status !== MessageStatus.Read).length;
+                    {filteredConversations.length > 0 ? (
+                        filteredConversations.map(conv => {
+                            const otherUser = getOtherParticipant(conv);
+                            const lastMsg = getLastMessage(conv.id);
+                            const unreadCount = getUnreadCount(conv.id);
+                            const isActive = conv.id === activeConversationId;
 
-                        if (!otherParticipant) return null;
+                            if (!otherUser) return null;
 
-                        return (
-                            <button
-                                key={convo.id}
-                                onClick={() => setView('messages', convo.id)}
-                                className={`w-full text-left p-4 flex items-center gap-4 transition-colors border-b dark:border-zinc-800 ${activeConversationId === convo.id ? 'bg-primary-50 dark:bg-primary-900/20' : 'hover:bg-slate-50 dark:hover:bg-zinc-800'}`}
-                            >
-                                <img src={otherParticipant.avatarUrl} alt={otherParticipant.name} className="w-12 h-12 rounded-full" />
-                                <div className="flex-grow overflow-hidden">
-                                    <div className="flex justify-between items-center">
-                                        <h3 title={otherParticipant.name} className="font-bold text-slate-800 dark:text-white truncate">{otherParticipant.name}</h3>
-                                        {lastMessage && <p className="text-xs text-slate-500 dark:text-slate-400 shrink-0">{formatTimestamp(lastMessage.timestamp)}</p>}
+                            return (
+                                <button
+                                    key={conv.id}
+                                    onClick={() => setView('messages', conv.id)}
+                                    className={`w-full p-4 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-zinc-800 transition border-b border-slate-50 dark:border-zinc-800 ${isActive ? 'bg-slate-50 dark:bg-zinc-800' : ''}`}
+                                >
+                                    <Avatar src={otherUser.avatarUrl} name={otherUser.name} className="w-12 h-12 rounded-full" />
+                                    <div className="flex-grow min-w-0 text-left">
+                                        <div className="flex justify-between items-baseline">
+                                            <h4 className="font-semibold text-slate-800 dark:text-white truncate">{otherUser.name}</h4>
+                                            {lastMsg && (
+                                                <span className="text-xs text-slate-400 dark:text-slate-500 shrink-0 ml-2">
+                                                    {formatTimestamp(lastMsg.timestamp)}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className={`text-sm truncate mt-0.5 ${unreadCount > 0 ? 'font-bold text-slate-900 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400'}`}>
+                                            {lastMsg ? (lastMsg.senderId === user?.id ? `You: ${lastMsg.text}` : lastMsg.text) : 'Start a conversation'}
+                                        </p>
                                     </div>
-                                    <div className="flex justify-between items-start">
-                                        <p title={lastMessage?.isDeleted ? 'Message deleted' : (lastMessage?.text || 'No messages yet')} className="text-sm text-slate-600 dark:text-slate-300 truncate italic">{lastMessage?.isDeleted ? 'Message deleted' : (lastMessage?.text || 'No messages yet')}</p>
-                                        {unreadCount > 0 && <span className="text-xs font-bold text-white bg-primary-600 rounded-full w-5 h-5 flex items-center justify-center shrink-0">{unreadCount}</span>}
-                                    </div>
-                                </div>
-                            </button>
-                        );
-                    })}
-                </div>
-            </aside>
-            <main className={`w-full md:w-2/3 flex-col min-w-0 ${activeConversationId ? 'flex' : 'hidden md:flex'}`}>
-                {activeConversation && otherParticipant ? (
-                    <>
-                        <div className="w-full text-left p-4 border-b border-slate-200 dark:border-zinc-700 flex items-center gap-4 bg-white dark:bg-dark-surface z-10">
-                             <button
-                                onClick={() => setView('messages', undefined, { replace: true })}
-                                className="md:hidden p-2 -ml-2 rounded-full hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
-                                aria-label="Back to conversations"
-                            >
-                                <ArrowLeft size={20} className="dark:text-white" />
-                            </button>
-                            <button 
-                                onClick={() => setView('publicProfile', otherParticipant.id)}
-                                className="flex items-center gap-4 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors rounded-md p-1 -m-1 flex-grow min-w-0"
-                            >
-                                <img src={otherParticipant.avatarUrl} alt="avatar" className="w-10 h-10 rounded-full" />
-                                <div className="min-w-0">
-                                    <h2 className="text-xl font-bold text-slate-800 dark:text-white truncate">{otherParticipant.name}</h2>
-                                    <p className="text-sm text-slate-500 dark:text-slate-400 truncate">{otherParticipant.course}</p>
-                                </div>
-                            </button>
+                                    {unreadCount > 0 && (
+                                        <div className="bg-primary-600 text-white text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full shrink-0">
+                                            {unreadCount}
+                                        </div>
+                                    )}
+                                </button>
+                            );
+                        })
+                    ) : (
+                        <div className="p-8 text-center text-slate-500 dark:text-slate-400">
+                            <MessageCircle size={48} className="mx-auto mb-4 opacity-50" />
+                            <p>No conversations found.</p>
                         </div>
+                    )}
+                </div>
+            </div>
 
-                        <div className="flex-grow p-4 md:p-6 overflow-y-auto overflow-x-hidden bg-slate-50 dark:bg-black/20 w-full custom-scrollbar" key={activeConversationId}>
-                            <div className="space-y-4">
-                                {activeChatMessages.map(msg => (
-                                    <div key={msg.id} className={`flex items-end gap-2 ${msg.senderId === user.id ? 'justify-end' : ''}`}>
-                                        {msg.senderId !== user.id && <img src={usersMap.get(msg.senderId)?.avatarUrl} alt="sender" className="w-8 h-8 rounded-full" />}
-                                        <div className={`max-w-[85%] md:max-w-md p-3 rounded-2xl min-w-0 ${msg.senderId === user.id ? 'bg-primary-500 text-white rounded-br-none' : 'bg-white dark:bg-zinc-700 text-slate-800 dark:text-white rounded-bl-none shadow-sm'}`}>
-                                            <MessageBubble 
-                                                message={{
-                                                    id: msg.id,
-                                                    text: msg.text,
-                                                    timestamp: msg.timestamp,
-                                                    status: msg.status,
-                                                    isDeleted: msg.isDeleted,
-                                                    editedAt: msg.editedAt
-                                                }} 
-                                                isSender={msg.senderId === user.id} 
-                                            />
-                                            <div className={`flex items-center gap-1.5 mt-1 ${msg.senderId === user.id ? 'justify-end' : 'justify-start'}`}>
-                                                <span className={`text-xs ${msg.senderId === user.id ? 'opacity-70' : 'text-slate-400 dark:text-slate-400'}`}>{formatTimestamp(msg.timestamp)}</span>
-                                                {msg.senderId === user.id && <MessageStatusIcon status={msg.status} />}
+            {/* Chat Area */}
+            {activeConversationId ? (
+                <div className={`${!activeConversationId ? 'hidden md:flex' : 'flex'} flex-col flex-grow h-full bg-slate-50 dark:bg-zinc-900/50`}>
+                     {/* Chat Header */}
+                     <div className="p-4 bg-white dark:bg-dark-surface border-b border-slate-200 dark:border-zinc-700 flex items-center gap-3 shadow-sm z-10">
+                        <button onClick={() => setView('messages')} className="md:hidden p-2 -ml-2 text-slate-600 dark:text-slate-400">
+                            <ArrowLeft size={20} />
+                        </button>
+                        {activeConversation && getOtherParticipant(activeConversation) && (
+                            <>
+                                <button onClick={() => setView('publicProfile', getOtherParticipant(activeConversation)?.id)}>
+                                     <Avatar 
+                                        src={getOtherParticipant(activeConversation)?.avatarUrl} 
+                                        name={getOtherParticipant(activeConversation)?.name || 'User'} 
+                                        className="w-10 h-10 rounded-full" 
+                                    />
+                                </button>
+                                <div>
+                                    <h3 className="font-bold text-slate-800 dark:text-white">{getOtherParticipant(activeConversation)?.name}</h3>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">{getOtherParticipant(activeConversation)?.course}</p>
+                                </div>
+                            </>
+                        )}
+                     </div>
+
+                     {/* Messages List */}
+                     <div className="flex-grow overflow-y-auto p-4 space-y-4">
+                        {currentMessages.map((msg, index) => {
+                            const isSender = msg.senderId === user?.id;
+                            const showDate = index === 0 || new Date(msg.timestamp).toDateString() !== new Date(currentMessages[index - 1].timestamp).toDateString();
+                            
+                            return (
+                                <React.Fragment key={msg.id}>
+                                    {showDate && (
+                                        <div className="flex justify-center my-4">
+                                            <span className="text-xs font-bold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-zinc-800 px-3 py-1 rounded-full">
+                                                {new Date(msg.timestamp).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}
+                                            </span>
+                                        </div>
+                                    )}
+                                    <div className={`flex ${isSender ? 'justify-end' : 'justify-start'}`}>
+                                        <div className={`max-w-[85%] md:max-w-[70%] rounded-2xl p-3 md:p-4 shadow-sm relative group ${
+                                            isSender 
+                                            ? 'bg-primary-600 text-white rounded-br-none' 
+                                            : 'bg-white dark:bg-zinc-800 text-slate-800 dark:text-white rounded-bl-none border border-slate-100 dark:border-zinc-700'
+                                        }`}>
+                                            <MessageBubble message={msg} isSender={isSender} />
+                                            <div className={`flex items-center gap-1 justify-end mt-1 text-[10px] ${isSender ? 'text-blue-100' : 'text-slate-400 dark:text-slate-500'}`}>
+                                                <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                                {isSender && <MessageStatusIcon status={msg.status} />}
                                             </div>
                                         </div>
                                     </div>
-                                ))}
-                                <div ref={chatEndRef} />
-                            </div>
+                                </React.Fragment>
+                            );
+                        })}
+                        <div ref={messagesEndRef} />
+                     </div>
+
+                     {/* Input Area */}
+                     <form onSubmit={handleSendMessage} className="p-4 bg-white dark:bg-dark-surface border-t border-slate-200 dark:border-zinc-700">
+                        <div className="flex items-end gap-2 bg-slate-100 dark:bg-zinc-800 p-2 rounded-xl border border-transparent focus-within:border-primary-500 dark:focus-within:border-primary-500 transition-colors">
+                            <input
+                                type="text"
+                                value={newMessage}
+                                onChange={e => setNewMessage(e.target.value)}
+                                placeholder="Type a message..."
+                                className="flex-grow bg-transparent border-none focus:ring-0 text-slate-800 dark:text-white placeholder:text-slate-500 dark:placeholder:text-slate-400 px-2 py-2 max-h-32 overflow-y-auto"
+                            />
+                            <button 
+                                type="submit" 
+                                disabled={!newMessage.trim()}
+                                className="p-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition shrink-0"
+                            >
+                                <Send size={20} />
+                            </button>
                         </div>
-                        <div className="p-4 bg-white dark:bg-dark-surface border-t border-slate-200 dark:border-zinc-700 w-full relative">
-                            {showEmojiPicker && (
-                                <div ref={emojiPickerRef} className="absolute bottom-20 right-4 bg-white dark:bg-zinc-800 shadow-xl rounded-lg p-2 border border-slate-200 dark:border-zinc-700 grid grid-cols-4 gap-2 z-20">
-                                    {emojis.map(emoji => (
-                                        <button key={emoji} onClick={() => addEmoji(emoji)} className="text-xl p-1 hover:bg-slate-100 dark:hover:bg-zinc-700 rounded transition">{emoji}</button>
-                                    ))}
-                                </div>
-                            )}
-                            <form onSubmit={handleSendMessage} className="flex items-center gap-2 w-full">
-                                <input
-                                    type="text"
-                                    value={newMessage}
-                                    onChange={(e) => setNewMessage(e.target.value)}
-                                    placeholder="Type a message..."
-                                    className="flex-grow bg-slate-100 dark:bg-zinc-800 dark:text-white text-slate-900 placeholder:text-slate-500 dark:placeholder:text-slate-500 px-4 py-3 border border-slate-300 dark:border-zinc-700 rounded-full focus:ring-primary-500 focus:border-primary-500 transition min-w-0"
-                                    autoComplete="off"
-                                />
-                                <button type="button" onClick={() => setShowEmojiPicker(!showEmojiPicker)} className="p-2 text-slate-500 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 transition">
-                                    <Smile size={24} />
-                                </button>
-                                <button type="submit" className="bg-primary-600 text-white p-3 rounded-full hover:bg-primary-700 transition shrink-0">
-                                    <Send size={20} />
-                                </button>
-                            </form>
-                        </div>
-                    </>
-                ) : (
-                    <div className="flex flex-col items-center justify-center h-full text-center text-slate-500 dark:text-slate-400 p-4">
-                        <MessageCircle size={64} className="mb-4" />
-                        <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Select a conversation</h2>
-                        <p>Choose a chat from the left panel to start messaging.</p>
+                     </form>
+                </div>
+            ) : (
+                <div className="hidden md:flex flex-col items-center justify-center flex-grow bg-slate-50 dark:bg-zinc-900/50 text-slate-400">
+                    <div className="w-24 h-24 bg-slate-100 dark:bg-zinc-800 rounded-full flex items-center justify-center mb-4">
+                        <MessageCircle size={48} className="opacity-50" />
                     </div>
-                )}
-            </main>
+                    <h3 className="text-xl font-bold text-slate-600 dark:text-slate-300">Your Messages</h3>
+                    <p className="mt-2 text-sm">Select a conversation to start chatting.</p>
+                </div>
+            )}
         </div>
     );
 };

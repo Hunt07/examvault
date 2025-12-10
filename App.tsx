@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import type { User, Resource, ForumPost, Comment, ForumReply, Notification, Conversation, DirectMessage, ResourceRequest, Attachment } from './types';
 import { NotificationType, MessageStatus, ResourceRequestStatus } from './types';
@@ -15,7 +16,6 @@ import Header from './components/Header';
 import UploadModal, { generateFilePreview } from './components/UploadModal';
 import TooltipGuide from './components/TooltipGuide';
 import ToastNotification from './components/ToastNotification';
-import { generateDefaultAvatar } from './components/Avatar';
 
 // Firebase Imports
 import { auth, db, storage } from './services/firebase';
@@ -89,6 +89,25 @@ export const AppContext = React.createContext<AppContextType>({} as AppContextTy
 // Helper to remove undefined values which Firestore hates
 const sanitizeForFirestore = (obj: any): any => {
   return JSON.parse(JSON.stringify(obj));
+};
+
+// Generate a default SVG avatar with the user's first initial
+const generateDefaultAvatar = (name: string): string => {
+  const initial = name && name.length > 0 ? name.charAt(0).toUpperCase() : '?';
+  const colors = ['#2563eb', '#db2777', '#ca8a04', '#16a34a', '#dc2626', '#7c3aed', '#0891b2', '#be123c'];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const color = colors[Math.abs(hash) % colors.length];
+
+  const svgString = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
+      <rect width="100" height="100" fill="${color}"/>
+      <text x="50" y="65" font-family="Arial, sans-serif" font-size="50" font-weight="bold" fill="white" text-anchor="middle">${initial}</text>
+    </svg>
+  `.trim();
+  return `data:image/svg+xml;base64,${btoa(svgString)}`;
 };
 
 // Extracted Helper for Deep Profile Propagation

@@ -1,3 +1,4 @@
+
 import React, { useContext, useState, useMemo, useRef, useEffect } from 'react';
 import type { ForumPost, ForumReply, Attachment } from '../../types';
 import { AppContext } from '../../App';
@@ -5,7 +6,6 @@ import { ArrowLeft, ThumbsUp, ThumbsDown, CheckCircle, MessageCircle, Paperclip,
 import MarkdownRenderer from '../MarkdownRenderer';
 import MarkdownToolbar from '../MarkdownToolbar';
 import UserRankBadge from '../UserRankBadge';
-import Avatar from '../Avatar';
 
 const ReplyComponent: React.FC<{
     reply: ForumReply;
@@ -69,7 +69,7 @@ const ReplyComponent: React.FC<{
         <div id={reply.id} className="mt-6 scroll-mt-24 transition-colors duration-1000 p-2 rounded-lg">
             <div className={`flex gap-4 items-start`}>
                 <button onClick={() => handleUserClick(reply.author.id)} className="shrink-0">
-                    <Avatar src={reply.author.avatarUrl} name={reply.author.name} className="w-10 h-10 rounded-full" />
+                    <img src={reply.author.avatarUrl} alt={reply.author.name} className="w-10 h-10 rounded-full" />
                 </button>
                 <div className="flex-grow bg-slate-50 dark:bg-zinc-900/50 p-4 rounded-lg border border-transparent dark:border-zinc-700">
                     <div className="flex justify-between items-start">
@@ -172,7 +172,7 @@ const ReplyComponent: React.FC<{
             {isReplying && (
                 <div className="ml-14 mt-4">
                     <form onSubmit={handleReplySubmit} className="flex gap-4 items-start">
-                        <Avatar src={user?.avatarUrl} name={user?.name || 'User'} className="w-8 h-8 rounded-full" />
+                        <img src={user?.avatarUrl} alt={user?.name} className="w-8 h-8 rounded-full" />
                         <div className="flex-grow">
                              <MarkdownToolbar
                                 textareaRef={replyTextareaRef}
@@ -372,7 +372,7 @@ const ForumPostDetailPage: React.FC<{ post: ForumPost }> = ({ post }) => {
                     <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mt-4">{post.title}</h1>
                     <div className="flex items-center gap-4 mt-4 text-sm text-slate-500 dark:text-slate-400">
                         <button onClick={() => setView(user?.id === post.author.id ? 'profile' : 'publicProfile', post.author.id)} className="flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-zinc-800 p-1 rounded-md transition">
-                            <Avatar src={post.author.avatarUrl} name={post.author.name} className="w-10 h-10 rounded-full" />
+                            <img src={post.author.avatarUrl} alt={post.author.name} className="w-10 h-10 rounded-full" />
                             <div className="text-left">
                                 <div className="flex items-center">
                                     <p className="font-semibold text-slate-800 dark:text-slate-200">{post.author.name}</p>
@@ -432,7 +432,7 @@ const ForumPostDetailPage: React.FC<{ post: ForumPost }> = ({ post }) => {
                 
                 <form onSubmit={handlePostReply}>
                     <div className="flex gap-4 items-start pb-6 mb-6 border-b border-slate-200 dark:border-zinc-700">
-                        <Avatar src={user?.avatarUrl} name={user?.name || 'User'} className="w-10 h-10 rounded-full" />
+                        <img src={user?.avatarUrl} alt={user?.name} className="w-10 h-10 rounded-full" />
                         <div className="flex-grow">
                              <MarkdownToolbar
                                 textareaRef={mainReplyTextareaRef}

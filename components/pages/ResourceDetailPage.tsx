@@ -1,3 +1,4 @@
+
 import React, { useState, useContext, useRef, useMemo, useEffect } from 'react';
 import type { Resource, Comment, Flashcard, QuizQuestion } from '../../types';
 import { AppContext } from '../../App';
@@ -12,7 +13,6 @@ import ShareModal from '../ShareModal';
 import ResourceCard from '../ResourceCard';
 import { db } from '../../services/firebase';
 import { collection, addDoc } from 'firebase/firestore';
-import Avatar from '../Avatar';
 
 const CommentComponent: React.FC<{
   comment: Comment;
@@ -60,7 +60,7 @@ const CommentComponent: React.FC<{
     <div id={comment.id} className="mt-4 scroll-mt-24 transition-colors duration-1000 p-2 rounded-lg">
       <div className="flex gap-4 items-start">
         <button onClick={() => handleUserClick(comment.author.id)} className="shrink-0">
-          <Avatar src={comment.author.avatarUrl} name={comment.author.name} className="w-10 h-10 rounded-full" />
+          <img src={comment.author.avatarUrl} alt={comment.author.name} className="w-10 h-10 rounded-full" />
         </button>
         <div className="flex-grow bg-slate-50 dark:bg-zinc-800/50 p-4 rounded-lg">
           <div className="flex justify-between items-start">
@@ -132,7 +132,7 @@ const CommentComponent: React.FC<{
       {isReplying && (
         <div className="ml-14 mt-4">
           <form onSubmit={handleReplySubmit} className="flex gap-4 items-start">
-            <Avatar src={user?.avatarUrl} name={user?.name || 'User'} className="w-8 h-8 rounded-full" />
+            <img src={user?.avatarUrl} alt={user?.name} className="w-8 h-8 rounded-full" />
             <div className="flex-grow">
               <MarkdownToolbar
                 textareaRef={replyTextareaRef}
@@ -698,7 +698,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
                 Discussion ({resource.comments.length})
             </h3>
             <form onSubmit={handlePostComment} className="flex gap-4 items-start pb-6 mb-6 border-b border-slate-200 dark:border-zinc-700">
-              <Avatar src={user?.avatarUrl} name={user?.name || 'User'} className="w-10 h-10 rounded-full shrink-0" />
+              <img src={user?.avatarUrl} alt={user?.name} className="w-10 h-10 rounded-full shrink-0" />
               <div className="w-full">
                 <MarkdownToolbar
                     textareaRef={commentTextareaRef}
@@ -771,7 +771,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
                 <div className="mt-6 pt-6 border-t border-slate-200 dark:border-dark-border">
                     <p className="text-sm font-semibold text-slate-800 dark:text-white mb-3">Uploaded by</p>
                     <button onClick={() => handleAuthorClick(resource.author.id)} className="flex items-center gap-3 w-full text-left hover:bg-slate-50 dark:hover:bg-zinc-800 p-2 rounded-lg transition-colors">
-                        <Avatar src={resource.author.avatarUrl} name={resource.author.name} className="w-12 h-12 rounded-full" />
+                        <img src={resource.author.avatarUrl} alt={resource.author.name} className="w-12 h-12 rounded-full" />
                         <div>
                             <div className="flex items-center">
                               <p className="font-bold text-slate-900 dark:text-slate-100">{resource.author.name}</p>

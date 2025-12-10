@@ -1,9 +1,11 @@
+
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 
-// Use Vite environment variable or fallback to the provided key
+// Use Vite environment variable.
 // Cast to any to prevent TS error: Property 'env' does not exist on type 'ImportMeta'
-// IMPORTANT: If this key was committed to GitHub, Google may have revoked it. Generate a new one if AI fails.
-const apiKey = (import.meta as any).env?.VITE_API_KEY || "AIzaSyDgJ3zCBpYfyj-JwYiWFLBSDnWYT03I2HA";
+const apiKey = (import.meta as any).env?.VITE_API_KEY || "AIzaSyCuNJIRcPQxT7hrPvZzqcTjD7VAQYio4-g";
+
+// Initialize safely - requests will fail gracefully if key is missing
 const genAI = new GoogleGenerativeAI(apiKey);
 
 // Switched to gemini-1.5-flash for maximum stability and free-tier compatibility
@@ -14,6 +16,10 @@ export const summarizeContent = async (
   fileBase64?: string, 
   mimeType?: string
 ): Promise<string> => {
+  if (!apiKey) {
+    return "Configuration Error: Gemini API Key is missing. Please set the VITE_API_KEY environment variable.";
+  }
+
   try {
     const textPrompt = `You are an expert academic assistant. Your task is to analyze the provided study material and create a highly informative, concise summary for a university student, formatted in markdown. The summary should be easy to digest and focus on what's most important for exam preparation.
 
@@ -50,13 +56,15 @@ Based on the following material, please provide the summary with these exact sec
   } catch (error: any) {
     console.error("Gemini API Error:", error);
     if (error.message?.includes('403') || error.message?.includes('API key')) {
-        return "Error: Invalid API Key. Google may have revoked your key if it was exposed on GitHub. Please generate a new key and add it to Vercel Environment Variables.";
+        return "Error: Invalid API Key. The key may have been revoked or is incorrect. Please check your VITE_API_KEY environment variable.";
     }
     return "Could not generate summary. Please check your Internet connection or API Key quota.";
   }
 };
 
 export const describeImage = async (base64Data: string, mimeType: string): Promise<string> => {
+  if (!apiKey) return "Error: API Key missing.";
+
   try {
     const textPart = {
       text: "Analyze this image from a study document. Describe the key information, including any text, diagrams, or main concepts. This will be used as a summary for other students."
@@ -87,6 +95,11 @@ export const generateStudySet = async (
   fileBase64?: string, 
   mimeType?: string
 ): Promise<any> => {
+  if (!apiKey) {
+      console.error("API Key missing for study set generation");
+      return [];
+  }
+
   try {
     let promptText;
     let schema;

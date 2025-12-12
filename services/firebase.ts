@@ -1,13 +1,21 @@
 
+
+
 // services/firebase.ts
 import { initializeApp } from "firebase/app";
 import * as firebaseAuth from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-// 🔹 Your Firebase config
+// Helper to get env vars safely
+const getEnv = (key: string) => {
+  return (import.meta as any).env?.[key] || "";
+};
+
+// 🔹 Your Firebase config using Environment Variables
+// You must set these in a .env file in your project root
 const firebaseConfig = {
-  apiKey: "AIzaSyCuN5mDneFpeI9ZVaiD6DRahRvSPGKGHZs",
+  apiKey: " ",
   authDomain: "examvault-live-07.firebaseapp.com",
   projectId: "examvault-live-07",
   storageBucket: "examvault-live-07.firebasestorage.app",

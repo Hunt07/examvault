@@ -81,7 +81,8 @@ const DashboardPage: React.FC = () => {
         resource.title.toLowerCase().includes(searchLower) ||
         resource.courseCode.toLowerCase().includes(searchLower) ||
         resource.courseName.toLowerCase().includes(searchLower) ||
-        resource.author.name.toLowerCase().includes(searchLower);
+        resource.author.name.toLowerCase().includes(searchLower) ||
+        (resource.lecturer && resource.lecturer.toLowerCase().includes(searchLower));
 
       if (!matchesSearch) return false;
 
@@ -121,7 +122,7 @@ const DashboardPage: React.FC = () => {
             <input
               id="tour-search-bar"
               type="text"
-              placeholder="Search by title, course code, or lecturer..."
+              placeholder="Search by title, course, or lecturer..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full bg-white dark:bg-dark-surface dark:text-white dark:border-zinc-700 pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500 shadow-sm transition-all"

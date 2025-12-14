@@ -2,13 +2,14 @@
 import React, { useState, useEffect, useContext } from 'react';
 import type { Resource, ResourceRequest } from '../types';
 import { ResourceType, ExamType, SemesterIntake } from '../types';
-import { X, UploadCloud, Image as ImageIcon, Info } from 'lucide-react';
+import { X, UploadCloud, Image as ImageIcon, Info, Loader2 } from 'lucide-react';
 import { AppContext } from '../App';
 
 interface UploadModalProps {
   onClose: () => void;
   onUpload: (resource: Omit<Resource, 'id' | 'author' | 'uploadDate' | 'upvotes' | 'downvotes' | 'upvotedBy' | 'downvotedBy' | 'comments' | 'fileUrl' | 'fileName' | 'previewImageUrl' | 'contentForAI' | 'fileBase64' | 'mimeType'>, file: File, coverImageFile: File | null) => void;
   fulfillingRequest?: ResourceRequest;
+  isLoading: boolean;
 }
 
 // Helper to generate SVG Data URI for previews (Abstract, Text-Free)
@@ -98,7 +99,7 @@ export const generateFilePreview = (fileName: string): string => {
   return `data:image/svg+xml;base64,${btoa(svgString)}`;
 };
 
-const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, fulfillingRequest }) => {
+const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, fulfillingRequest, isLoading }) => {
   const { showToast } = useContext(AppContext);
   const [title, setTitle] = useState('');
   const [courseCode, setCourseCode] = useState('');
@@ -215,6 +216,9 @@ const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, fulfilling
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (isLoading) return;
+
     if (!file) {
       showToast('Please select a file to upload.', 'error');
       return;
@@ -247,8 +251,9 @@ const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, fulfilling
       lecturer: supportsExamType ? lecturer : undefined,
       description,
     };
+    
+    // Trigger upload but DO NOT close. App.tsx will handle close on success.
     onUpload(newResource, file, coverImageFile);
-    onClose();
   };
 
   const displayPreviewUrl = coverImagePreviewUrl || filePreviewUrl;
@@ -258,7 +263,11 @@ const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, fulfilling
       <div className="bg-white dark:bg-dark-surface rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200 border border-transparent dark:border-zinc-700">
         <div className="p-6 border-b border-slate-200 dark:border-zinc-700 flex justify-between items-center">
           <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Upload a New Resource</h2>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-zinc-800 transition">
+          <button 
+            onClick={onClose} 
+            disabled={isLoading}
+            className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-zinc-800 transition disabled:opacity-50"
+          >
             <X size={24} className="text-slate-600 dark:text-slate-400" />
           </button>
         </div>
@@ -402,11 +411,27 @@ const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, fulfilling
             )}
           </div>
           <div className="mt-8 pt-6 border-t border-slate-200 dark:border-zinc-700 flex justify-end gap-4">
-            <button type="button" onClick={onClose} className="bg-slate-100 dark:bg-zinc-700 text-slate-700 dark:text-white font-bold py-2 px-6 rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-600 transition">
+            <button 
+                type="button" 
+                onClick={onClose} 
+                disabled={isLoading}
+                className="bg-slate-100 dark:bg-zinc-700 text-slate-700 dark:text-white font-bold py-2 px-6 rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-600 transition disabled:opacity-50"
+            >
               Cancel
             </button>
-            <button type="submit" className="bg-primary-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-primary-700 transition">
-              Upload
+            <button 
+                type="submit" 
+                disabled={isLoading}
+                className="bg-primary-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-primary-700 transition flex items-center gap-2 disabled:opacity-50"
+            >
+              {isLoading ? (
+                  <>
+                    <Loader2 size={18} className="animate-spin" />
+                    Uploading...
+                  </>
+              ) : (
+                  'Upload'
+              )}
             </button>
           </div>
         </form>

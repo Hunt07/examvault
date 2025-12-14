@@ -211,6 +211,7 @@ const App: React.FC = () => {
   const [resourceRequests, setResourceRequests] = useState<ResourceRequest[]>([]);
   
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [fulfillingRequest, setFulfillingRequest] = useState<ResourceRequest | undefined>(undefined);
 
   const [toast, setToast] = useState<{ message: string; points?: number; type?: 'success' | 'error' | 'info' } | null>(null);
@@ -567,36 +568,17 @@ const App: React.FC = () => {
   };
 
   const handleUpload = async (resourceData: any, file: File, coverImage: File | null) => {
-      if (!user || !db || !storage) return;
+      if (!user || !db || !storage) {
+          showToast("Upload service not initialized.", "error");
+          return;
+      }
 
-      const tempId = `temp-${Date.now()}`;
-      const tempPreview = coverImage ? URL.createObjectURL(coverImage) : generateFilePreview(file.name);
-      
-      const optimisticResource: Resource = {
-          id: tempId,
-          ...resourceData,
-          author: user,
-          uploadDate: new Date().toISOString(),
-          upvotes: 0,
-          downvotes: 0,
-          upvotedBy: [],
-          downvotedBy: [],
-          comments: [],
-          fileUrl: '#',
-          fileName: file.name,
-          previewImageUrl: tempPreview,
-          fileBase64: '',
-          mimeType: file.type,
-          contentForAI: "Processing...", 
-          semester: resourceData.semester
-      };
-
-      setResources(prev => [optimisticResource, ...prev]);
-      setToast({ message: "Upload started... Resource will appear shortly.", type: 'info' });
-      setIsUploadModalOpen(false);
+      setIsUploading(true);
 
       try {
           const storageRef = ref(storage, `resources/${Date.now()}_${file.name}`);
+          
+          // Perform upload
           await uploadBytes(storageRef, file);
           const downloadURL = await getDownloadURL(storageRef);
 
@@ -613,7 +595,7 @@ const App: React.FC = () => {
           try {
             fileBase64 = await fileToBase64(file);
           } catch (e) {
-            console.error("Failed to convert file to base64", e);
+            console.warn("Failed to convert file to base64, AI features may be limited", e);
           }
 
           const newResource: Omit<Resource, 'id'> = {
@@ -681,15 +663,25 @@ const App: React.FC = () => {
                    }
                });
           }
+          
+          // Only close modal and reset state on success
+          setIsUploadModalOpen(false);
+          
       } catch (error: any) {
           console.error("Upload failed", error);
-          setResources(prev => prev.filter(r => r.id !== tempId));
           
-          let msg = "Upload failed. Please try again.";
+          let msg = `Upload failed: ${error.message || "Unknown error"}`;
           if (error.code === 'storage/unauthorized') {
-             msg = "Upload failed: Unauthorized (Check file size limits or permissions).";
+             msg = "Permission Denied: Ensure you are logged in and file size is within limits (10MB).";
+          } else if (error.code === 'storage/canceled') {
+             msg = "Upload canceled.";
+          } else if (error.code === 'storage/unknown') {
+             msg = "Storage Error. Please check your internet connection.";
           }
+          
           setToast({ message: msg, type: 'error' });
+      } finally {
+          setIsUploading(false);
       }
   };
 
@@ -1419,9 +1411,10 @@ const App: React.FC = () => {
 
         {isUploadModalOpen && (
             <UploadModal 
-                onClose={() => { setIsUploadModalOpen(false); setFulfillingRequest(undefined); }} 
+                onClose={() => { if(!isUploading) { setIsUploadModalOpen(false); setFulfillingRequest(undefined); } }} 
                 onUpload={handleUpload}
                 fulfillingRequest={fulfillingRequest}
+                isLoading={isUploading}
             />
         )}
         

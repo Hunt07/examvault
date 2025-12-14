@@ -1,9 +1,10 @@
 
 import React, { useContext } from 'react';
-import type { Resource } from '../types';
-import { ThumbsUp, MessageSquare, FileText, Notebook } from 'lucide-react';
+import { ResourceType, type Resource } from '../types';
+import { ThumbsUp, MessageSquare, FileText, Notebook, ClipboardList, Archive } from 'lucide-react';
 import { AppContext } from '../App';
 import UserRankBadge from './UserRankBadge';
+import Avatar from './Avatar';
 
 interface ResourceCardProps {
   resource: Resource;
@@ -16,6 +17,36 @@ const ResourceCard: React.FC<ResourceCardProps> = ({ resource, onSelect, onAutho
   const { userRanks } = useContext(AppContext);
   const authorRank = userRanks.get(resource.author.id);
 
+  const getBadgeStyle = (type: ResourceType) => {
+    switch (type) {
+        case ResourceType.PastPaper:
+            return 'bg-blue-100 text-blue-800 dark:bg-blue-900/80 dark:text-blue-200';
+        case ResourceType.Notes:
+            return 'bg-green-100 text-green-800 dark:bg-green-900/80 dark:text-green-200';
+        case ResourceType.Assignment:
+            return 'bg-purple-100 text-purple-800 dark:bg-purple-900/80 dark:text-purple-200';
+        case ResourceType.Other:
+            return 'bg-orange-100 text-orange-800 dark:bg-orange-900/80 dark:text-orange-200';
+        default:
+            return 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200';
+    }
+  };
+
+  const getBadgeIcon = (type: ResourceType, size: number) => {
+      switch (type) {
+          case ResourceType.PastPaper:
+              return <FileText size={size}/>;
+          case ResourceType.Notes:
+              return <Notebook size={size}/>;
+          case ResourceType.Assignment:
+              return <ClipboardList size={size}/>;
+          case ResourceType.Other:
+              return <Archive size={size}/>;
+          default:
+              return <FileText size={size}/>;
+      }
+  };
+
   return (
     <div 
         onClick={onSelect}
@@ -27,8 +58,8 @@ const ResourceCard: React.FC<ResourceCardProps> = ({ resource, onSelect, onAutho
           src={resource.previewImageUrl}
           alt={resource.title}
         />
-        <div className={`absolute top-3 right-3 flex items-center gap-2 font-semibold rounded-full ${resource.type === 'Past Paper' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/80 dark:text-blue-200' : 'bg-green-100 text-green-800 dark:bg-green-900/80 dark:text-green-200'} ${compact ? 'text-[10px] px-2 py-0.5' : 'text-xs px-2 py-1'}`}>
-          {resource.type === 'Past Paper' ? <FileText size={compact ? 12 : 14}/> : <Notebook size={compact ? 12 : 14}/>}
+        <div className={`absolute top-3 right-3 flex items-center gap-2 font-semibold rounded-full ${getBadgeStyle(resource.type)} ${compact ? 'text-[10px] px-2 py-0.5' : 'text-xs px-2 py-1'}`}>
+          {getBadgeIcon(resource.type, compact ? 12 : 14)}
           {!compact && resource.type}
         </div>
       </div>
@@ -50,7 +81,11 @@ const ResourceCard: React.FC<ResourceCardProps> = ({ resource, onSelect, onAutho
             }}
             className="flex items-center gap-2 rounded-md p-1 -ml-1 hover:bg-slate-100 dark:hover:bg-zinc-700 max-w-[70%]"
           >
-            <img src={resource.author.avatarUrl} alt={resource.author.name} className={`${compact ? 'w-5 h-5' : 'w-6 h-6'} rounded-full`} />
+            <Avatar 
+                src={resource.author.avatarUrl} 
+                alt={resource.author.name} 
+                className={compact ? 'w-5 h-5' : 'w-6 h-6'} 
+            />
             <div className="flex items-center min-w-0">
                 <span className="truncate text-slate-700 dark:text-white">{resource.author.name}</span>
                 <UserRankBadge rank={authorRank} size={compact ? 10 : 14} />

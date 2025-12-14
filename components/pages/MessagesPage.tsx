@@ -2,8 +2,8 @@
 import React, { useContext, useMemo, useState, useEffect, useRef } from 'react';
 import { AppContext } from '../../App';
 import type { User } from '../../types';
-import { MessageStatus } from '../../types';
-import { Send, Check, CheckCheck, MessageCircle, ArrowLeft, FileText, Notebook, ExternalLink, MoreVertical, Edit2, Trash2, X, Smile } from 'lucide-react';
+import { MessageStatus, ResourceType } from '../../types';
+import { Send, Check, CheckCheck, MessageCircle, ArrowLeft, FileText, Notebook, ClipboardList, Archive, ExternalLink, MoreVertical, Edit2, Trash2, X, Smile } from 'lucide-react';
 import Avatar from '../Avatar';
 
 const formatTimestamp = (timestamp: string): string => {
@@ -90,6 +90,26 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isSender }) => {
         setIsEditing(false);
     };
 
+    const getResourceIcon = (type: ResourceType) => {
+        switch (type) {
+            case ResourceType.PastPaper: return <FileText size={20}/>;
+            case ResourceType.Notes: return <Notebook size={20}/>;
+            case ResourceType.Assignment: return <ClipboardList size={20}/>;
+            case ResourceType.Other: return <Archive size={20}/>;
+            default: return <FileText size={20}/>;
+        }
+    };
+
+    const getResourceColor = (type: ResourceType) => {
+        switch (type) {
+            case ResourceType.PastPaper: return 'bg-blue-100 text-blue-600';
+            case ResourceType.Notes: return 'bg-green-100 text-green-600';
+            case ResourceType.Assignment: return 'bg-purple-100 text-purple-600';
+            case ResourceType.Other: return 'bg-orange-100 text-orange-600';
+            default: return 'bg-slate-100 text-slate-600';
+        }
+    };
+
     const renderText = (text: string) => {
         if (message.isDeleted) {
             return <span className="italic opacity-60 flex items-center gap-1"><X size={12}/> This message was deleted</span>;
@@ -128,9 +148,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isSender }) => {
                                 <div className={`flex items-center justify-center w-10 h-10 rounded-lg shrink-0 mr-3 ${
                                     isSender 
                                         ? 'bg-white/20 text-white' 
-                                        : (resource.type === 'Past Paper' ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600')
+                                        : getResourceColor(resource.type)
                                 }`}>
-                                        {resource.type === 'Past Paper' ? <FileText size={20}/> : <Notebook size={20}/>}
+                                        {getResourceIcon(resource.type)}
                                 </div>
                                 <div className="min-w-0 flex-1">
                                         <p className={`text-sm font-bold truncate ${isSender ? 'text-white' : 'text-slate-900 dark:text-white'}`}>{resource.title}</p>

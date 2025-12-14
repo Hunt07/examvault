@@ -25,6 +25,8 @@ export interface UserSubscriptions {
 export enum ResourceType {
   PastPaper = 'Past Paper',
   Notes = 'Notes',
+  Assignment = 'Assignment',
+  Other = 'Other',
 }
 
 export enum ExamType {

@@ -259,8 +259,9 @@ const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, fulfilling
             <div className="col-span-2">
               <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">Resource Type</label>
               <select value={type} onChange={e => setType(e.target.value as ResourceType)} className="w-full bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-white px-4 py-2 border border-slate-300 dark:border-zinc-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 transition">
-                <option value={ResourceType.PastPaper}>Past Paper</option>
-                <option value={ResourceType.Notes}>Notes</option>
+                {Object.values(ResourceType).map((rt) => (
+                  <option key={rt} value={rt}>{rt}</option>
+                ))}
               </select>
             </div>
             <div className="col-span-2">

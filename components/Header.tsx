@@ -1,10 +1,11 @@
 
 import React, { useContext, useState, useMemo, useRef, useEffect } from 'react';
 import { AppContext } from '../App';
-import { BookOpen, PlusCircle, Bell, User, LogOut, FileText, Mail, MessageSquare, Gift, Bookmark, Sun, Moon, HelpCircle } from 'lucide-react';
+import { BookOpen, PlusCircle, Bell, User as UserIcon, LogOut, FileText, Mail, MessageSquare, Gift, Bookmark, Sun, Moon, HelpCircle } from 'lucide-react';
 import type { Notification } from '../types';
 import UserRankBadge from './UserRankBadge';
 import { NotificationType } from '../types';
+import Avatar from './Avatar';
 
 function timeAgo(dateString: string): string {
   const date = new Date(dateString);
@@ -322,10 +323,10 @@ const Header: React.FC<{ onUploadClick: () => void }> = ({ onUploadClick }) => {
 
             <div id="tour-profile-menu" className="relative group">
               <button className="flex items-center gap-2">
-                <img
-                  src={user?.avatarUrl}
-                  alt={user?.name}
-                  className="w-10 h-10 rounded-full border-2 border-slate-200 dark:border-slate-700"
+                <Avatar 
+                  src={user?.avatarUrl} 
+                  alt={user?.name || "User"} 
+                  className="w-10 h-10 border-2 border-slate-200 dark:border-slate-700" 
                 />
               </button>
               <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-dark-surface rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-30 border border-slate-200 dark:border-dark-border">
@@ -338,7 +339,7 @@ const Header: React.FC<{ onUploadClick: () => void }> = ({ onUploadClick }) => {
                         <p className="text-sm text-slate-500 dark:text-slate-400 truncate">{user?.email}</p>
                     </div>
                     <button onClick={() => setView('profile')} className="w-full text-left flex items-center gap-3 px-4 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-zinc-800">
-                        <User size={16} />
+                        <UserIcon size={16} />
                         Profile
                     </button>
                     <button onClick={logout} className="w-full text-left flex items-center gap-3 px-4 py-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20">

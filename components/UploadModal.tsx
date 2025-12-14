@@ -219,6 +219,10 @@ const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, fulfilling
       showToast('Please select a file to upload.', 'error');
       return;
     }
+    
+    // Enable examType/lecturer for PastPaper, Assignment, and Other
+    const supportsExamType = [ResourceType.PastPaper, ResourceType.Assignment, ResourceType.Other].includes(type);
+
     const newResource = {
       title,
       courseCode,
@@ -226,8 +230,8 @@ const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, fulfilling
       type,
       year,
       semester,
-      examType: type === ResourceType.PastPaper ? examType : undefined,
-      lecturer: type === ResourceType.PastPaper ? lecturer : undefined,
+      examType: supportsExamType ? examType : undefined,
+      lecturer: supportsExamType ? lecturer : undefined,
       description,
     };
     onUpload(newResource, file, coverImageFile);
@@ -290,10 +294,14 @@ const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, fulfilling
                   {Object.values(SemesterIntake).map(si => <option key={si} value={si}>{si}</option>)}
               </select>
             </div>
-            {type === ResourceType.PastPaper && (
+            
+            {/* Show Exam Type and Lecturer for Past Paper, Assignment, and Other */}
+            {(type === ResourceType.PastPaper || type === ResourceType.Assignment || type === ResourceType.Other) && (
               <>
                 <div>
-                  <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">Exam Type</label>
+                  <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">
+                    {type === ResourceType.PastPaper ? 'Exam Type' : 'Assessment Type'}
+                  </label>
                   <select value={examType} onChange={e => setExamType(e.target.value as ExamType)} className="w-full bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-white px-4 py-2 border border-slate-300 dark:border-zinc-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 transition">
                     {Object.values(ExamType).map(et => <option key={et} value={et}>{et}</option>)}
                   </select>
@@ -304,6 +312,7 @@ const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, fulfilling
                 </div>
               </>
             )}
+
             <div className="col-span-2 mt-4">
               <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">File Upload</label>
               <div

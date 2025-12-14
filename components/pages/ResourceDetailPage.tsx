@@ -562,7 +562,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
                 <InfoTag label="Year" value={resource.year} />
                 <InfoTag label="Semester" value={resource.semester} />
                 {resource.lecturer && <InfoTag label="Lecturer" value={resource.lecturer} />}
-                {resource.examType && <InfoTag label="Paper Type" value={resource.examType} />}
+                {resource.examType && <InfoTag label={resource.type === ResourceType.PastPaper ? "Paper Type" : "Assessment Type"} value={resource.examType} />}
                 {fileType && <InfoTag label="File Type" value={fileType} />}
             </div>
 

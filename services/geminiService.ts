@@ -1,12 +1,35 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const getApiKey = () => {
+  // Check for Vite environment variable
+  // Cast import.meta to any to avoid TypeScript error about 'env' property
+  const meta = import.meta as any;
+  if (typeof meta !== 'undefined' && meta.env && meta.env.VITE_API_KEY) {
+    return meta.env.VITE_API_KEY;
+  }
+  // Check for process.env (safely)
+  try {
+    if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+      return process.env.API_KEY;
+    }
+  } catch (e) {
+    // ignore
+  }
+  return "";
+};
+
+const apiKey = getApiKey();
+const ai = new GoogleGenAI({ apiKey: apiKey });
 
 export const summarizeContent = async (
   content: string, 
   fileBase64?: string, 
   mimeType?: string
 ): Promise<string> => {
+  if (!apiKey) {
+      return "Configuration Error: API Key is missing. Please ensure VITE_API_KEY is set in your .env file.";
+  }
+
   try {
     const systemInstruction = `You are an expert academic assistant. Your task is to analyze the provided study material and create a highly informative, concise summary for a university student, formatted in markdown. The summary should be easy to digest and focus on what's most important for exam preparation.
 
@@ -51,6 +74,7 @@ Based on the following material, please provide the summary with these exact sec
 };
 
 export const describeImage = async (base64Data: string, mimeType: string): Promise<string> => {
+  if (!apiKey) return "Error: API Key missing.";
   try {
     const cleanBase64 = base64Data.replace(/^data:.+;base64,/, '');
     const prompt = "Analyze this image from a study document. Describe the key information, including any text, diagrams, or main concepts. This will be used as a summary for other students.";
@@ -78,6 +102,10 @@ export const generateStudySet = async (
   fileBase64?: string, 
   mimeType?: string
 ): Promise<any> => {
+  if (!apiKey) {
+      console.error("API Key missing");
+      return [];
+  }
   try {
     let promptText;
     let schema;

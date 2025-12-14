@@ -3,7 +3,7 @@ import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 
 // Initialize the Google Generative AI client
 // Ensure your API key is correctly set in your environment variables (e.g., .env.local for Vercel)
-const API_KEY = process.env.API_KEY || "AIzaSyCuNJIRcPQxT7hrPvZzqcTjD7VAQYio4-g";
+const API_KEY = process.env.API_KEY || "AIzaSyCkBQYObA2NK48P-my-6MbHxisCfNCLeVg";
 const genAI = new GoogleGenerativeAI(API_KEY);
 
 export const summarizeContent = async (

@@ -219,6 +219,19 @@ const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, fulfilling
       showToast('Please select a file to upload.', 'error');
       return;
     }
+
+    // Size Validation
+    const MAX_FILE_SIZE_MB = 10;
+    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+        showToast(`File size exceeds the ${MAX_FILE_SIZE_MB}MB limit. (${(file.size / 1024 / 1024).toFixed(2)}MB)`, 'error');
+        return;
+    }
+
+    const MAX_COVER_SIZE_MB = 5;
+    if (coverImageFile && coverImageFile.size > MAX_COVER_SIZE_MB * 1024 * 1024) {
+        showToast(`Cover image exceeds the ${MAX_COVER_SIZE_MB}MB limit.`, 'error');
+        return;
+    }
     
     // Enable examType/lecturer for PastPaper, Assignment, and Other
     const supportsExamType = [ResourceType.PastPaper, ResourceType.Assignment, ResourceType.Other].includes(type);

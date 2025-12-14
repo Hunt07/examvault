@@ -1,31 +1,31 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import type { User, Resource, ForumPost, Comment, ForumReply, Notification, Conversation, DirectMessage, ResourceRequest, Attachment } from './types';
-import { NotificationType, MessageStatus, ResourceRequestStatus } from './types';
-import AuthPage from './components/pages/AuthPage';
-import DashboardPage from './components/pages/DashboardPage';
-import ResourceDetailPage from './components/pages/ResourceDetailPage';
-import DiscussionsPage from './components/pages/ForumsPage';
-import ForumPostDetailPage from './components/pages/ForumPostDetailPage';
-import ProfilePage from './components/pages/ProfilePage';
-import MessagesPage from './components/pages/MessagesPage';
-import LeaderboardPage from './components/pages/LeaderboardPage';
-import ResourceRequestsPage from './components/pages/ResourceRequestsPage';
-import SideNav from './components/SideNav';
-import Header from './components/Header';
-import UploadModal, { generateFilePreview } from './components/UploadModal';
-import TooltipGuide from './components/TooltipGuide';
-import ToastNotification from './components/ToastNotification';
+import type { User, Resource, ForumPost, Comment, ForumReply, Notification, Conversation, DirectMessage, ResourceRequest, Attachment } from '../../types';
+import { NotificationType, MessageStatus, ResourceRequestStatus } from '../../types';
+import AuthPage from './AuthPage';
+import DashboardPage from './DashboardPage';
+import ResourceDetailPage from './ResourceDetailPage';
+import DiscussionsPage from './ForumsPage';
+import ForumPostDetailPage from './ForumPostDetailPage';
+import ProfilePage from './ProfilePage';
+import MessagesPage from './MessagesPage';
+import LeaderboardPage from './LeaderboardPage';
+import ResourceRequestsPage from './ResourceRequestsPage';
+import SideNav from '../SideNav';
+import Header from '../Header';
+import UploadModal, { generateFilePreview } from '../UploadModal';
+import TooltipGuide from '../TooltipGuide';
+import ToastNotification from '../ToastNotification';
 
 // Firebase Imports
-import { auth, db, storage } from './services/firebase';
+import { auth, db, storage } from '../../services/firebase';
 import * as firebaseAuth from 'firebase/auth';
 import { 
   collection, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, getDocs,
   onSnapshot, query, orderBy, serverTimestamp, arrayUnion, increment, where, arrayRemove, deleteField, writeBatch 
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
 
 export type View = 'dashboard' | 'resourceDetail' | 'discussions' | 'forumDetail' | 'profile' | 'publicProfile' | 'messages' | 'leaderboard' | 'requests';
 
@@ -113,31 +113,31 @@ const generateDefaultAvatar = (name: string): string => {
 // Extracted Helper for Deep Profile Propagation
 const propagateUserUpdates = async (userId: string, updateData: any) => {
     // 1. Propagate to Resources (Author field)
-    const resQuery = query(collection(db, "resources"), where("author.id", "==", userId));
+    const resQuery = query(collection(db!, "resources"), where("author.id", "==", userId));
     const resSnap = await getDocs(resQuery);
-    const batch = writeBatch(db);
+    const batch = writeBatch(db!);
     let count = 0;
 
     resSnap.forEach((docSnap) => {
-         const resRef = doc(db, "resources", docSnap.id);
+         const resRef = doc(db!, "resources", docSnap.id);
          batch.update(resRef, { author: { ...docSnap.data().author, ...updateData } });
          count++;
     });
 
     // 2. Propagate to Forum Posts
-    const postQuery = query(collection(db, "forumPosts"), where("author.id", "==", userId));
+    const postQuery = query(collection(db!, "forumPosts"), where("author.id", "==", userId));
     const postSnap = await getDocs(postQuery);
     postSnap.forEach((docSnap) => {
-         const postRef = doc(db, "forumPosts", docSnap.id);
+         const postRef = doc(db!, "forumPosts", docSnap.id);
          batch.update(postRef, { author: { ...docSnap.data().author, ...updateData } });
          count++;
     });
 
     // 3. Propagate to Requests
-    const reqQuery = query(collection(db, "resourceRequests"), where("requester.id", "==", userId));
+    const reqQuery = query(collection(db!, "resourceRequests"), where("requester.id", "==", userId));
     const reqSnap = await getDocs(reqQuery);
     reqSnap.forEach((docSnap) => {
-         const reqRef = doc(db, "resourceRequests", docSnap.id);
+         const reqRef = doc(db!, "resourceRequests", docSnap.id);
          batch.update(reqRef, { requester: { ...docSnap.data().requester, ...updateData } });
          count++;
     });
@@ -147,7 +147,7 @@ const propagateUserUpdates = async (userId: string, updateData: any) => {
     }
 
     // 4. Propagate to Comments (inside Resources)
-    const allResSnap = await getDocs(collection(db, "resources"));
+    const allResSnap = await getDocs(collection(db!, "resources"));
     allResSnap.forEach(async (docSnap) => {
         const res = docSnap.data() as Resource;
         if (!res.comments) return;
@@ -166,7 +166,7 @@ const propagateUserUpdates = async (userId: string, updateData: any) => {
     });
 
     // 5. Propagate to Replies (inside Forum Posts)
-    const allPostsSnap = await getDocs(collection(db, "forumPosts"));
+    const allPostsSnap = await getDocs(collection(db!, "forumPosts"));
     allPostsSnap.forEach(async (docSnap) => {
         const post = docSnap.data() as ForumPost;
         if (!post.replies) return;
@@ -223,10 +223,15 @@ const App: React.FC = () => {
   const [tourStep, setTourStep] = useState(0);
 
   useEffect(() => {
+    if (!auth || !db) {
+        setIsLoading(false);
+        return;
+    }
+
     const unsubscribe = firebaseAuth.onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         try {
-          const userRef = doc(db, "users", firebaseUser.uid);
+          const userRef = doc(db!, "users", firebaseUser.uid);
           const userSnap = await getDoc(userRef);
 
           if (userSnap.exists()) {
@@ -307,13 +312,13 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !db) return;
 
     setAreResourcesLoading(true);
 
     const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
       const fetchedUsers: User[] = [];
-      const batch = writeBatch(db);
+      const batch = writeBatch(db!);
       let needsCommit = false;
       const usersToPropagate: { id: string, avatarUrl: string }[] = [];
 
@@ -325,7 +330,7 @@ const App: React.FC = () => {
         if (isLegacy) {
             const newAvatar = generateDefaultAvatar(u.name);
             u.avatarUrl = newAvatar;
-            const ref = doc(db, "users", u.id);
+            const ref = doc(db!, "users", u.id);
             batch.update(ref, { avatarUrl: newAvatar });
             needsCommit = true;
             usersToPropagate.push({ id: u.id, avatarUrl: newAvatar });
@@ -402,7 +407,7 @@ const App: React.FC = () => {
   }, [user?.id]);
 
   const sendNotification = async (recipientId: string, senderId: string, type: NotificationType, message: string, linkIds?: { resourceId?: string, forumPostId?: string, conversationId?: string, commentId?: string, replyId?: string, requestId?: string }) => {
-      if (recipientId === user?.id) return;
+      if (recipientId === user?.id || !db) return;
 
       const isDuplicate = notifications.some(n => 
           n.recipientId === recipientId &&
@@ -430,15 +435,15 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-      if (!user) return;
+      if (!user || !db) return;
       const incomingSentMessages = directMessages.filter(m => m.recipientId === user.id && m.status === MessageStatus.Sent);
       
       if (incomingSentMessages.length > 0) {
           const timeoutId = setTimeout(() => {
-              const batch = writeBatch(db);
+              const batch = writeBatch(db!);
               let hasUpdates = false;
               incomingSentMessages.forEach(msg => {
-                  const msgRef = doc(db, "directMessages", msg.id);
+                  const msgRef = doc(db!, "directMessages", msg.id);
                   batch.update(msgRef, { status: MessageStatus.Delivered });
                   hasUpdates = true;
               });
@@ -515,6 +520,7 @@ const App: React.FC = () => {
   const handleLogin = (email: string) => {};
 
   const logout = async () => {
+    if (!auth) return;
     await firebaseAuth.signOut(auth);
     setUser(null);
     setViewState('dashboard');
@@ -522,7 +528,7 @@ const App: React.FC = () => {
   };
 
   const toggleSaveResource = async (resourceId: string) => {
-    if (!user) return;
+    if (!user || !db) return;
     const isSaved = user.savedResourceIds?.includes(resourceId);
     const userRef = doc(db, "users", user.id);
     
@@ -534,7 +540,7 @@ const App: React.FC = () => {
   };
 
   const earnPoints = async (amount: number, message: string) => {
-    if (!user) return;
+    if (!user || !db) return;
     const userRef = doc(db, "users", user.id);
     await updateDoc(userRef, {
         points: increment(amount),
@@ -561,7 +567,7 @@ const App: React.FC = () => {
   };
 
   const handleUpload = async (resourceData: any, file: File, coverImage: File | null) => {
-      if (!user) return;
+      if (!user || !db || !storage) return;
 
       const tempId = `temp-${Date.now()}`;
       const tempPreview = coverImage ? URL.createObjectURL(coverImage) : generateFilePreview(file.name);
@@ -675,15 +681,20 @@ const App: React.FC = () => {
                    }
                });
           }
-      } catch (error) {
+      } catch (error: any) {
           console.error("Upload failed", error);
           setResources(prev => prev.filter(r => r.id !== tempId));
-          setToast({ message: "Upload failed. Please try again.", type: 'error' });
+          
+          let msg = "Upload failed. Please try again.";
+          if (error.code === 'storage/unauthorized') {
+             msg = "Upload failed: Unauthorized (Check file size limits or permissions).";
+          }
+          setToast({ message: msg, type: 'error' });
       }
   };
 
   const deleteResource = async (resourceId: string, fileUrl: string, previewUrl?: string) => {
-      if (!user) return;
+      if (!user || !db) return;
       
       setViewState('dashboard');
       setSelectedId(undefined);
@@ -691,22 +702,24 @@ const App: React.FC = () => {
       try {
           await deleteDoc(doc(db, "resources", resourceId));
 
-          if (fileUrl && fileUrl.startsWith('http')) {
-              try {
-                  const fileRef = ref(storage, fileUrl);
-                  await deleteObject(fileRef);
-              } catch (e) {
-                  console.warn("Could not delete file:", e);
-              }
-          }
+          if (storage) {
+            if (fileUrl && fileUrl.startsWith('http')) {
+                try {
+                    const fileRef = ref(storage, fileUrl);
+                    await deleteObject(fileRef);
+                } catch (e) {
+                    console.warn("Could not delete file:", e);
+                }
+            }
 
-          if (previewUrl && previewUrl.includes('firebasestorage')) {
-              try {
-                  const coverRef = ref(storage, previewUrl);
-                  await deleteObject(coverRef);
-              } catch (e) {
-                  console.warn("Could not delete cover image:", e);
-              }
+            if (previewUrl && previewUrl.includes('firebasestorage')) {
+                try {
+                    const coverRef = ref(storage, previewUrl);
+                    await deleteObject(coverRef);
+                } catch (e) {
+                    console.warn("Could not delete cover image:", e);
+                }
+            }
           }
 
           const userRef = doc(db, "users", user.id);
@@ -731,7 +744,7 @@ const App: React.FC = () => {
   };
 
   const handleVote = async (resourceId: string, action: 'up' | 'down') => {
-    if (!user) return;
+    if (!user || !db) return;
     const resource = resources.find(r => r.id === resourceId);
     if (!resource) return;
 
@@ -780,7 +793,7 @@ const App: React.FC = () => {
   };
 
   const addCommentToResource = async (resourceId: string, text: string, parentId: string | null) => {
-    if (!user) return;
+    if (!user || !db) return;
     try {
         const commentId = `c-${Date.now()}`;
         const newComment: Comment = {
@@ -829,6 +842,7 @@ const App: React.FC = () => {
   };
 
   const deleteCommentFromResource = async (resourceId: string, comment: Comment) => {
+      if (!db) return;
       try {
           const resRef = doc(db, "resources", resourceId);
           await updateDoc(resRef, { comments: arrayRemove(comment) });
@@ -840,7 +854,7 @@ const App: React.FC = () => {
   };
 
   const handleCommentVote = async (resourceId: string, commentId: string) => {
-     if (!user) return;
+     if (!user || !db) return;
      const resRef = doc(db, "resources", resourceId);
      const snap = await getDoc(resRef);
      if (snap.exists()) {
@@ -872,7 +886,7 @@ const App: React.FC = () => {
   };
 
   const addForumPost = async (postData: { title: string; courseCode: string; body: string; tags: string[] }) => {
-      if (!user) return;
+      if (!user || !db) return;
       try {
           const newPost: Omit<ForumPost, 'id'> = {
               ...postData,
@@ -911,6 +925,7 @@ const App: React.FC = () => {
   };
 
   const deleteForumPost = async (postId: string) => {
+      if (!db) return;
       setViewState('discussions');
       setSelectedId(undefined);
       try {
@@ -923,7 +938,7 @@ const App: React.FC = () => {
   };
 
   const handlePostVote = async (postId: string, action: 'up' | 'down') => {
-      if (!user) return;
+      if (!user || !db) return;
       const postRef = doc(db, "forumPosts", postId);
       const post = forumPosts.find(p => p.id === postId);
       if (!post) return;
@@ -962,7 +977,7 @@ const App: React.FC = () => {
   };
 
   const addReplyToPost = async (postId: string, text: string, parentId: string | null, file?: File) => {
-      if (!user) return;
+      if (!user || !db) return;
       
       try {
           const replyId = `reply-${Date.now()}`;
@@ -977,7 +992,7 @@ const App: React.FC = () => {
               parentId
           };
 
-          if (file) {
+          if (file && storage) {
               const storageRef = ref(storage, `attachments/${Date.now()}_${file.name}`);
               await uploadBytes(storageRef, file);
               const url = await getDownloadURL(storageRef);
@@ -1025,6 +1040,7 @@ const App: React.FC = () => {
   };
 
   const deleteReplyFromPost = async (postId: string, reply: ForumReply) => {
+      if (!db) return;
       try {
           const postRef = doc(db, "forumPosts", postId);
           await updateDoc(postRef, { replies: arrayRemove(reply) });
@@ -1036,7 +1052,7 @@ const App: React.FC = () => {
   };
 
   const handleReplyVote = async (postId: string, replyId: string) => {
-      if (!user) return;
+      if (!user || !db) return;
       const postRef = doc(db, "forumPosts", postId);
       const snap = await getDoc(postRef);
       if (snap.exists()) {
@@ -1068,6 +1084,7 @@ const App: React.FC = () => {
   };
 
   const toggleVerifiedAnswer = async (postId: string, replyId: string) => {
+      if (!db) return;
       const postRef = doc(db, "forumPosts", postId);
       const snap = await getDoc(postRef);
       if (snap.exists()) {
@@ -1085,7 +1102,7 @@ const App: React.FC = () => {
   };
 
   const addResourceRequest = async (reqData: { title: string; courseCode: string; details: string }) => {
-      if (!user) return;
+      if (!user || !db) return;
       try {
           const newReq: Omit<ResourceRequest, 'id'> = {
               requester: sanitizeForFirestore(user),
@@ -1116,6 +1133,7 @@ const App: React.FC = () => {
   };
 
   const deleteResourceRequest = async (requestId: string) => {
+      if (!db) return;
       try {
           await deleteDoc(doc(db, "resourceRequests", requestId));
           earnPoints(-5, "Request deleted. Points reverted.");
@@ -1134,7 +1152,7 @@ const App: React.FC = () => {
   };
 
   const toggleUserSubscription = async (targetUserId: string) => {
-      if (!user) return;
+      if (!user || !db) return;
       const isFollowing = user.subscriptions.users.includes(targetUserId);
       const userRef = doc(db, "users", user.id);
       
@@ -1147,7 +1165,7 @@ const App: React.FC = () => {
   };
 
   const toggleLecturerSubscription = async (lecturerName: string) => {
-      if (!user) return;
+      if (!user || !db) return;
       const isFollowing = user.subscriptions.lecturers.includes(lecturerName);
       const userRef = doc(db, "users", user.id);
       
@@ -1159,7 +1177,7 @@ const App: React.FC = () => {
   };
 
   const toggleCourseCodeSubscription = async (courseCode: string) => {
-      if (!user) return;
+      if (!user || !db) return;
       const isFollowing = user.subscriptions.courseCodes.includes(courseCode);
       const userRef = doc(db, "users", user.id);
       
@@ -1171,7 +1189,7 @@ const App: React.FC = () => {
   };
 
   const updateUserProfile = async (data: Partial<User>) => {
-      if (!user) return;
+      if (!user || !db) return;
       
       const userRef = doc(db, "users", user.id);
       await updateDoc(userRef, data);
@@ -1185,7 +1203,7 @@ const App: React.FC = () => {
   };
 
   const sendMessage = async (conversationId: string, text: string) => {
-      if (!user) return;
+      if (!user || !db) return;
       
       const convo = conversations.find(c => c.id === conversationId);
       if (!convo) return;
@@ -1211,6 +1229,7 @@ const App: React.FC = () => {
   };
 
   const editMessage = async (messageId: string, newText: string) => {
+      if (!db) return;
       const msgRef = doc(db, "directMessages", messageId);
       await updateDoc(msgRef, {
           text: newText,
@@ -1219,6 +1238,7 @@ const App: React.FC = () => {
   };
 
   const deleteMessage = async (messageId: string) => {
+      if (!db) return;
       const msgRef = doc(db, "directMessages", messageId);
       await updateDoc(msgRef, {
           isDeleted: true,
@@ -1227,7 +1247,7 @@ const App: React.FC = () => {
   };
 
   const startConversation = async (userId: string, initialMessage?: string) => {
-    if (!user) return;
+    if (!user || !db) return;
     
     // Check if conversation exists
     const existingConvo = conversations.find(c => 
@@ -1272,19 +1292,21 @@ const App: React.FC = () => {
   };
 
   const markNotificationAsRead = async (id: string) => {
+      if (!db) return;
       const notifRef = doc(db, "notifications", id);
       await updateDoc(notifRef, { isRead: true });
   };
 
   const markAllNotificationsAsRead = async () => {
+      if (!db) return;
       notifications.filter(n => !n.isRead).forEach(async (n) => {
-          const notifRef = doc(db, "notifications", n.id);
+          const notifRef = doc(db!, "notifications", n.id);
           await updateDoc(notifRef, { isRead: true });
       });
   };
 
   const clearAllNotifications = async () => {
-      if (!user) return;
+      if (!user || !db) return;
       const q = query(collection(db, "notifications"), where("recipientId", "==", user.id));
       const querySnapshot = await getDocs(q);
       const batch = writeBatch(db);
@@ -1296,7 +1318,7 @@ const App: React.FC = () => {
   };
 
   const markMessagesAsRead = async (conversationId: string) => {
-      if (!user) return;
+      if (!user || !db) return;
       const unreadMessages = directMessages.filter(
           m => m.conversationId === conversationId && m.recipientId === user.id && m.status !== MessageStatus.Read
       );
@@ -1304,7 +1326,7 @@ const App: React.FC = () => {
       if (unreadMessages.length > 0) {
           const batch = writeBatch(db);
           unreadMessages.forEach(msg => {
-              batch.update(doc(db, "directMessages", msg.id), { status: MessageStatus.Read });
+              batch.update(doc(db!, "directMessages", msg.id), { status: MessageStatus.Read });
           });
           await batch.commit();
       }
@@ -1322,6 +1344,27 @@ const App: React.FC = () => {
             <Loader2 size={48} className="animate-spin text-primary-600" />
         </div>
     );
+  }
+
+  // 🔴 SAFETY CHECK: If auth isn't initialized, show an error instead of crashing
+  if (!auth) {
+      return (
+          <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg p-4">
+              <div className="bg-white dark:bg-dark-surface p-8 rounded-xl shadow-lg border border-red-200 dark:border-red-900 max-w-md text-center">
+                  <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <AlertCircle size={32} />
+                  </div>
+                  <h1 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Configuration Error</h1>
+                  <p className="text-slate-600 dark:text-slate-300 mb-6">
+                      Firebase API keys are missing or invalid. <br/>
+                      Please create a <code className="bg-slate-100 dark:bg-zinc-800 px-1 py-0.5 rounded font-mono text-sm">.env</code> file in the project root with your Firebase credentials.
+                  </p>
+                  <p className="text-xs text-slate-400">
+                      Check the browser console for specific errors.
+                  </p>
+              </div>
+          </div>
+      );
   }
 
   if (!user) {

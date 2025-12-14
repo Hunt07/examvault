@@ -1,26 +1,24 @@
 
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 
-// Use Vite environment variable.
-// Cast to any to prevent TS error: Property 'env' does not exist on type 'ImportMeta'
-const apiKey = (import.meta as any).env?.VITE_API_KEY || "AIzaSyCuNJIRcPQxT7hrPvZzqcTjD7VAQYio4-g";
-
-// Initialize safely - requests will fail gracefully if key is missing
-const genAI = new GoogleGenerativeAI(apiKey);
-
-// Switched to gemini-1.5-flash for maximum stability and free-tier compatibility
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+// Initialize the Google Generative AI client
+// Ensure your API key is correctly set in your environment variables (e.g., .env.local for Vercel)
+const API_KEY = process.env.API_KEY || "AIzaSyCuNJIRcPQxT7hrPvZzqcTjD7VAQYio4-g";
+const genAI = new GoogleGenerativeAI(API_KEY);
 
 export const summarizeContent = async (
   content: string, 
   fileBase64?: string, 
   mimeType?: string
 ): Promise<string> => {
-  if (!apiKey) {
-    return "Configuration Error: Gemini API Key is missing. Please set the VITE_API_KEY environment variable.";
+  if (!API_KEY) {
+    return "Configuration Error: API Key is missing. Please ensure process.env.API_KEY is configured.";
   }
 
   try {
+    // Use gemini-1.5-flash for speed and efficiency
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
     const textPrompt = `You are an expert academic assistant. Your task is to analyze the provided study material and create a highly informative, concise summary for a university student, formatted in markdown. The summary should be easy to digest and focus on what's most important for exam preparation.
 
 Do not use generic phrases like "This document discusses..." or "The material covers...". Get straight to the point.
@@ -31,44 +29,41 @@ Based on the following material, please provide the summary with these exact sec
 - **Potential Exam Questions:** A numbered list of 2-3 sample questions that could be asked on an exam based on this material.
 `;
 
-    let parts: any[] = [];
+    let promptParts: any[] = [textPrompt];
 
     if (fileBase64 && mimeType) {
         // Remove data URL prefix if present for clean base64
         const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
         
-        parts = [
-            { text: textPrompt },
-            {
-                inlineData: {
-                    mimeType: mimeType,
-                    data: cleanBase64
-                }
+        promptParts.push({
+            inlineData: {
+                data: cleanBase64,
+                mimeType: mimeType
             }
-        ];
+        });
     } else {
-        parts = [{ text: `${textPrompt}\n\nMaterial to analyze:\n---\n${content}\n---` }];
+        promptParts.push(`\n\nMaterial to analyze:\n---\n${content}\n---`);
     }
 
-    const result = await model.generateContent(parts);
-    const response = result.response;
+    const result = await model.generateContent(promptParts);
+    const response = await result.response;
     return response.text() || "No summary generated.";
   } catch (error: any) {
     console.error("Gemini API Error:", error);
     if (error.message?.includes('403') || error.message?.includes('API key')) {
-        return "Error: Invalid API Key. The key may have been revoked or is incorrect. Please check your VITE_API_KEY environment variable.";
+        return "Error: Invalid or revoked API Key. The system administrator needs to update the API Key.";
     }
     return "Could not generate summary. Please check your Internet connection or API Key quota.";
   }
 };
 
 export const describeImage = async (base64Data: string, mimeType: string): Promise<string> => {
-  if (!apiKey) return "Error: API Key missing.";
+  if (!API_KEY) return "Error: API Key missing.";
 
   try {
-    const textPart = {
-      text: "Analyze this image from a study document. Describe the key information, including any text, diagrams, or main concepts. This will be used as a summary for other students."
-    };
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+    const textPart = "Analyze this image from a study document. Describe the key information, including any text, diagrams, or main concepts. This will be used as a summary for other students.";
 
     // Remove data URL prefix if present for clean base64
     const cleanBase64 = base64Data.replace(/^data:.+;base64,/, '');
@@ -81,7 +76,7 @@ export const describeImage = async (base64Data: string, mimeType: string): Promi
     };
 
     const result = await model.generateContent([textPart, imagePart]);
-    const response = result.response;
+    const response = await result.response;
     return response.text() || "No description generated.";
   } catch (error) {
     console.error("Error describing image with Gemini:", error);
@@ -95,7 +90,7 @@ export const generateStudySet = async (
   fileBase64?: string, 
   mimeType?: string
 ): Promise<any> => {
-  if (!apiKey) {
+  if (!API_KEY) {
       console.error("API Key missing for study set generation");
       return [];
   }
@@ -125,7 +120,10 @@ export const generateStudySet = async (
             type: SchemaType.OBJECT,
             properties: {
                 question: { type: SchemaType.STRING },
-                options: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+                options: { 
+                    type: SchemaType.ARRAY, 
+                    items: { type: SchemaType.STRING } 
+                },
                 correctAnswer: { type: SchemaType.STRING },
             },
             required: ['question', 'options', 'correctAnswer'],
@@ -133,35 +131,31 @@ export const generateStudySet = async (
       };
     }
 
-    // Initialize a model with generation config for JSON
-    const jsonModel = genAI.getGenerativeModel({
+    const model = genAI.getGenerativeModel({ 
         model: "gemini-1.5-flash",
         generationConfig: {
             responseMimeType: "application/json",
-            responseSchema: schema,
+            responseSchema: schema
         }
     });
 
-    let parts: any[] = [];
+    let promptParts: any[] = [promptText];
+
     if (fileBase64 && mimeType) {
         const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
-        parts = [
-            { text: promptText },
-            {
-                inlineData: {
-                    mimeType: mimeType,
-                    data: cleanBase64
-                }
+        promptParts.push({
+            inlineData: {
+                data: cleanBase64,
+                mimeType: mimeType
             }
-        ];
+        });
     } else {
-        parts = [{ text: `${promptText}\n\nMaterial to analyze:\n---\n${content}\n---` }];
+        promptParts.push(`\n\nMaterial to analyze:\n---\n${content}\n---`);
     }
     
-    const result = await jsonModel.generateContent(parts);
-    const response = result.response;
-    const text = response.text();
-    
+    const result = await model.generateContent(promptParts);
+    const response = await result.response;
+    const text = response.text() || "[]";
     return JSON.parse(text);
   } catch (error) {
     console.error(`Error generating ${setType} with Gemini:`, error);

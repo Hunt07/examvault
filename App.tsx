@@ -1,24 +1,24 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import type { User, Resource, ForumPost, Comment, ForumReply, Notification, Conversation, DirectMessage, ResourceRequest, Attachment } from '../../types';
-import { NotificationType, MessageStatus, ResourceRequestStatus } from '../../types';
-import AuthPage from './AuthPage';
-import DashboardPage from './DashboardPage';
-import ResourceDetailPage from './ResourceDetailPage';
-import DiscussionsPage from './ForumsPage';
-import ForumPostDetailPage from './ForumPostDetailPage';
-import ProfilePage from './ProfilePage';
-import MessagesPage from './MessagesPage';
-import LeaderboardPage from './LeaderboardPage';
-import ResourceRequestsPage from './ResourceRequestsPage';
-import SideNav from '../SideNav';
-import Header from '../Header';
-import UploadModal, { generateFilePreview } from '../UploadModal';
-import TooltipGuide from '../TooltipGuide';
-import ToastNotification from '../ToastNotification';
+import type { User, Resource, ForumPost, Comment, ForumReply, Notification, Conversation, DirectMessage, ResourceRequest, Attachment } from './types';
+import { NotificationType, MessageStatus, ResourceRequestStatus } from './types';
+import AuthPage from './components/pages/AuthPage';
+import DashboardPage from './components/pages/DashboardPage';
+import ResourceDetailPage from './components/pages/ResourceDetailPage';
+import DiscussionsPage from './components/pages/ForumsPage';
+import ForumPostDetailPage from './components/pages/ForumPostDetailPage';
+import ProfilePage from './components/pages/ProfilePage';
+import MessagesPage from './components/pages/MessagesPage';
+import LeaderboardPage from './components/pages/LeaderboardPage';
+import ResourceRequestsPage from './components/pages/ResourceRequestsPage';
+import SideNav from './components/SideNav';
+import Header from './components/Header';
+import UploadModal, { generateFilePreview } from './components/UploadModal';
+import TooltipGuide from './components/TooltipGuide';
+import ToastNotification from './components/ToastNotification';
 
 // Firebase Imports
-import { auth, db, storage } from '../../services/firebase';
+import { auth, db, storage } from './services/firebase';
 import * as firebaseAuth from 'firebase/auth';
 import { 
   collection, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, getDocs,

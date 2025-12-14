@@ -39,7 +39,12 @@ const isMimeTypeSupported = (mimeType: string): boolean => {
         'text/plain',
         'text/csv', 
         'text/markdown',
-        'text/html'
+        'text/html',
+        // Office Document Support
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // docx
+        'application/msword', // doc
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation', // pptx
+        'application/vnd.ms-powerpoint' // ppt
     ];
     if (supportedExact.includes(mimeType)) return true;
     if (mimeType.startsWith('image/')) return true;
@@ -72,7 +77,7 @@ Based on the following material, please provide the summary with these exact sec
     
     if (fileBase64 && mimeType) {
         if (!isMimeTypeSupported(mimeType)) {
-            return "⚠️ **Format Not Supported**\n\nAI Summarization is currently available for **PDFs** and **Images** only.\n\nMicrosoft Office files (Word, PowerPoint, Excel) cannot be processed directly. Please convert your document to PDF to use AI features.";
+            return "⚠️ **Format Not Supported**\n\nAI Summarization is currently available for PDFs, Word Docs, PowerPoints, and Images.\n\nIf this file type is not working, please try converting it to PDF.";
         }
 
         const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
@@ -106,7 +111,7 @@ Based on the following material, please provide the summary with these exact sec
     }
     // Handle API errors related to file processing
     if (error.message?.includes('INVALID_ARGUMENT')) {
-        return "Error: The file format or size is not supported by the AI model.";
+        return "Error: The file format or size might not be fully supported by the AI model yet. Please try converting this document to PDF for better results.";
     }
     return "Could not generate summary. Please check your Internet connection.";
   }

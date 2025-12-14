@@ -239,7 +239,11 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
           'application/pdf',
           'image/',
           'text/',
-          'application/json'
+          'application/json',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'application/msword',
+          'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          'application/vnd.ms-powerpoint'
       ];
       // Check if starts with any supported type
       return supported.some(t => resource.mimeType?.startsWith(t));
@@ -730,9 +734,9 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
                 <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 mb-4 flex items-start gap-3">
                     <AlertCircle className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" size={20} />
                     <div>
-                        <h4 className="font-bold text-amber-800 dark:text-amber-200 text-sm">File Type Not Supported</h4>
+                        <h4 className="font-bold text-amber-800 dark:text-amber-200 text-sm">File Type Not Fully Supported</h4>
                         <p className="text-amber-700 dark:text-amber-300 text-xs mt-1">
-                            AI summarization is only available for PDF and Image files. Word/PowerPoint files cannot be processed directly.
+                            AI summarization works best with PDF and Image files. For Word and PowerPoint, reliability may vary.
                         </p>
                     </div>
                 </div>
@@ -775,7 +779,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
             
             {!isAISupported && (
                 <div className="bg-slate-50 dark:bg-zinc-800/50 p-4 rounded-lg text-center mb-4">
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Study tools are not available for this file type.</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Study tools may be limited for this file type.</p>
                 </div>
             )}
 
@@ -809,7 +813,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
             {!isGeneratingStudySet && studySet && studySet.length === 0 && (
                  <div className="p-4 text-center bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
                     <p className="text-red-700 dark:text-red-300 font-semibold">Could not generate study set.</p>
-                    <p className="text-red-600 dark:text-red-400 text-sm">Please try again later.</p>
+                    <p className="text-red-600 dark:text-red-400 text-sm">Please try again later or check if the file format is supported.</p>
                     <button onClick={resetStudySet} className="mt-2 text-sm text-primary-600 dark:text-primary-400 font-semibold hover:text-primary-800 dark:hover:text-primary-300">Try again</button>
                 </div>
             )}

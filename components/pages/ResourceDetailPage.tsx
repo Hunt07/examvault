@@ -171,7 +171,7 @@ const CommentComponent: React.FC<{
 
 
 const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
-  const { user, userRanks, setView, handleVote, addCommentToResource, goBack, toggleUserSubscription, toggleLecturerSubscription, toggleCourseCodeSubscription, savedResourceIds, toggleSaveResource, resources, deleteResource, scrollTargetId, setScrollTargetId } = useContext(AppContext);
+  const { user, userRanks, setView, handleVote, addCommentToResource, goBack, toggleLecturerSubscription, toggleCourseCodeSubscription, savedResourceIds, toggleSaveResource, resources, deleteResource, scrollTargetId, setScrollTargetId } = useContext(AppContext);
   const [summary, setSummary] = useState('');
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [newComment, setNewComment] = useState('');
@@ -506,6 +506,36 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     );
   };
 
+  const getBadgeStyle = (type: ResourceType) => {
+    switch (type) {
+        case ResourceType.PastPaper:
+            return 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300';
+        case ResourceType.Notes:
+            return 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300';
+        case ResourceType.Assignment:
+            return 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300';
+        case ResourceType.Other:
+            return 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300';
+        default:
+            return 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-300';
+    }
+  };
+
+  const getBadgeIcon = (type: ResourceType) => {
+      switch (type) {
+          case ResourceType.PastPaper:
+              return <FileText size={16}/>;
+          case ResourceType.Notes:
+              return <Notebook size={16}/>;
+          case ResourceType.Assignment:
+              return <ClipboardList size={16}/>;
+          case ResourceType.Other:
+              return <Archive size={16}/>;
+          default:
+              return <FileText size={16}/>;
+      }
+  };
+
   return (
     <div>
       <button onClick={goBack} className="flex items-center gap-2 text-primary-600 dark:text-primary-400 font-semibold hover:text-primary-800 dark:hover:text-primary-300 transition mb-6">
@@ -517,11 +547,8 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
         <div className="lg:col-span-2">
           <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md transition-colors duration-300 border border-transparent dark:border-zinc-700">
             <div className="flex items-center gap-3 mb-4">
-              <span className={`flex items-center gap-2 text-sm font-semibold px-3 py-1 rounded-full ${resource.type === ResourceType.PastPaper ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300' : 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'}`}>
-                {resource.type === ResourceType.PastPaper && <FileText size={16}/>}
-                {resource.type === ResourceType.Notes && <Notebook size={16}/>}
-                {resource.type === ResourceType.Assignment && <ClipboardList size={16}/>}
-                {resource.type === ResourceType.Other && <Archive size={16}/>}
+              <span className={`flex items-center gap-2 text-sm font-semibold px-3 py-1 rounded-full ${getBadgeStyle(resource.type)}`}>
+                {getBadgeIcon(resource.type)}
                 {resource.type}
               </span>
               <span className="text-sm font-bold text-slate-800 dark:text-white px-3 py-1 bg-slate-100 dark:bg-zinc-800 rounded-full">{resource.courseCode}</span>
@@ -659,288 +686,247 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
                <div className="border border-slate-200 dark:border-zinc-700 rounded-lg p-6 text-center">
                   <Loader2 className="mx-auto h-12 w-12 text-primary-500 animate-spin" />
                   <p className="mt-4 text-slate-600 dark:text-slate-300 font-medium">Gemini is thinking...</p>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Analyzing document structure and content...</p>
-               </div>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Generating a summary for you.</p>
+              </div>
             )}
             {summary && (
-                <div className="bg-slate-50 dark:bg-zinc-800/50 p-6 rounded-lg border border-slate-200 dark:border-zinc-700">
-                    <MarkdownRenderer content={summary} />
-                </div>
+              <div className="bg-slate-50 dark:bg-zinc-800/50 border border-slate-200 dark:border-zinc-700 rounded-lg p-4 sm:p-6 dark:text-slate-200">
+                  <MarkdownRenderer content={summary} />
+              </div>
             )}
           </div>
-
+          
           <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md mt-8 transition-colors duration-300 border border-transparent dark:border-zinc-700">
-             <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-bold text-slate-800 dark:text-white">Interactive Study Tools</h3>
-             </div>
-             
-             {!studySet && !isGeneratingStudySet && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <button 
-                        onClick={() => handleGenerateStudySet('flashcards')}
-                        className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-300 dark:border-zinc-700 rounded-lg hover:border-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/10 transition group"
-                    >
-                        <BookCopy className="w-8 h-8 text-slate-400 group-hover:text-primary-500 mb-2 transition-colors" />
-                        <span className="font-bold text-slate-700 dark:text-slate-300 group-hover:text-primary-600 dark:group-hover:text-primary-400">Generate Flashcards</span>
-                        <span className="text-xs text-slate-500 dark:text-slate-500 mt-1">Create study cards from content</span>
-                    </button>
-                    <button 
-                        onClick={() => handleGenerateStudySet('quiz')}
-                        className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-300 dark:border-zinc-700 rounded-lg hover:border-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/10 transition group"
-                    >
-                        <HelpCircle className="w-8 h-8 text-slate-400 group-hover:text-primary-500 mb-2 transition-colors" />
-                        <span className="font-bold text-slate-700 dark:text-slate-300 group-hover:text-primary-600 dark:group-hover:text-primary-400">Generate Quiz</span>
-                        <span className="text-xs text-slate-500 dark:text-slate-500 mt-1">Test your knowledge</span>
-                    </button>
-                </div>
-             )}
-
-             {isGeneratingStudySet && (
-                <div className="border border-slate-200 dark:border-zinc-700 rounded-lg p-8 text-center">
+            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4">AI Study Tools</h3>
+            {isGeneratingStudySet && (
+                <div className="border border-slate-200 dark:border-zinc-700 rounded-lg p-6 text-center">
                     <Loader2 className="mx-auto h-12 w-12 text-primary-500 animate-spin" />
-                    <p className="mt-4 text-slate-600 dark:text-slate-300 font-medium">Creating {studySetType}...</p>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">This may take a moment.</p>
+                    <p className="mt-4 text-slate-600 dark:text-slate-300 font-medium">Gemini is thinking...</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Generating {studySetType === 'flashcards' ? 'flashcards' : 'a quiz'} for you.</p>
                 </div>
-             )}
-
-             {studySet && studySetType === 'flashcards' && (
-                <FlashcardViewer flashcards={studySet as Flashcard[]} onReset={resetStudySet} />
-             )}
-             
-             {studySet && studySetType === 'quiz' && (
-                <QuizComponent questions={studySet as QuizQuestion[]} onReset={resetStudySet} />
-             )}
-
-          </div>
-
-          <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md mt-8 transition-colors duration-300 border border-transparent dark:border-zinc-700">
-            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-6">Comments ({resource.comments.length})</h3>
-            
-            <form onSubmit={handlePostComment} className="flex gap-4 items-start mb-8">
-                <Avatar src={user?.avatarUrl} alt={user?.name || 'User'} className="w-10 h-10" />
-                <div className="flex-grow">
-                    <MarkdownToolbar
-                        textareaRef={commentTextareaRef}
-                        value={newComment}
-                        onValueChange={setNewComment}
-                    />
-                    <textarea
-                        ref={commentTextareaRef}
-                        value={newComment}
-                        onChange={(e) => setNewComment(e.target.value)}
-                        placeholder="Add a comment..."
-                        className="w-full bg-slate-100 dark:bg-zinc-800 dark:text-white text-slate-900 placeholder:text-slate-500 dark:placeholder:text-slate-500 px-4 py-2 border border-slate-300 dark:border-zinc-700 rounded-b-lg focus:ring-primary-500 focus:border-primary-500 transition focus:outline-none"
-                        rows={3}
-                    />
-                    <div className="flex justify-end mt-2">
-                        <button type="submit" className="bg-primary-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-primary-700 transition">
-                            Post Comment
+            )}
+            {!isGeneratingStudySet && !studySet && (
+                <div className="border-2 border-dashed border-slate-300 dark:border-zinc-700 rounded-lg p-6 text-center">
+                    <div className="flex justify-center gap-4">
+                        <button onClick={() => handleGenerateStudySet('flashcards')} className="flex-1 inline-flex flex-col items-center gap-2 bg-slate-50 dark:bg-zinc-800 text-slate-700 dark:text-slate-200 font-bold py-4 px-4 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-700 transition border border-slate-200 dark:border-zinc-700">
+                            <BookCopy size={24} />
+                            Generate Flashcards
+                        </button>
+                        <button onClick={() => handleGenerateStudySet('quiz')} className="flex-1 inline-flex flex-col items-center gap-2 bg-slate-50 dark:bg-zinc-800 text-slate-700 dark:text-slate-200 font-bold py-4 px-4 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-700 transition border border-slate-200 dark:border-zinc-700">
+                            <HelpCircle size={24} />
+                            Generate Practice Quiz
                         </button>
                     </div>
                 </div>
-            </form>
+            )}
+            {!isGeneratingStudySet && studySet && studySet.length > 0 && (
+                <div className="bg-slate-50 dark:bg-zinc-800/50 border border-slate-200 dark:border-zinc-700 rounded-lg p-4 sm:p-6">
+                    {studySetType === 'flashcards' && <FlashcardViewer flashcards={studySet as Flashcard[]} onReset={resetStudySet} />}
+                    {studySetType === 'quiz' && <QuizComponent questions={studySet as QuizQuestion[]} onReset={resetStudySet} />}
+                </div>
+            )}
+            {!isGeneratingStudySet && studySet && studySet.length === 0 && (
+                 <div className="p-4 text-center bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                    <p className="text-red-700 dark:text-red-300 font-semibold">Could not generate study set.</p>
+                    <p className="text-red-600 dark:text-red-400 text-sm">Please try again later.</p>
+                    <button onClick={resetStudySet} className="mt-2 text-sm text-primary-600 dark:text-primary-400 font-semibold hover:text-primary-800 dark:hover:text-primary-300">Try again</button>
+                </div>
+            )}
+          </div>
 
-            <div className="space-y-6">
+          <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md mt-8 transition-colors duration-300 border border-transparent dark:border-zinc-700">
+            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                <MessageSquare size={22}/>
+                Discussion ({resource.comments.length})
+            </h3>
+            <form onSubmit={handlePostComment} className="flex gap-4 items-start pb-6 mb-6 border-b border-slate-200 dark:border-zinc-700">
+              <Avatar src={user?.avatarUrl} alt={user?.name} className="w-10 h-10 rounded-full shrink-0" />
+              <div className="w-full">
+                <MarkdownToolbar
+                    textareaRef={commentTextareaRef}
+                    value={newComment}
+                    onValueChange={setNewComment}
+                />
+                <textarea
+                    ref={commentTextareaRef}
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    placeholder="Add a comment..."
+                    className="w-full bg-slate-100 dark:bg-zinc-800 dark:text-white text-slate-900 placeholder:text-slate-500 dark:placeholder:text-slate-500 px-4 py-2 border border-slate-300 dark:border-zinc-700 rounded-b-lg focus:ring-primary-500 focus:border-primary-500 transition focus:outline-none"
+                    rows={3}
+                />
+                 <div className="flex justify-end mt-2">
+                    <button type="submit" className="bg-primary-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-primary-700 transition">Post</button>
+                </div>
+              </div>
+            </form>
+            <div className="mt-6">
                 {renderComments(null)}
             </div>
           </div>
         </div>
 
-        <div className="lg:col-span-1 space-y-8">
-            <div className="bg-white dark:bg-dark-surface p-6 rounded-xl shadow-md border border-transparent dark:border-zinc-700">
-                <h3 className="font-bold text-slate-800 dark:text-white mb-4">About the Author</h3>
-                <div 
-                    onClick={() => handleAuthorClick(resource.author.id)}
-                    className="flex items-center gap-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-zinc-800 p-2 -mx-2 rounded-lg transition"
-                >
-                    <Avatar src={resource.author.avatarUrl} alt={resource.author.name} className="w-14 h-14" />
-                    <div>
-                        <div className="flex items-center gap-2">
-                             <p className="font-bold text-slate-900 dark:text-white text-lg">{resource.author.name}</p>
-                             <UserRankBadge rank={authorRank} />
-                        </div>
-                        <p className="text-slate-500 dark:text-slate-400 text-sm">{resource.author.course}</p>
-                    </div>
-                </div>
+        <div className="lg:col-span-1">
+            <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md lg:sticky top-24 transition-colors duration-300 border border-transparent dark:border-zinc-700">
+                <img src={resource.previewImageUrl} alt={resource.title} className="w-full h-80 object-cover rounded-lg mb-6" />
                 
-                <div className="flex gap-2 mt-4">
-                     <button 
-                        onClick={() => toggleUserSubscription(resource.author.id)}
-                        className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg font-semibold text-sm transition ${user?.subscriptions.users.includes(resource.author.id) ? 'bg-primary-600 text-white hover:bg-primary-700' : 'bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-zinc-700'}`}
-                    >
-                         {user?.subscriptions.users.includes(resource.author.id) ? <UserMinus size={16}/> : <UserPlus size={16}/>}
-                         {user?.subscriptions.users.includes(resource.author.id) ? 'Unfollow' : 'Follow'}
-                     </button>
-                </div>
-            </div>
-
-            <div className="bg-white dark:bg-dark-surface p-6 rounded-xl shadow-md border border-transparent dark:border-zinc-700">
-                 <h3 className="font-bold text-slate-800 dark:text-white mb-4">Resource Stats</h3>
-                 <div className="flex items-center justify-around py-2">
-                     <div className="text-center">
-                        <div className="flex items-center justify-center w-10 h-10 bg-slate-100 dark:bg-zinc-800 rounded-full mx-auto mb-1 text-slate-600 dark:text-slate-400">
-                            <ThumbsUp size={20} />
-                        </div>
-                        <span className="block font-bold text-slate-800 dark:text-white text-lg">{resource.upvotes}</span>
-                        <span className="text-xs text-slate-500 dark:text-slate-400">Upvotes</span>
-                     </div>
-                     <div className="text-center">
-                        <div className="flex items-center justify-center w-10 h-10 bg-slate-100 dark:bg-zinc-800 rounded-full mx-auto mb-1 text-slate-600 dark:text-slate-400">
-                            <MessageSquare size={20} />
-                        </div>
-                         <span className="block font-bold text-slate-800 dark:text-white text-lg">{resource.comments.length}</span>
-                        <span className="text-xs text-slate-500 dark:text-slate-400">Comments</span>
-                     </div>
-                      <div className="text-center">
-                        <div className="flex items-center justify-center w-10 h-10 bg-slate-100 dark:bg-zinc-800 rounded-full mx-auto mb-1 text-slate-600 dark:text-slate-400">
-                             <Clock size={20} />
-                        </div>
-                         <span className="block font-bold text-slate-800 dark:text-white text-lg">{new Date(resource.uploadDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
-                        <span className="text-xs text-slate-500 dark:text-slate-400">Uploaded</span>
-                     </div>
-                 </div>
-
-                 <div className="flex flex-col gap-2 mt-6">
+                <div className="flex items-center gap-2">
                     <button 
-                         onClick={handleUpvoteClick}
-                         className={`w-full flex items-center justify-center gap-2 py-2 rounded-lg font-semibold transition ${isUpvoted ? 'bg-primary-600 text-white' : 'bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-zinc-700'}`}
+                      onClick={handleUpvoteClick}
+                      className={`flex items-center gap-2 p-3 rounded-lg transition font-medium ${isUpvoted ? 'bg-green-600 text-white' : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50'}`}
                     >
                         <ThumbsUp size={18} />
-                        {isUpvoted ? 'Upvoted' : 'Upvote Resource'}
-                    </button>
-                    <button 
-                        onClick={handleDownvoteClick}
-                        className={`w-full flex items-center justify-center gap-2 py-2 rounded-lg font-semibold transition ${isDownvoted ? 'bg-red-600 text-white' : 'bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-zinc-700'}`}
-                    >
-                        <ThumbsDown size={18} />
-                        Downvote
+                        {resource.upvotes > 0 && <span>{resource.upvotes}</span>}
                     </button>
                     <button
-                        onClick={() => toggleSaveResource(resource.id)}
-                        className={`w-full flex items-center justify-center gap-2 py-2 rounded-lg font-semibold transition ${isSaved ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-700' : 'bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-zinc-700'}`}
+                      onClick={handleDownvoteClick}
+                      className={`flex items-center gap-2 p-3 rounded-lg transition font-medium ${isDownvoted ? 'bg-red-600 text-white' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50'}`}
                     >
-                        {isSaved ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
-                        {isSaved ? 'Saved' : 'Save for later'}
+                        <ThumbsDown size={18} />
+                        {resource.downvotes > 0 && <span>{resource.downvotes}</span>}
                     </button>
                     <button 
+                        onClick={() => toggleSaveResource(resource.id)}
+                        title={isSaved ? "Unsave" : "Save for later"}
+                        className={`p-3 rounded-lg transition font-medium ${isSaved ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-zinc-700'}`}
+                    >
+                        {isSaved ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
+                    </button>
+                     <button 
                         onClick={() => setIsShareModalOpen(true)}
-                        className="w-full flex items-center justify-center gap-2 py-2 rounded-lg font-semibold bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-zinc-700 transition"
+                        title="Share"
+                        className="p-3 rounded-lg transition font-medium bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-zinc-700"
                     >
                         <Share2 size={18} />
-                        Share
                     </button>
                     {isAuthor && (
-                         <button 
+                        <button 
                             onClick={() => setIsDeleteConfirmOpen(true)}
-                            className="w-full flex items-center justify-center gap-2 py-2 rounded-lg font-semibold bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 transition mt-2"
+                            title="Delete Resource"
+                            className="p-3 rounded-lg transition font-medium bg-slate-100 dark:bg-zinc-800 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30"
                         >
                             <Trash2 size={18} />
-                            Delete Resource
                         </button>
                     )}
-                 </div>
-            </div>
-
-            <div className="bg-white dark:bg-dark-surface p-6 rounded-xl shadow-md border border-transparent dark:border-zinc-700">
-                <h3 className="font-bold text-slate-800 dark:text-white mb-4">Related Resources</h3>
-                <div className="space-y-4">
-                     {relatedResources.slice(relatedStartIndex, relatedStartIndex + 4).map(rel => (
-                         <div key={rel.id} className="cursor-pointer group" onClick={() => setView('resourceDetail', rel.id)}>
-                             <div className="flex gap-3">
-                                <div className="w-16 h-16 shrink-0 rounded-lg overflow-hidden bg-slate-200 dark:bg-zinc-800">
-                                    <img src={rel.previewImageUrl} alt={rel.title} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
-                                </div>
-                                <div>
-                                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-0.5">{rel.courseCode}</p>
-                                    <h4 className="text-sm font-bold text-slate-800 dark:text-white line-clamp-2 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition">{rel.title}</h4>
-                                </div>
-                             </div>
-                         </div>
-                     ))}
-                     {relatedResources.length === 0 && (
-                         <p className="text-sm text-slate-500 dark:text-slate-400">No related resources found.</p>
-                     )}
                 </div>
-                 {relatedResources.length > 4 && (
-                    <div className="flex justify-between mt-4 pt-4 border-t border-slate-100 dark:border-zinc-800">
-                         <button 
-                            disabled={relatedStartIndex === 0}
-                            onClick={() => setRelatedStartIndex(prev => Math.max(0, prev - 4))}
-                            className="text-sm font-semibold text-primary-600 dark:text-primary-400 disabled:opacity-50 disabled:cursor-not-allowed hover:underline"
-                        >
-                             Previous
-                         </button>
-                         <button 
-                            disabled={relatedStartIndex + 4 >= relatedResources.length}
-                            onClick={() => setRelatedStartIndex(prev => Math.min(relatedResources.length - 1, prev + 4))}
-                            className="text-sm font-semibold text-primary-600 dark:text-primary-400 disabled:opacity-50 disabled:cursor-not-allowed hover:underline"
-                        >
-                             Next
-                         </button>
-                    </div>
-                 )}
+
+                <div className="mt-6 pt-6 border-t border-slate-200 dark:border-dark-border">
+                    <p className="text-sm font-semibold text-slate-800 dark:text-white mb-3">Uploaded by</p>
+                    <button onClick={() => handleAuthorClick(resource.author.id)} className="flex items-center gap-3 w-full text-left hover:bg-slate-50 dark:hover:bg-zinc-800 p-2 rounded-lg transition-colors">
+                        <Avatar src={resource.author.avatarUrl} alt={resource.author.name} className="w-12 h-12 rounded-full" />
+                        <div>
+                            <div className="flex items-center">
+                              <p className="font-bold text-slate-900 dark:text-slate-100">{resource.author.name}</p>
+                              <UserRankBadge rank={authorRank} />
+                            </div>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                                <span className="font-semibold">{resource.author.course}</span> • Joined on {new Date(resource.author.joinDate).toLocaleDateString()}
+                            </p>
+                        </div>
+                    </button>
+                </div>
             </div>
         </div>
       </div>
       
-      {/* File Preview Modal */}
-      {isPreviewOpen && (
-        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 animate-in fade-in">
-            <div className="bg-white dark:bg-dark-surface w-full max-w-5xl h-[85vh] rounded-xl overflow-hidden flex flex-col relative">
-                <div className="p-4 border-b border-slate-200 dark:border-zinc-700 flex justify-between items-center bg-white dark:bg-zinc-800">
-                    <div>
-                        <h3 className="font-bold text-slate-800 dark:text-white">{resource.fileName}</h3>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">Preview Mode</p>
+      {relatedResources.length > 0 && (
+        <div className="mt-12 border-t border-slate-200 dark:border-zinc-700 pt-8">
+            <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-6">Related Resources</h2>
+            <div className="relative group px-4">
+                
+                {relatedStartIndex > 0 && (
+                    <button 
+                        onClick={() => setRelatedStartIndex(prev => Math.max(0, prev - 1))}
+                        className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-20 bg-white dark:bg-zinc-800 text-slate-700 dark:text-slate-200 p-3 rounded-full shadow-lg border border-slate-100 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-700 hover:text-primary-600 hover:scale-110 transition-all duration-200 flex items-center justify-center"
+                        aria-label="Previous"
+                    >
+                        <ArrowLeft size={24} />
+                    </button>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
+                    {relatedResources.slice(relatedStartIndex, relatedStartIndex + 4).map(related => (
+                        <ResourceCard 
+                            key={related.id}
+                            resource={related}
+                            onSelect={() => setView('resourceDetail', related.id)}
+                            onAuthorClick={handleAuthorClick}
+                            compact={true}
+                        />
+                    ))}
+                </div>
+
+                {relatedStartIndex < relatedResources.length - 4 && (
+                    <button 
+                        onClick={() => setRelatedStartIndex(prev => Math.min(Math.max(0, relatedResources.length - 4), prev + 1))}
+                        className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-20 bg-white dark:bg-zinc-800 text-slate-700 dark:text-slate-200 p-3 rounded-full shadow-lg border border-slate-100 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-700 hover:text-primary-600 hover:scale-110 transition-all duration-200 flex items-center justify-center"
+                        aria-label="Next"
+                    >
+                        <ArrowRight size={24} />
+                    </button>
+                )}
+            </div>
+        </div>
+      )}
+
+      {isDeleteConfirmOpen && (
+            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in">
+                <div className="bg-white dark:bg-zinc-800 p-6 rounded-xl shadow-xl max-w-sm w-full border dark:border-zinc-700">
+                    <div className="flex flex-col items-center text-center">
+                        <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-full text-red-600 dark:text-red-400 mb-4">
+                            <Trash2 size={32} />
+                        </div>
+                        <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Delete Resource?</h3>
+                        <p className="text-slate-500 dark:text-slate-400 mb-6">
+                            Are you sure you want to delete <strong>{resource.title}</strong>? This action cannot be undone.
+                        </p>
+                        <div className="flex gap-3 w-full">
+                            <button onClick={() => setIsDeleteConfirmOpen(false)} className="flex-1 py-2.5 bg-slate-100 dark:bg-zinc-700 text-slate-700 dark:text-slate-200 font-semibold rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-600 transition">Cancel</button>
+                            <button onClick={confirmDelete} className="flex-1 py-2.5 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition">Delete</button>
+                        </div>
                     </div>
-                    <div className="flex gap-2">
+                </div>
+            </div>
+      )}
+
+      {isPreviewOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+             <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col relative animate-in zoom-in-95 duration-200">
+                <div className="p-4 border-b flex justify-between items-center bg-slate-50 rounded-t-xl">
+                    <div className="flex items-center gap-3 overflow-hidden">
+                         <div className={`p-2 rounded-lg ${getBadgeStyle(resource.type)}`}>
+                            {getBadgeIcon(resource.type)}
+                        </div>
+                        <div className="overflow-hidden">
+                             <h3 className="font-bold text-slate-800 truncate text-lg leading-tight">{resource.title}</h3>
+                             <p className="text-xs text-slate-500 truncate">{resource.fileName}</p>
+                        </div>
+                    </div>
+                     <div className="flex items-center gap-2 shrink-0">
                         <a 
                             href={resource.fileUrl} 
                             download={resource.fileName}
-                            className="p-2 hover:bg-slate-100 dark:hover:bg-zinc-700 rounded-full transition"
+                            className="p-2 rounded-full hover:bg-slate-200 text-slate-600 transition"
                             title="Download"
                         >
-                            <Download size={20} className="text-slate-600 dark:text-slate-300" />
+                            <Download size={20} />
                         </a>
-                        <button onClick={() => setIsPreviewOpen(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-zinc-700 rounded-full transition">
-                            <X size={20} className="text-slate-600 dark:text-slate-300" />
+                        <button onClick={() => setIsPreviewOpen(false)} className="p-2 rounded-full hover:bg-red-100 text-slate-500 hover:text-red-600 transition">
+                            <X size={24} />
                         </button>
                     </div>
                 </div>
-                <div className="flex-grow bg-slate-100 dark:bg-zinc-900 overflow-auto">
+                <div className="flex-grow bg-slate-200 overflow-hidden flex items-center justify-center rounded-b-xl relative">
                     {renderPreviewContent()}
                 </div>
             </div>
         </div>
-      )}
-
-      {/* Share Modal */}
-      <ShareModal 
-        isOpen={isShareModalOpen} 
-        onClose={() => setIsShareModalOpen(false)} 
-        resource={resource} 
-      />
-      
-      {/* Delete Confirmation Modal */}
-      {isDeleteConfirmOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in">
-            <div className="bg-white dark:bg-zinc-800 p-6 rounded-xl shadow-xl max-w-sm w-full border dark:border-zinc-700">
-                <div className="flex flex-col items-center text-center">
-                    <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-full text-red-600 dark:text-red-400 mb-4">
-                        <Trash2 size={32} />
-                    </div>
-                    <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Delete Resource?</h3>
-                    <p className="text-slate-500 dark:text-slate-400 mb-6">
-                        Are you sure you want to delete <strong>{resource.title}</strong>? This action cannot be undone.
-                    </p>
-                    <div className="flex gap-3 w-full">
-                        <button onClick={() => setIsDeleteConfirmOpen(false)} className="flex-1 py-2.5 bg-slate-100 dark:bg-zinc-700 text-slate-700 dark:text-slate-200 font-semibold rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-600 transition">Cancel</button>
-                        <button onClick={confirmDelete} className="flex-1 py-2.5 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition">Delete</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-      )}
-
+    )}
+    <ShareModal 
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        resource={resource}
+    />
     </div>
   );
 };

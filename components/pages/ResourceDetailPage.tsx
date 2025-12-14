@@ -312,19 +312,52 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     }
   };
 
+  const resolveFileBase64 = async (): Promise<string | undefined> => {
+    if (resource.fileBase64) return resource.fileBase64;
+    try {
+        const response = await fetch(resource.fileUrl);
+        if (!response.ok) throw new Error('Fetch failed');
+        const blob = await response.blob();
+        return await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+    } catch (error) {
+        console.error("Error fetching file for AI:", error);
+        return undefined;
+    }
+  };
+
   const handleGenerateSummary = async () => {
     setIsSummarizing(true);
     setSummary('');
-    // Pass the base64 content and mimeType if available
-    const result = await summarizeContent(resource.contentForAI, resource.fileBase64, resource.mimeType);
+    
+    const base64 = await resolveFileBase64();
+    if (!base64) {
+        setSummary("Error: Could not retrieve file content for AI analysis. The file might be too large or inaccessible.");
+        setIsSummarizing(false);
+        return;
+    }
+
+    const result = await summarizeContent(resource.contentForAI, base64, resource.mimeType);
     setSummary(result);
     setIsSummarizing(false);
   };
   
   const handleGeneratePreview = async () => {
-    if (!resource.fileBase64) return;
+    if (!isAISupported) return;
     setIsGeneratingPreview(true);
-    const result = await summarizeContent(resource.contentForAI, resource.fileBase64, resource.mimeType);
+    
+    const base64 = await resolveFileBase64();
+    if (!base64) {
+        setAiGeneratedPreview("Error: Could not retrieve file content.");
+        setIsGeneratingPreview(false);
+        return;
+    }
+
+    const result = await summarizeContent(resource.contentForAI, base64, resource.mimeType);
     setAiGeneratedPreview(result);
     setIsGeneratingPreview(false);
   };
@@ -333,7 +366,11 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     setIsGeneratingStudySet(true);
     setStudySet(null);
     setStudySetType(type);
-    const result = await generateStudySet(resource.contentForAI, type, resource.fileBase64, resource.mimeType);
+    
+    const base64 = await resolveFileBase64();
+    // Proceed even if base64 is undefined (generateStudySet handles undefined)
+    
+    const result = await generateStudySet(resource.contentForAI, type, base64, resource.mimeType);
     setStudySet(result);
     setIsGeneratingStudySet(false);
   };
@@ -477,7 +514,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
                         <FileText size={16} className="text-slate-400" />
                         <span className="text-sm font-semibold text-slate-500">Content Overview</span>
                     </div>
-                     {!contentToDisplay && resource.fileBase64 && !isGeneratingPreview && isAISupported && (
+                     {!contentToDisplay && !isGeneratingPreview && isAISupported && (
                         <button 
                             onClick={handleGeneratePreview}
                             className="text-xs bg-primary-50 text-primary-600 px-2 py-1 rounded hover:bg-primary-100 font-semibold transition flex items-center gap-1"
@@ -499,7 +536,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
                     ) : (
                         <div className="flex flex-col items-center justify-center h-full text-slate-400 py-12">
                             <p className="italic mb-4">No text preview available.</p>
-                            {resource.fileBase64 && isAISupported ? (
+                            {isAISupported ? (
                                  <button 
                                     onClick={handleGeneratePreview}
                                     className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition font-semibold text-sm shadow-sm"

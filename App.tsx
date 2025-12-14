@@ -610,7 +610,9 @@ const App: React.FC = () => {
               fileUrl: downloadURL,
               fileName: file.name,
               previewImageUrl: previewUrl, 
-              fileBase64: fileBase64,
+              // Prevent storing large base64 strings in Firestore to avoid document size limit errors (1MB limit)
+              // Only store if roughly < 800KB to allow room for other fields
+              fileBase64: fileBase64.length < 800000 ? fileBase64 : null,
               mimeType: file.type,
               contentForAI: "Content is in the file...", 
           };

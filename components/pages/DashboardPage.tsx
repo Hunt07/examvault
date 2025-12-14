@@ -81,8 +81,7 @@ const DashboardPage: React.FC = () => {
         resource.title.toLowerCase().includes(searchLower) ||
         resource.courseCode.toLowerCase().includes(searchLower) ||
         resource.courseName.toLowerCase().includes(searchLower) ||
-        resource.author.name.toLowerCase().includes(searchLower) ||
-        (resource.lecturer && resource.lecturer.toLowerCase().includes(searchLower));
+        resource.author.name.toLowerCase().includes(searchLower);
 
       if (!matchesSearch) return false;
 

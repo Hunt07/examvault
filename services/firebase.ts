@@ -15,7 +15,7 @@ const getEnv = (key: string) => {
 // 🔹 Your Firebase config using Environment Variables
 // You must set these in a .env file in your project root
 const firebaseConfig = {
-  apiKey: " ",
+  apiKey: "AIzaSyCuN5mDneFpeI9ZVaiD6DRahRvSPGKGHZs",
   authDomain: "examvault-live-07.firebaseapp.com",
   projectId: "examvault-live-07",
   storageBucket: "examvault-live-07.firebasestorage.app",

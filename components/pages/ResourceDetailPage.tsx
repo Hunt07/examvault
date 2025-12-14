@@ -233,6 +233,18 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     setIsGeneratingPreview(false);
   }, [resource.id]);
 
+  const isAISupported = useMemo(() => {
+      if (!resource.mimeType) return false;
+      const supported = [
+          'application/pdf',
+          'image/',
+          'text/',
+          'application/json'
+      ];
+      // Check if starts with any supported type
+      return supported.some(t => resource.mimeType?.startsWith(t));
+  }, [resource.mimeType]);
+
   const commentsByParentId = useMemo(() => {
     const group: Record<string, Comment[]> = {};
     for (const comment of resource.comments) {
@@ -465,7 +477,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
                         <FileText size={16} className="text-slate-400" />
                         <span className="text-sm font-semibold text-slate-500">Content Overview</span>
                     </div>
-                     {!contentToDisplay && resource.fileBase64 && !isGeneratingPreview && (
+                     {!contentToDisplay && resource.fileBase64 && !isGeneratingPreview && isAISupported && (
                         <button 
                             onClick={handleGeneratePreview}
                             className="text-xs bg-primary-50 text-primary-600 px-2 py-1 rounded hover:bg-primary-100 font-semibold transition flex items-center gap-1"
@@ -487,7 +499,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
                     ) : (
                         <div className="flex flex-col items-center justify-center h-full text-slate-400 py-12">
                             <p className="italic mb-4">No text preview available.</p>
-                            {resource.fileBase64 ? (
+                            {resource.fileBase64 && isAISupported ? (
                                  <button 
                                     onClick={handleGeneratePreview}
                                     className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition font-semibold text-sm shadow-sm"
@@ -496,7 +508,11 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
                                     Generate AI Summary
                                 </button>
                             ) : (
-                                <p className="text-xs text-slate-400">Upload a file with content to enable AI features.</p>
+                                <p className="text-xs text-slate-400">
+                                    {isAISupported 
+                                        ? "Upload a file with content to enable AI features." 
+                                        : "AI features are not supported for this file type."}
+                                </p>
                             )}
                         </div>
                     )}
@@ -672,11 +688,32 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
 
           <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md mt-8 transition-colors duration-300 border border-transparent dark:border-zinc-700">
             <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4">AI Summary</h3>
+            
+            {!isAISupported && (
+                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 mb-4 flex items-start gap-3">
+                    <AlertCircle className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" size={20} />
+                    <div>
+                        <h4 className="font-bold text-amber-800 dark:text-amber-200 text-sm">File Type Not Supported</h4>
+                        <p className="text-amber-700 dark:text-amber-300 text-xs mt-1">
+                            AI summarization is only available for PDF and Image files. Word/PowerPoint files cannot be processed directly.
+                        </p>
+                    </div>
+                </div>
+            )}
+
             {!summary && !isSummarizing && (
               <div className="border-2 border-dashed border-slate-300 dark:border-zinc-700 rounded-lg p-6 text-center">
                   <BrainCircuit className="mx-auto h-12 w-12 text-slate-400 dark:text-slate-500" />
                   <p className="mt-2 text-slate-600 dark:text-slate-400">Get a quick overview of this document.</p>
-                  <button onClick={handleGenerateSummary} className="mt-4 inline-flex items-center gap-2 bg-primary-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-primary-700 transition">
+                  <button 
+                    onClick={handleGenerateSummary} 
+                    disabled={!isAISupported}
+                    className={`mt-4 inline-flex items-center gap-2 font-bold py-2 px-4 rounded-lg transition ${
+                        isAISupported 
+                        ? 'bg-primary-600 text-white hover:bg-primary-700' 
+                        : 'bg-slate-200 dark:bg-zinc-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                    }`}
+                  >
                       <BrainCircuit size={18} />
                       Generate with Gemini
                   </button>
@@ -698,6 +735,13 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
           
           <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md mt-8 transition-colors duration-300 border border-transparent dark:border-zinc-700">
             <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4">AI Study Tools</h3>
+            
+            {!isAISupported && (
+                <div className="bg-slate-50 dark:bg-zinc-800/50 p-4 rounded-lg text-center mb-4">
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Study tools are not available for this file type.</p>
+                </div>
+            )}
+
             {isGeneratingStudySet && (
                 <div className="border border-slate-200 dark:border-zinc-700 rounded-lg p-6 text-center">
                     <Loader2 className="mx-auto h-12 w-12 text-primary-500 animate-spin" />
@@ -706,13 +750,13 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
                 </div>
             )}
             {!isGeneratingStudySet && !studySet && (
-                <div className="border-2 border-dashed border-slate-300 dark:border-zinc-700 rounded-lg p-6 text-center">
+                <div className={`border-2 border-dashed border-slate-300 dark:border-zinc-700 rounded-lg p-6 text-center ${!isAISupported ? 'opacity-50 pointer-events-none' : ''}`}>
                     <div className="flex justify-center gap-4">
-                        <button onClick={() => handleGenerateStudySet('flashcards')} className="flex-1 inline-flex flex-col items-center gap-2 bg-slate-50 dark:bg-zinc-800 text-slate-700 dark:text-slate-200 font-bold py-4 px-4 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-700 transition border border-slate-200 dark:border-zinc-700">
+                        <button onClick={() => handleGenerateStudySet('flashcards')} disabled={!isAISupported} className="flex-1 inline-flex flex-col items-center gap-2 bg-slate-50 dark:bg-zinc-800 text-slate-700 dark:text-slate-200 font-bold py-4 px-4 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-700 transition border border-slate-200 dark:border-zinc-700">
                             <BookCopy size={24} />
                             Generate Flashcards
                         </button>
-                        <button onClick={() => handleGenerateStudySet('quiz')} className="flex-1 inline-flex flex-col items-center gap-2 bg-slate-50 dark:bg-zinc-800 text-slate-700 dark:text-slate-200 font-bold py-4 px-4 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-700 transition border border-slate-200 dark:border-zinc-700">
+                        <button onClick={() => handleGenerateStudySet('quiz')} disabled={!isAISupported} className="flex-1 inline-flex flex-col items-center gap-2 bg-slate-50 dark:bg-zinc-800 text-slate-700 dark:text-slate-200 font-bold py-4 px-4 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-700 transition border border-slate-200 dark:border-zinc-700">
                             <HelpCircle size={24} />
                             Generate Practice Quiz
                         </button>

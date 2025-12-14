@@ -32,6 +32,22 @@ if (apiKey) {
   console.warn("Gemini API Key is missing. AI features will be disabled.");
 }
 
+const isMimeTypeSupported = (mimeType: string): boolean => {
+    const supportedExact = [
+        'application/pdf',
+        'application/json',
+        'text/plain',
+        'text/csv', 
+        'text/markdown',
+        'text/html'
+    ];
+    if (supportedExact.includes(mimeType)) return true;
+    if (mimeType.startsWith('image/')) return true;
+    if (mimeType.startsWith('audio/')) return true;
+    if (mimeType.startsWith('video/')) return true;
+    return false;
+};
+
 export const summarizeContent = async (
   content: string, 
   fileBase64?: string, 
@@ -55,6 +71,10 @@ Based on the following material, please provide the summary with these exact sec
     const parts: any[] = [];
     
     if (fileBase64 && mimeType) {
+        if (!isMimeTypeSupported(mimeType)) {
+            return "⚠️ **Format Not Supported**\n\nAI Summarization is currently available for **PDFs** and **Images** only.\n\nMicrosoft Office files (Word, PowerPoint, Excel) cannot be processed directly. Please convert your document to PDF to use AI features.";
+        }
+
         const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
         parts.push({
             inlineData: {
@@ -83,6 +103,10 @@ Based on the following material, please provide the summary with these exact sec
     }
     if (error.message?.includes('429')) {
         return "Error: Quota exceeded. Please try again later.";
+    }
+    // Handle API errors related to file processing
+    if (error.message?.includes('INVALID_ARGUMENT')) {
+        return "Error: The file format or size is not supported by the AI model.";
     }
     return "Could not generate summary. Please check your Internet connection.";
   }
@@ -161,6 +185,12 @@ export const generateStudySet = async (
     parts.push({ text: promptText });
 
     if (fileBase64 && mimeType) {
+        if (!isMimeTypeSupported(mimeType)) {
+             // Return empty array if not supported, UI will handle the empty state
+             console.warn("Unsupported MIME type for study set generation:", mimeType);
+             return []; 
+        }
+
         const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
         parts.push({
             inlineData: {

@@ -1,33 +1,45 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 
-const getApiKey = () => {
-  // Check for Vite environment variable
-  // Cast import.meta to any to avoid TypeScript error about 'env' property
-  const meta = import.meta as any;
-  if (typeof meta !== 'undefined' && meta.env && meta.env.VITE_API_KEY) {
-    return meta.env.VITE_API_KEY;
+// Robustly retrieve API Key
+const getApiKey = (): string => {
+  // 1. Try standard Vite injection (most likely source)
+  // @ts-ignore
+  if (import.meta.env && import.meta.env.VITE_API_KEY) {
+    // @ts-ignore
+    return import.meta.env.VITE_API_KEY;
   }
-  // Check for process.env (safely)
+
+  // 2. Fallback for some cloud environments or alternative setups
   try {
-    if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
-      return process.env.API_KEY;
+    if (typeof process !== 'undefined' && process.env) {
+      return process.env.VITE_API_KEY || process.env.API_KEY || "";
     }
   } catch (e) {
     // ignore
   }
+
   return "";
 };
 
 const apiKey = getApiKey();
-const ai = new GoogleGenAI({ apiKey: apiKey });
+
+// Initialize AI client conditionally
+let ai: GoogleGenAI | null = null;
+if (apiKey) {
+  ai = new GoogleGenAI({ apiKey: apiKey });
+} else {
+  console.warn("Gemini API Key is missing. AI features will be disabled.");
+}
 
 export const summarizeContent = async (
   content: string, 
   fileBase64?: string, 
   mimeType?: string
 ): Promise<string> => {
-  if (!apiKey) {
-      return "Configuration Error: API Key is missing. Please ensure VITE_API_KEY is set in your .env file.";
+  if (!ai || !apiKey) {
+      console.error("Missing API Key");
+      return "Configuration Error: API Key is missing. Please ensure VITE_API_KEY is set in your .env.local file and restart the server.";
   }
 
   try {
@@ -69,12 +81,15 @@ Based on the following material, please provide the summary with these exact sec
     if (error.message?.includes('403') || error.message?.includes('API key')) {
         return "Error: Invalid or revoked API Key.";
     }
-    return "Could not generate summary. Please check your Internet connection or API Key quota.";
+    if (error.message?.includes('429')) {
+        return "Error: Quota exceeded. Please try again later.";
+    }
+    return "Could not generate summary. Please check your Internet connection.";
   }
 };
 
 export const describeImage = async (base64Data: string, mimeType: string): Promise<string> => {
-  if (!apiKey) return "Error: API Key missing.";
+  if (!ai || !apiKey) return "Error: API Key missing.";
   try {
     const cleanBase64 = base64Data.replace(/^data:.+;base64,/, '');
     const prompt = "Analyze this image from a study document. Describe the key information, including any text, diagrams, or main concepts. This will be used as a summary for other students.";
@@ -102,7 +117,7 @@ export const generateStudySet = async (
   fileBase64?: string, 
   mimeType?: string
 ): Promise<any> => {
-  if (!apiKey) {
+  if (!ai || !apiKey) {
       console.error("API Key missing");
       return [];
   }

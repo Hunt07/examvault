@@ -438,7 +438,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     if (isOfficeDoc) {
         return (
             <iframe 
-                src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(resource.fileUrl)}`} 
+                src={`https://docs.google.com/gview?url=${encodeURIComponent(resource.fileUrl)}&embedded=true`} 
                 className="w-full h-full border-none" 
                 title="Office Document Preview" 
             />

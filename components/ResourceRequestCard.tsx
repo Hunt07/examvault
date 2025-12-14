@@ -5,7 +5,6 @@ import { ResourceRequestStatus } from '../types';
 import { AppContext } from '../App';
 import UserRankBadge from './UserRankBadge';
 import { CheckCircle, Clock, Trash2 } from 'lucide-react';
-import Avatar from './Avatar';
 
 interface ResourceRequestCardProps {
   request: ResourceRequest;
@@ -47,7 +46,7 @@ const ResourceRequestCard: React.FC<ResourceRequestCardProps> = ({ request }) =>
                     className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400 shrink-0 self-end sm:self-auto rounded-md p-2 -mr-2 hover:bg-slate-100 dark:hover:bg-zinc-700"
                     aria-label={`View profile for ${request.requester.name}`}
                 >
-                    <Avatar src={request.requester.avatarUrl} alt={request.requester.name} className="w-10 h-10" />
+                    <img src={request.requester.avatarUrl} alt={request.requester.name} className="w-10 h-10 rounded-full" />
                     <div className="text-left">
                         <div className="flex items-center">
                             <p className="font-semibold text-slate-700 dark:text-white">{request.requester.name}</p>

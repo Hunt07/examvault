@@ -409,6 +409,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     const ext = resource.fileName.split('.').pop()?.toLowerCase();
     const isPdf = ext === 'pdf';
     const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext || '');
+    const isOfficeDoc = ['ppt', 'pptx', 'doc', 'docx', 'xls', 'xlsx'].includes(ext || '');
 
     if (isMock) {
         return (
@@ -431,7 +432,17 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     }
 
     if (isPdf) {
-        return <iframe src={resource.fileUrl} className="w-full h-full" title="PDF Preview"></iframe>;
+        return <iframe src={resource.fileUrl} className="w-full h-full border-none" title="PDF Preview"></iframe>;
+    }
+
+    if (isOfficeDoc) {
+        return (
+            <iframe 
+                src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(resource.fileUrl)}`} 
+                className="w-full h-full border-none" 
+                title="Office Document Preview" 
+            />
+        );
     }
 
     // Fallback for unsupported types

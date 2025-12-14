@@ -4,6 +4,7 @@ import { AppContext } from '../../App';
 import type { User } from '../../types';
 import { MessageStatus } from '../../types';
 import { Send, Check, CheckCheck, MessageCircle, ArrowLeft, FileText, Notebook, ExternalLink, MoreVertical, Edit2, Trash2, X, Smile } from 'lucide-react';
+import Avatar from '../Avatar';
 
 const formatTimestamp = (timestamp: string): string => {
     const date = new Date(timestamp);
@@ -321,7 +322,7 @@ const MessagesPage: React.FC<{ activeConversationId: string | null }> = ({ activ
                                 onClick={() => setView('messages', convo.id)}
                                 className={`w-full text-left p-4 flex items-center gap-4 transition-colors border-b dark:border-zinc-800 ${activeConversationId === convo.id ? 'bg-primary-50 dark:bg-primary-900/20' : 'hover:bg-slate-50 dark:hover:bg-zinc-800'}`}
                             >
-                                <img src={otherParticipant.avatarUrl} alt={otherParticipant.name} className="w-12 h-12 rounded-full" />
+                                <Avatar src={otherParticipant.avatarUrl} alt={otherParticipant.name} className="w-12 h-12" />
                                 <div className="flex-grow overflow-hidden">
                                     <div className="flex justify-between items-center">
                                         <h3 title={otherParticipant.name} className="font-bold text-slate-800 dark:text-white truncate">{otherParticipant.name}</h3>
@@ -352,7 +353,7 @@ const MessagesPage: React.FC<{ activeConversationId: string | null }> = ({ activ
                                 onClick={() => setView('publicProfile', otherParticipant.id)}
                                 className="flex items-center gap-4 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors rounded-md p-1 -m-1 flex-grow min-w-0"
                             >
-                                <img src={otherParticipant.avatarUrl} alt="avatar" className="w-10 h-10 rounded-full" />
+                                <Avatar src={otherParticipant.avatarUrl} alt="avatar" className="w-10 h-10" />
                                 <div className="min-w-0">
                                     <h2 className="text-xl font-bold text-slate-800 dark:text-white truncate">{otherParticipant.name}</h2>
                                     <p className="text-sm text-slate-500 dark:text-slate-400 truncate">{otherParticipant.course}</p>
@@ -364,7 +365,7 @@ const MessagesPage: React.FC<{ activeConversationId: string | null }> = ({ activ
                             <div className="space-y-4">
                                 {activeChatMessages.map(msg => (
                                     <div key={msg.id} className={`flex items-end gap-2 ${msg.senderId === user.id ? 'justify-end' : ''}`}>
-                                        {msg.senderId !== user.id && <img src={usersMap.get(msg.senderId)?.avatarUrl} alt="sender" className="w-8 h-8 rounded-full" />}
+                                        {msg.senderId !== user.id && <Avatar src={usersMap.get(msg.senderId)?.avatarUrl} alt="sender" className="w-8 h-8" />}
                                         <div className={`max-w-[85%] md:max-w-md p-3 rounded-2xl min-w-0 ${msg.senderId === user.id ? 'bg-primary-500 text-white rounded-br-none' : 'bg-white dark:bg-zinc-700 text-slate-800 dark:text-white rounded-bl-none shadow-sm'}`}>
                                             <MessageBubble 
                                                 message={{

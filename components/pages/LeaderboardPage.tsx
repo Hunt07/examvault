@@ -4,6 +4,7 @@ import { AppContext } from '../../App';
 import type { User } from '../../types';
 import { Award, Medal, Trophy, Info, X } from 'lucide-react';
 import UserRankBadge from '../UserRankBadge';
+import Avatar from '../Avatar';
 
 type LeaderboardTab = 'all' | 'weekly';
 
@@ -138,7 +139,7 @@ const LeaderboardPage: React.FC = () => {
                                         <span className="w-6 text-center text-slate-500 dark:text-slate-400 font-bold">{index + 1}</span>
                                     )}
                                 </div>
-                                <img src={user.avatarUrl} alt={user.name} className="w-12 h-12 rounded-full" />
+                                <Avatar src={user.avatarUrl} alt={user.name} className="w-12 h-12" />
                                 <div>
                                     <p className="text-base sm:text-lg font-bold text-slate-800 dark:text-white">{user.name}</p>
                                     <p className="text-sm text-slate-500 dark:text-slate-400">

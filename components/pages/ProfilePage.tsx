@@ -6,6 +6,7 @@ import { AppContext } from '../../App';
 import ResourceCard from '../ResourceCard';
 import { Award, UploadCloud, Calendar, MessageSquare as MessageSquareIcon, Edit, X, Save, ArrowLeft, UserPlus, UserMinus, ThumbsUp, MessageSquare, Clock, Loader2 } from 'lucide-react';
 import UserRankBadge from '../UserRankBadge';
+import Avatar from '../Avatar';
 import { storage } from '../../services/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
@@ -147,10 +148,10 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, allResources, isCurrent
             <div className="bg-white dark:bg-dark-surface rounded-xl shadow-md mb-8 overflow-hidden transition-colors duration-300 border border-transparent dark:border-zinc-700">
                  {!isEditing ? (
                     <div className="p-6 md:p-10 flex flex-col md:flex-row items-center gap-6">
-                        <img 
+                        <Avatar 
                             src={user.avatarUrl} 
                             alt={user.name} 
-                            className="w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-slate-100 dark:border-zinc-700 shadow-md object-cover bg-white" 
+                            className="w-32 h-32 md:w-40 md:h-40 border-4 border-slate-100 dark:border-zinc-700 shadow-md bg-white" 
                         />
                         
                         <div className="flex-grow text-center md:text-left">
@@ -202,7 +203,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, allResources, isCurrent
                     <div className="p-8">
                         <div className="flex flex-col md:flex-row items-center gap-8">
                              <div className="relative">
-                                <img src={editedAvatarUrl || 'https://via.placeholder.com/128'} alt="Avatar Preview" className="w-32 h-32 rounded-full border-4 border-primary-300 object-cover" />
+                                <Avatar src={editedAvatarUrl || 'https://via.placeholder.com/128'} alt="Avatar Preview" className="w-32 h-32 border-4 border-primary-300" />
                                 <div className="absolute bottom-0 right-0 bg-primary-600 p-2 rounded-full text-white cursor-pointer hover:bg-primary-700">
                                      <label htmlFor="edit-avatar" className="cursor-pointer">
                                         {isUploadingAvatar ? <Loader2 className="animate-spin" size={16}/> : <UploadCloud size={16}/>}

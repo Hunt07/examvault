@@ -3,6 +3,7 @@ import React, { useState, useContext, useMemo } from 'react';
 import { X, Mail, MessageSquare, Copy, Check, Search, Send, ArrowLeft, Link as LinkIcon } from 'lucide-react';
 import { AppContext } from '../App';
 import type { Resource } from '../types';
+import Avatar from './Avatar';
 
 interface ShareModalProps {
   isOpen: boolean;
@@ -169,7 +170,7 @@ const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, resource }) =>
                             className={`w-full flex items-center justify-between p-3 rounded-lg transition text-left ${isSent ? 'opacity-50 cursor-default' : 'hover:bg-slate-50 dark:hover:bg-zinc-700'}`}
                         >
                             <div className="flex items-center gap-3">
-                                <img src={user.avatarUrl} alt={user.name} className="w-10 h-10 rounded-full" />
+                                <Avatar src={user.avatarUrl} alt={user.name} className="w-10 h-10" />
                                 <div>
                                     <div className="flex items-center gap-2">
                                         <p className="font-semibold text-slate-800 dark:text-white">{user.name}</p>

@@ -4,6 +4,7 @@ import type { User } from '../types';
 import { Award } from 'lucide-react';
 import { AppContext } from '../App';
 import UserRankBadge from './UserRankBadge';
+import Avatar from './Avatar';
 
 interface UserCardProps {
   user: User;
@@ -18,8 +19,8 @@ const UserCard: React.FC<UserCardProps> = ({ user, onSelect }) => {
       onClick={onSelect}
       className="bg-white dark:bg-zinc-800 rounded-xl shadow-md p-4 flex flex-col items-center text-center hover:shadow-xl transition-all duration-300 cursor-pointer group border border-transparent dark:border-zinc-700"
     >
-      <img
-        className="w-24 h-24 rounded-full border-4 border-slate-200 dark:border-zinc-700 group-hover:border-primary-400 dark:group-hover:border-primary-500 transition-colors object-cover"
+      <Avatar
+        className="w-24 h-24 border-4 border-slate-200 dark:border-zinc-700 group-hover:border-primary-400 dark:group-hover:border-primary-500 transition-colors"
         src={user.avatarUrl}
         alt={user.name}
       />

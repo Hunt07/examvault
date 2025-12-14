@@ -5,6 +5,7 @@ import type { ForumPost } from '../../types';
 import { ThumbsUp, MessageSquare, PlusCircle } from 'lucide-react';
 import CreatePostModal from '../CreatePostModal';
 import UserRankBadge from '../UserRankBadge';
+import Avatar from '../Avatar';
 
 const ForumPostCard: React.FC<{ post: ForumPost, onSelect: () => void, onAuthorClick: (authorId: string) => void }> = ({ post, onSelect, onAuthorClick }) => {
     const { userRanks } = useContext(AppContext);
@@ -26,7 +27,7 @@ const ForumPostCard: React.FC<{ post: ForumPost, onSelect: () => void, onAuthorC
                     className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400 shrink-0 self-end sm:self-auto rounded-md p-2 -mr-2 hover:bg-slate-100 dark:hover:bg-zinc-700"
                     aria-label={`View profile for ${post.author.name}`}
                 >
-                    <img src={post.author.avatarUrl} alt={post.author.name} className="w-10 h-10 rounded-full" />
+                    <Avatar src={post.author.avatarUrl} alt={post.author.name} className="w-10 h-10" />
                     <div className="text-left">
                         <div className="flex items-center">
                             <p className="font-semibold text-slate-700 dark:text-white">{post.author.name}</p>

@@ -199,8 +199,10 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   const isUpvoted = resource.upvotedBy?.includes(user?.id || '');
   const isDownvoted = resource.downvotedBy?.includes(user?.id || '');
 
+  // Handle Deep Linking / Scrolling
   useEffect(() => {
       if (scrollTargetId) {
+          // Allow DOM to render
           setTimeout(() => {
               const targetElement = document.getElementById(scrollTargetId);
               if (targetElement) {
@@ -232,9 +234,15 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   }, [resource.id]);
 
   const isAISupported = useMemo(() => {
-      // Support almost all common doc types now via extraction
       if (!resource.mimeType) return false;
-      return true; 
+      const supported = [
+          'application/pdf',
+          'image/',
+          'text/',
+          'application/json'
+      ];
+      // Check if starts with any supported type
+      return supported.some(t => resource.mimeType?.startsWith(t));
   }, [resource.mimeType]);
 
   const commentsByParentId = useMemo(() => {
@@ -253,9 +261,13 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   }, [resource.comments]);
 
   const relatedResources = useMemo(() => {
+    // Filter out the current resource
     const candidates = resources.filter(r => r.id !== resource.id);
+    
+    // 1. Priority: Same Course Code
     let matches = candidates.filter(r => r.courseCode === resource.courseCode);
     
+    // 2. Fallback: Same Subject Area
     if (matches.length < 8) {
         const subjectMatch = resource.courseCode.match(/^[A-Za-z]+/);
         if (subjectMatch) {
@@ -267,6 +279,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
         }
     }
 
+    // 3. Fallback: Same Resource Type
     if (matches.length < 8) {
         const typeMatches = candidates.filter(r => 
             r.type === resource.type && !matches.includes(r)
@@ -274,6 +287,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
         matches = [...matches, ...typeMatches];
     }
     
+    // 4. Fallback: Any other resources
     if (matches.length < 8) {
         const otherMatches = candidates.filter(r => !matches.includes(r));
         matches = [...matches, ...otherMatches];
@@ -316,24 +330,18 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     }
   };
 
-  const getMetadataContext = () => {
-      // Basic metadata to guide the AI, but relying on file content for the meat
-      return `
-      Title: ${resource.title}
-      Course: ${resource.courseCode}
-      Type: ${resource.type}
-      `;
-  };
-
   const handleGenerateSummary = async () => {
     setIsSummarizing(true);
     setSummary('');
     
     const base64 = await resolveFileBase64();
-    // Do not include placeholder text if it's just the default
-    const textContext = getMetadataContext();
+    if (!base64) {
+        setSummary("Error: Could not retrieve file content for AI analysis. The file might be too large or inaccessible.");
+        setIsSummarizing(false);
+        return;
+    }
 
-    const result = await summarizeContent(textContext, base64, resource.mimeType);
+    const result = await summarizeContent(resource.contentForAI, base64, resource.mimeType);
     setSummary(result);
     setIsSummarizing(false);
   };
@@ -343,9 +351,13 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     setIsGeneratingPreview(true);
     
     const base64 = await resolveFileBase64();
-    const textContext = getMetadataContext();
+    if (!base64) {
+        setAiGeneratedPreview("Error: Could not retrieve file content.");
+        setIsGeneratingPreview(false);
+        return;
+    }
 
-    const result = await summarizeContent(textContext, base64, resource.mimeType);
+    const result = await summarizeContent(resource.contentForAI, base64, resource.mimeType);
     setAiGeneratedPreview(result);
     setIsGeneratingPreview(false);
   };
@@ -356,9 +368,9 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     setStudySetType(type);
     
     const base64 = await resolveFileBase64();
-    const textContext = getMetadataContext();
+    // Proceed even if base64 is undefined (generateStudySet handles undefined)
     
-    const result = await generateStudySet(textContext, type, base64, resource.mimeType);
+    const result = await generateStudySet(resource.contentForAI, type, base64, resource.mimeType);
     setStudySet(result);
     setIsGeneratingStudySet(false);
   };
@@ -483,7 +495,9 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
         );
     }
 
-    const contentToDisplay = aiGeneratedPreview || null;
+    // Fallback for unsupported types
+    const isPlaceholderContent = resource.contentForAI === "Content is in the file..." || !resource.contentForAI;
+    const contentToDisplay = aiGeneratedPreview || (isPlaceholderContent ? null : resource.contentForAI);
 
     return (
         <div className="flex flex-col items-center justify-center h-full p-8 text-center">
@@ -532,7 +546,9 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
                                 </button>
                             ) : (
                                 <p className="text-xs text-slate-400">
-                                    AI features are not supported for this file type.
+                                    {isAISupported 
+                                        ? "Upload a file with content to enable AI features." 
+                                        : "AI features are not supported for this file type."}
                                 </p>
                             )}
                         </div>
@@ -714,9 +730,9 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
                 <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 mb-4 flex items-start gap-3">
                     <AlertCircle className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" size={20} />
                     <div>
-                        <h4 className="font-bold text-amber-800 dark:text-amber-200 text-sm">File Type Not Fully Supported</h4>
+                        <h4 className="font-bold text-amber-800 dark:text-amber-200 text-sm">File Type Not Supported</h4>
                         <p className="text-amber-700 dark:text-amber-300 text-xs mt-1">
-                            AI summarization works best with PDF and Image files. For Word and PowerPoint, reliability may vary.
+                            AI summarization is only available for PDF and Image files. Word/PowerPoint files cannot be processed directly.
                         </p>
                     </div>
                 </div>
@@ -759,7 +775,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
             
             {!isAISupported && (
                 <div className="bg-slate-50 dark:bg-zinc-800/50 p-4 rounded-lg text-center mb-4">
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Study tools may be limited for this file type.</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Study tools are not available for this file type.</p>
                 </div>
             )}
 
@@ -793,7 +809,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
             {!isGeneratingStudySet && studySet && studySet.length === 0 && (
                  <div className="p-4 text-center bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
                     <p className="text-red-700 dark:text-red-300 font-semibold">Could not generate study set.</p>
-                    <p className="text-red-600 dark:text-red-400 text-sm">Please try again later or check if the file format is supported.</p>
+                    <p className="text-red-600 dark:text-red-400 text-sm">Please try again later.</p>
                     <button onClick={resetStudySet} className="mt-2 text-sm text-primary-600 dark:text-primary-400 font-semibold hover:text-primary-800 dark:hover:text-primary-300">Try again</button>
                 </div>
             )}

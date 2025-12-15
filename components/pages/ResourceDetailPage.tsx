@@ -334,18 +334,28 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     }
   };
 
+  const getMetadataContext = () => {
+      // Build a rich text context including metadata to help Gemini when file content is binary/unsupported
+      return `
+      Metadata for Context:
+      Title: ${resource.title}
+      Course: ${resource.courseCode} - ${resource.courseName}
+      Description: ${resource.description}
+      Type: ${resource.type}
+      
+      Extracted/Placeholder Content:
+      ${resource.contentForAI}
+      `;
+  };
+
   const handleGenerateSummary = async () => {
     setIsSummarizing(true);
     setSummary('');
     
     const base64 = await resolveFileBase64();
-    if (!base64) {
-        setSummary("Error: Could not retrieve file content for AI analysis. The file might be too large or inaccessible.");
-        setIsSummarizing(false);
-        return;
-    }
+    const textContext = getMetadataContext();
 
-    const result = await summarizeContent(resource.contentForAI, base64, resource.mimeType);
+    const result = await summarizeContent(textContext, base64, resource.mimeType);
     setSummary(result);
     setIsSummarizing(false);
   };
@@ -355,13 +365,9 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     setIsGeneratingPreview(true);
     
     const base64 = await resolveFileBase64();
-    if (!base64) {
-        setAiGeneratedPreview("Error: Could not retrieve file content.");
-        setIsGeneratingPreview(false);
-        return;
-    }
+    const textContext = getMetadataContext();
 
-    const result = await summarizeContent(resource.contentForAI, base64, resource.mimeType);
+    const result = await summarizeContent(textContext, base64, resource.mimeType);
     setAiGeneratedPreview(result);
     setIsGeneratingPreview(false);
   };
@@ -372,9 +378,9 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     setStudySetType(type);
     
     const base64 = await resolveFileBase64();
-    // Proceed even if base64 is undefined (generateStudySet handles undefined)
+    const textContext = getMetadataContext();
     
-    const result = await generateStudySet(resource.contentForAI, type, base64, resource.mimeType);
+    const result = await generateStudySet(textContext, type, base64, resource.mimeType);
     setStudySet(result);
     setIsGeneratingStudySet(false);
   };

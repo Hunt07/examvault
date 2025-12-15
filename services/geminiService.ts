@@ -46,8 +46,11 @@ const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
     return bytes.buffer;
 };
 
-// Generic XML Text Extractor (Namespace Agnostic, Tree Traversal)
+// Generic XML Text Extractor (Namespace Agnostic, Tree Traversal & Regex Fallback)
 const extractTextFromXmlContent = (xmlContent: string): string => {
+    let extractedText = "";
+    
+    // Strategy 1: DOM Parser (Best for structure)
     try {
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(xmlContent, "text/xml");
@@ -59,18 +62,34 @@ const extractTextFromXmlContent = (xmlContent: string): string => {
         for (let i = 0; i < elements.length; i++) {
             const el = elements[i];
             // 't' = text in Word/PPT, 'v' = value in Excel
-            // We verify it has direct text content to avoid duplicating parent container text
             if (el.localName === 't' || el.localName === 'v') {
                 if (el.textContent) {
                     textParts.push(el.textContent);
                 }
             }
         }
-        return textParts.join(" ");
+        extractedText = textParts.join(" ");
     } catch (e) {
-        console.warn("XML Parsing error", e);
-        return "";
+        console.warn("DOM XML Parsing error", e);
     }
+
+    // Strategy 2: Nuclear Regex (Fallback if DOM failed or returned almost nothing)
+    // Matches content between > and < tags for things that look like text nodes (t or v)
+    if (extractedText.length < 10) {
+       // Look for <*:t>...</*:t> or just <t>...</t> ignoring attributes
+       // Regex: < (optional namespace :) t (attributes) > (capture) < / (optional namespace :) t >
+       const regex = /<(?:\w+:)?t[^>]*>(.*?)<\/(?:\w+:)?t>/g;
+       let match;
+       const parts = [];
+       while ((match = regex.exec(xmlContent)) !== null) {
+           parts.push(match[1]);
+       }
+       if (parts.length > 0) {
+           extractedText = parts.join(" ");
+       }
+    }
+
+    return extractedText;
 };
 
 const extractTextFromDocx = async (fileBase64: string): Promise<string> => {
@@ -295,7 +314,7 @@ export const generateStudySet = async (
         model: 'gemini-2.5-flash',
         config: {
             responseMimeType: "application/json",
-            responseSchema: schema
+            responseSchema: schema  
         },
         contents: { parts }
     });

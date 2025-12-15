@@ -338,7 +338,15 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     setSummary('');
     
     const base64 = await resolveFileBase64();
-    // Do not include placeholder text if it's just the default
+    
+    if (!base64 && resource.fileUrl !== '#') {
+        // If resolution failed and it's not a mock, don't send empty request
+        setSummary("⚠️ **Content Access Error**\n\nUnable to access the file content for AI analysis. This typically happens with larger files not stored locally, or due to CORS restrictions on the storage bucket.");
+        setIsSummarizing(false);
+        return;
+    }
+
+    // Only include metadata if we actually have a file or it's a mock
     const textContext = getMetadataContext();
 
     const result = await summarizeContent(textContext, base64, resource.mimeType);
@@ -351,6 +359,13 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     setIsGeneratingPreview(true);
     
     const base64 = await resolveFileBase64();
+    
+    if (!base64 && resource.fileUrl !== '#') {
+        setAiGeneratedPreview("⚠️ **Content Access Error**\n\nUnable to access the file content for AI analysis. This typically happens with larger files not stored locally, or due to CORS restrictions on the storage bucket.");
+        setIsGeneratingPreview(false);
+        return;
+    }
+
     const textContext = getMetadataContext();
 
     const result = await summarizeContent(textContext, base64, resource.mimeType);
@@ -364,6 +379,14 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     setStudySetType(type);
     
     const base64 = await resolveFileBase64();
+    
+    if (!base64 && resource.fileUrl !== '#') {
+        setStudySet([]); // Or some error state
+        setIsGeneratingStudySet(false);
+        alert("Unable to access file content for study set generation. (CORS/Size limit)");
+        return;
+    }
+
     const textContext = getMetadataContext();
     
     const result = await generateStudySet(textContext, type, base64, resource.mimeType);

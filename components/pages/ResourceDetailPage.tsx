@@ -199,10 +199,8 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   const isUpvoted = resource.upvotedBy?.includes(user?.id || '');
   const isDownvoted = resource.downvotedBy?.includes(user?.id || '');
 
-  // Handle Deep Linking / Scrolling
   useEffect(() => {
       if (scrollTargetId) {
-          // Allow DOM to render
           setTimeout(() => {
               const targetElement = document.getElementById(scrollTargetId);
               if (targetElement) {
@@ -234,19 +232,9 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   }, [resource.id]);
 
   const isAISupported = useMemo(() => {
+      // Support almost all common doc types now via extraction
       if (!resource.mimeType) return false;
-      const supported = [
-          'application/pdf',
-          'image/',
-          'text/',
-          'application/json',
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          'application/msword',
-          'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-          'application/vnd.ms-powerpoint'
-      ];
-      // Check if starts with any supported type
-      return supported.some(t => resource.mimeType?.startsWith(t));
+      return true; 
   }, [resource.mimeType]);
 
   const commentsByParentId = useMemo(() => {
@@ -265,13 +253,9 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   }, [resource.comments]);
 
   const relatedResources = useMemo(() => {
-    // Filter out the current resource
     const candidates = resources.filter(r => r.id !== resource.id);
-    
-    // 1. Priority: Same Course Code
     let matches = candidates.filter(r => r.courseCode === resource.courseCode);
     
-    // 2. Fallback: Same Subject Area
     if (matches.length < 8) {
         const subjectMatch = resource.courseCode.match(/^[A-Za-z]+/);
         if (subjectMatch) {
@@ -283,7 +267,6 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
         }
     }
 
-    // 3. Fallback: Same Resource Type
     if (matches.length < 8) {
         const typeMatches = candidates.filter(r => 
             r.type === resource.type && !matches.includes(r)
@@ -291,7 +274,6 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
         matches = [...matches, ...typeMatches];
     }
     
-    // 4. Fallback: Any other resources
     if (matches.length < 8) {
         const otherMatches = candidates.filter(r => !matches.includes(r));
         matches = [...matches, ...otherMatches];
@@ -335,16 +317,11 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   };
 
   const getMetadataContext = () => {
-      // Build a rich text context including metadata to help Gemini when file content is binary/unsupported
+      // Basic metadata to guide the AI, but relying on file content for the meat
       return `
-      Metadata for Context:
       Title: ${resource.title}
-      Course: ${resource.courseCode} - ${resource.courseName}
-      Description: ${resource.description}
+      Course: ${resource.courseCode}
       Type: ${resource.type}
-      
-      Extracted/Placeholder Content:
-      ${resource.contentForAI}
       `;
   };
 
@@ -353,6 +330,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     setSummary('');
     
     const base64 = await resolveFileBase64();
+    // Do not include placeholder text if it's just the default
     const textContext = getMetadataContext();
 
     const result = await summarizeContent(textContext, base64, resource.mimeType);
@@ -505,9 +483,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
         );
     }
 
-    // Fallback for unsupported types
-    const isPlaceholderContent = resource.contentForAI === "Content is in the file..." || !resource.contentForAI;
-    const contentToDisplay = aiGeneratedPreview || (isPlaceholderContent ? null : resource.contentForAI);
+    const contentToDisplay = aiGeneratedPreview || null;
 
     return (
         <div className="flex flex-col items-center justify-center h-full p-8 text-center">
@@ -556,9 +532,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
                                 </button>
                             ) : (
                                 <p className="text-xs text-slate-400">
-                                    {isAISupported 
-                                        ? "Upload a file with content to enable AI features." 
-                                        : "AI features are not supported for this file type."}
+                                    AI features are not supported for this file type.
                                 </p>
                             )}
                         </div>

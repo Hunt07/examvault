@@ -1,30 +1,24 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
+// @ts-ignore
+import JSZip from "jszip";
 
 // Robustly retrieve API Key
 const getApiKey = (): string => {
-  // 1. Try standard Vite injection (most likely source)
   // @ts-ignore
   if (import.meta.env && import.meta.env.VITE_API_KEY) {
     // @ts-ignore
     return import.meta.env.VITE_API_KEY;
   }
-
-  // 2. Fallback for some cloud environments or alternative setups
   try {
     if (typeof process !== 'undefined' && process.env) {
       return process.env.VITE_API_KEY || process.env.API_KEY || "";
     }
-  } catch (e) {
-    // ignore
-  }
-
+  } catch (e) {}
   return "";
 };
 
 const apiKey = getApiKey();
-
-// Initialize AI client conditionally
 let ai: GoogleGenAI | null = null;
 if (apiKey) {
   ai = new GoogleGenAI({ apiKey: apiKey });
@@ -36,24 +30,14 @@ const isMimeTypeSupported = (mimeType: string): boolean => {
     const supportedExact = [
         'application/pdf',
         'application/json',
-        'text/plain',
-        'text/csv', 
-        'text/markdown',
-        'text/html',
-        // Office Document Support
+        'text/plain', 'text/csv', 'text/markdown', 'text/html',
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // docx
-        'application/msword', // doc
         'application/vnd.openxmlformats-officedocument.presentationml.presentation', // pptx
-        'application/vnd.ms-powerpoint' // ppt
     ];
-    if (supportedExact.includes(mimeType)) return true;
-    if (mimeType.startsWith('image/')) return true;
-    if (mimeType.startsWith('audio/')) return true;
-    if (mimeType.startsWith('video/')) return true;
-    return false;
+    return supportedExact.includes(mimeType) || mimeType.startsWith('image/') || mimeType.startsWith('audio/') || mimeType.startsWith('video/');
 };
 
-// Check if the model supports this mime type natively via inlineData
+// Returns true if Gemini supports this mimeType natively via inlineData
 const isInlineDataSupported = (mimeType: string): boolean => {
     return mimeType.startsWith('image/') || 
            mimeType === 'application/pdf' ||
@@ -61,34 +45,86 @@ const isInlineDataSupported = (mimeType: string): boolean => {
            mimeType.startsWith('video/');
 };
 
+// Helper to extract text from Office Open XML files (docx, pptx)
+const extractTextFromOfficeFile = async (base64: string, mimeType: string): Promise<string> => {
+    try {
+        const zip = new JSZip();
+        // Load the zip content (docx and pptx are just zips)
+        const content = await zip.loadAsync(base64, { base64: true });
+        let text = "";
+
+        if (mimeType.includes("wordprocessingml")) { // .docx
+            // Parse word/document.xml
+            const xml = await content.file("word/document.xml")?.async("string");
+            if (xml) {
+                // Extract text inside <w:t> tags
+                const matches = xml.match(/<w:t[^>]*>(.*?)<\/w:t>/g);
+                if (matches) {
+                    text = matches.map(tag => tag.replace(/<[^>]+>/g, '')).join(" ");
+                }
+            }
+        } else if (mimeType.includes("presentationml")) { // .pptx
+            // Parse ppt/slides/slide*.xml
+            const slideFiles = Object.keys(content.files).filter(f => f.match(/ppt\/slides\/slide\d+\.xml/));
+            
+            // Simple sort to try and keep slide order roughly correct
+            slideFiles.sort((a, b) => {
+                const numA = parseInt(a.match(/\d+/)![0]);
+                const numB = parseInt(b.match(/\d+/)![0]);
+                return numA - numB;
+            });
+
+            for (const filename of slideFiles) {
+                const xml = await content.file(filename)?.async("string");
+                if (xml) {
+                    // Extract text inside <a:t> tags
+                    const matches = xml.match(/<a:t[^>]*>(.*?)<\/a:t>/g);
+                    if (matches) {
+                        text += `[Slide ${filename.match(/\d+/)}] ` + matches.map(tag => tag.replace(/<[^>]+>/g, '')).join(" ") + "\n\n";
+                    }
+                }
+            }
+        }
+        return text || "Error: No text found in document XML.";
+    } catch (error) {
+        console.error("Failed to parse office file:", error);
+        return "Error: Could not parse Office document. Ensure it is a valid .docx or .pptx file.";
+    }
+};
+
 export const summarizeContent = async (
-  content: string, 
+  textContext: string, 
   fileBase64?: string, 
   mimeType?: string
 ): Promise<string> => {
   if (!ai || !apiKey) {
-      console.error("Missing API Key");
-      return "Configuration Error: API Key is missing. Please ensure VITE_API_KEY is set in your .env.local file and restart the server.";
+      return "Configuration Error: API Key is missing.";
   }
 
   try {
-    const systemInstruction = `You are an expert academic assistant. Your task is to analyze the provided study material and create a highly informative, concise summary for a university student, formatted in markdown. The summary should be easy to digest and focus on what's most important for exam preparation.
+    const systemInstruction = `You are an expert academic assistant. Your task is to analyze the provided study material and create a highly informative, concise summary for a university student, formatted in markdown.
 
-Do not use generic phrases like "This document discusses..." or "The material covers...". Get straight to the point.
-
-Based on the following material, please provide the summary with these exact sections:
-- **Key Concepts:** A bulleted list of the most important terms, definitions, and concepts.
-- **Main Takeaways:** 2-3 sentences summarizing the core message or conclusions.
-- **Potential Exam Questions:** A numbered list of 2-3 sample questions that could be asked on an exam based on this material.`;
+    Based on the material, provide:
+    - **Key Concepts:** Bulleted list of terms and definitions.
+    - **Main Takeaways:** 2-3 sentences summarizing the core message.
+    - **Potential Exam Questions:** 3 sample questions.
+    
+    If the document seems to be a list of questions (like a past paper), provide the answers or a guide on how to solve them.`;
 
     const parts: any[] = [];
     
+    // Always include metadata/context text
+    if (textContext) {
+        parts.push({ text: `Context/Metadata:\n${textContext}` });
+    }
+
     if (fileBase64 && mimeType) {
         if (!isMimeTypeSupported(mimeType)) {
-            return "⚠️ **Format Not Supported**\n\nAI Summarization is currently available for PDFs, Word Docs, PowerPoints, and Images.\n\nIf this file type is not working, please try converting it to PDF.";
+            return "⚠️ Format Not Supported. Please convert to PDF, DOCX, PPTX, or Image.";
         }
 
         if (isInlineDataSupported(mimeType)) {
+            // PDF/Image: Send directly
             const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
             parts.push({
                 inlineData: {
@@ -96,81 +132,45 @@ Based on the following material, please provide the summary with these exact sec
                     mimeType: mimeType
                 }
             });
-            parts.push({ text: "Analyze the above document/image." });
+            parts.push({ text: "Analyze the above file." });
         } else {
-            // For Office docs (Word/PPT) that aren't natively supported via inlineData in the standard API yet:
-            // We fallback to using the metadata provided in 'content' to hallucinate/generate a relevant summary.
-            parts.push({ text: `[System Note: The user provided a ${mimeType} file. Since direct file parsing for this format is limited, please generate a comprehensive study guide and summary based on the Title, Course, and Description provided below. Infer likely topics and key concepts typical for this subject.]` });
+            // DOCX/PPTX: Parse text client-side and send as text
+            const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
+            const extractedText = await extractTextFromOfficeFile(cleanBase64, mimeType);
+            parts.push({ text: `\n\n--- Extracted Document Content ---\n${extractedText}\n----------------------------------` });
         }
     }
-    
-    // Always append the text content (Title, Desc, etc.)
-    parts.push({ text: `\n\nMaterial to analyze:\n---\n${content}\n---` });
 
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
-        config: {
-            systemInstruction: systemInstruction,
-        },
+        config: { systemInstruction },
         contents: { parts }
     });
 
     return response.text || "No summary generated.";
   } catch (error: any) {
     console.error("Gemini API Error:", error);
-    if (error.message?.includes('403') || error.message?.includes('API key')) {
-        return "Error: Invalid or revoked API Key.";
-    }
-    if (error.message?.includes('429')) {
-        return "Error: Quota exceeded. Please try again later.";
-    }
-    // Handle API errors related to file processing
-    if (error.message?.includes('INVALID_ARGUMENT')) {
-        return "Error: The file format or size might not be fully supported by the AI model yet. Please try converting this document to PDF for better results.";
-    }
-    return "Could not generate summary. Please check your Internet connection.";
-  }
-};
-
-export const describeImage = async (base64Data: string, mimeType: string): Promise<string> => {
-  if (!ai || !apiKey) return "Error: API Key missing.";
-  try {
-    const cleanBase64 = base64Data.replace(/^data:.+;base64,/, '');
-    const prompt = "Analyze this image from a study document. Describe the key information, including any text, diagrams, or main concepts. This will be used as a summary for other students.";
-
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: {
-            parts: [
-                { inlineData: { mimeType, data: cleanBase64 } },
-                { text: prompt }
-            ]
-        }
-    });
-
-    return response.text || "No description generated.";
-  } catch (error) {
-    console.error("Error describing image with Gemini:", error);
-    return "Could not generate a description for the image.";
+    if (error.message?.includes('403') || error.message?.includes('API key')) return "Error: Invalid API Key.";
+    if (error.message?.includes('429')) return "Error: Quota exceeded.";
+    return "Could not generate summary. Please try again.";
   }
 };
 
 export const generateStudySet = async (
-  content: string, 
+  textContext: string, 
   setType: 'flashcards' | 'quiz',
   fileBase64?: string, 
   mimeType?: string
 ): Promise<any> => {
-  if (!ai || !apiKey) {
-      console.error("API Key missing");
-      return [];
-  }
+  if (!ai || !apiKey) return [];
+  
   try {
-    let promptText;
-    let schema;
+    let promptText = setType === 'flashcards' 
+        ? `Generate 5-10 flashcards (term/definition) based on the material.`
+        : `Generate a 5-question multiple-choice quiz based on the material.`;
 
+    let schema;
     if (setType === 'flashcards') {
-      promptText = `Analyze the provided study material and generate a set of 5-10 flashcards.`;
       schema = {
         type: Type.ARRAY,
         items: {
@@ -183,17 +183,13 @@ export const generateStudySet = async (
         },
       };
     } else {
-      promptText = `Analyze the provided study material and generate a 5-question multiple-choice quiz.`;
       schema = {
         type: Type.ARRAY,
         items: {
             type: Type.OBJECT,
             properties: {
                 question: { type: Type.STRING },
-                options: { 
-                    type: Type.ARRAY, 
-                    items: { type: Type.STRING } 
-                },
+                options: { type: Type.ARRAY, items: { type: Type.STRING } },
                 correctAnswer: { type: Type.STRING },
             },
             required: ['question', 'options', 'correctAnswer'],
@@ -203,12 +199,11 @@ export const generateStudySet = async (
 
     const parts: any[] = [];
     parts.push({ text: promptText });
+    
+    if (textContext) parts.push({ text: `Context: ${textContext}` });
 
     if (fileBase64 && mimeType) {
-        if (!isMimeTypeSupported(mimeType)) {
-             console.warn("Unsupported MIME type for study set generation:", mimeType);
-             return []; 
-        }
+        if (!isMimeTypeSupported(mimeType)) return [];
 
         if (isInlineDataSupported(mimeType)) {
             const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
@@ -219,11 +214,11 @@ export const generateStudySet = async (
                 }
             });
         } else {
-             parts.push({ text: `[System Note: The user provided a ${mimeType} file. Please generate the ${setType} based on the Title, Course, and Description provided below.]` });
+            const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
+            const extractedText = await extractTextFromOfficeFile(cleanBase64, mimeType);
+            parts.push({ text: `\n\nDocument Content:\n${extractedText}` });
         }
     }
-    
-    parts.push({ text: `\n\nMaterial to analyze:\n---\n${content}\n---` });
     
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
@@ -237,7 +232,7 @@ export const generateStudySet = async (
     const text = response.text;
     return text ? JSON.parse(text) : [];
   } catch (error) {
-    console.error(`Error generating ${setType} with Gemini:`, error);
+    console.error(`Error generating ${setType}:`, error);
     return [];
   }
 };

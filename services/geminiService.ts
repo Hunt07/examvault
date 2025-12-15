@@ -1,5 +1,9 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
+// @ts-ignore
+import mammoth from "mammoth";
+// @ts-ignore
+import JSZip from "jszip";
 
 // Robustly retrieve API Key
 const getApiKey = (): string => {
@@ -39,13 +43,79 @@ const isMimeTypeSupported = (mimeType: string): boolean => {
         'text/plain',
         'text/csv', 
         'text/markdown',
-        'text/html'
+        'text/html',
+        // Office formats (via extraction)
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // docx
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation' // pptx
     ];
     if (supportedExact.includes(mimeType)) return true;
     if (mimeType.startsWith('image/')) return true;
     if (mimeType.startsWith('audio/')) return true;
     if (mimeType.startsWith('video/')) return true;
     return false;
+};
+
+// Helper: Convert Base64 string to ArrayBuffer
+const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
+    const binaryString = window.atob(base64);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes.buffer;
+};
+
+// Helper: Extract text from DOCX
+const extractTextFromDocx = async (fileBase64: string): Promise<string> => {
+    try {
+        const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
+        const arrayBuffer = base64ToArrayBuffer(cleanBase64);
+        const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+        return result.value;
+    } catch (e) {
+        console.error("DOCX Extraction failed", e);
+        throw new Error("Failed to extract text from Word document.");
+    }
+};
+
+// Helper: Extract text from PPTX
+const extractTextFromPptx = async (fileBase64: string): Promise<string> => {
+    try {
+        const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
+        const arrayBuffer = base64ToArrayBuffer(cleanBase64);
+        const zip = await JSZip.loadAsync(arrayBuffer);
+        
+        const slideFiles: any[] = [];
+        zip.folder("ppt/slides")?.forEach((relativePath, file) => {
+            if (relativePath.match(/slide\d+\.xml/)) {
+                slideFiles.push({ path: relativePath, file: file });
+            }
+        });
+
+        // Sort slides naturally (slide1, slide2, slide10...)
+        slideFiles.sort((a, b) => {
+            const numA = parseInt(a.path.match(/\d+/)?.[0] || "0");
+            const numB = parseInt(b.path.match(/\d+/)?.[0] || "0");
+            return numA - numB;
+        });
+
+        let extractedText = "";
+        for (const slide of slideFiles) {
+            const xmlContent = await slide.file.async("string");
+            // Simple Regex to extract text from XML <a:t> tags (PowerPoint text nodes)
+            const textMatches = xmlContent.match(/<a:t[^>]*>(.*?)<\/a:t>/g);
+            if (textMatches) {
+                const slideText = textMatches.map((t: string) => t.replace(/<\/?a:t[^>]*>/g, '')).join(" ");
+                extractedText += `[Slide]: ${slideText}\n\n`;
+            }
+        }
+        
+        return extractedText || "No text content found in slides.";
+    } catch (e) {
+        console.error("PPTX Extraction failed", e);
+        throw new Error("Failed to extract text from PowerPoint presentation.");
+    }
 };
 
 export const summarizeContent = async (
@@ -70,19 +140,30 @@ Based on the following material, please provide the summary with these exact sec
 
     const parts: any[] = [];
     
+    // Handle File Input
     if (fileBase64 && mimeType) {
         if (!isMimeTypeSupported(mimeType)) {
-            return "⚠️ **Format Not Supported**\n\nAI Summarization is currently available for **PDFs** and **Images** only.\n\nMicrosoft Office files (Word, PowerPoint, Excel) cannot be processed directly. Please convert your document to PDF to use AI features.";
+            return "⚠️ **Format Not Supported**\n\nAI Summarization is available for **PDFs**, **Images**, **Word (.docx)**, and **PowerPoint (.pptx)**.\n\nLegacy binary formats like .doc and .ppt are not supported. Please convert them to the newer formats.";
         }
 
-        const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
-        parts.push({
-            inlineData: {
-                data: cleanBase64,
-                mimeType: mimeType
-            }
-        });
-        parts.push({ text: "Analyze the above document/image." });
+        // Branching logic for extraction
+        if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+            const extractedText = await extractTextFromDocx(fileBase64);
+            parts.push({ text: `Analyze the following document content:\n\n${extractedText}` });
+        } else if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
+            const extractedText = await extractTextFromPptx(fileBase64);
+            parts.push({ text: `Analyze the following presentation slides:\n\n${extractedText}` });
+        } else {
+            // PDF or Image (Native Support)
+            const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
+            parts.push({
+                inlineData: {
+                    data: cleanBase64,
+                    mimeType: mimeType
+                }
+            });
+            parts.push({ text: "Analyze the above document/image." });
+        }
     } else {
         parts.push({ text: `\n\nMaterial to analyze:\n---\n${content}\n---` });
     }
@@ -104,34 +185,7 @@ Based on the following material, please provide the summary with these exact sec
     if (error.message?.includes('429')) {
         return "Error: Quota exceeded. Please try again later.";
     }
-    // Handle API errors related to file processing
-    if (error.message?.includes('INVALID_ARGUMENT')) {
-        return "Error: The file format or size is not supported by the AI model.";
-    }
-    return "Could not generate summary. Please check your Internet connection.";
-  }
-};
-
-export const describeImage = async (base64Data: string, mimeType: string): Promise<string> => {
-  if (!ai || !apiKey) return "Error: API Key missing.";
-  try {
-    const cleanBase64 = base64Data.replace(/^data:.+;base64,/, '');
-    const prompt = "Analyze this image from a study document. Describe the key information, including any text, diagrams, or main concepts. This will be used as a summary for other students.";
-
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: {
-            parts: [
-                { inlineData: { mimeType, data: cleanBase64 } },
-                { text: prompt }
-            ]
-        }
-    });
-
-    return response.text || "No description generated.";
-  } catch (error) {
-    console.error("Error describing image with Gemini:", error);
-    return "Could not generate a description for the image.";
+    return "Could not generate summary. Please check your Internet connection or file integrity.";
   }
 };
 
@@ -182,24 +236,34 @@ export const generateStudySet = async (
     }
 
     const parts: any[] = [];
-    parts.push({ text: promptText });
-
+    
+    // Handle File Input
     if (fileBase64 && mimeType) {
         if (!isMimeTypeSupported(mimeType)) {
-             // Return empty array if not supported, UI will handle the empty state
              console.warn("Unsupported MIME type for study set generation:", mimeType);
              return []; 
         }
 
-        const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
-        parts.push({
-            inlineData: {
-                data: cleanBase64,
-                mimeType: mimeType
-            }
-        });
+        // Branching logic for extraction
+        if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+            const extractedText = await extractTextFromDocx(fileBase64);
+            parts.push({ text: `${promptText}\n\nMaterial:\n${extractedText}` });
+        } else if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
+            const extractedText = await extractTextFromPptx(fileBase64);
+            parts.push({ text: `${promptText}\n\nMaterial:\n${extractedText}` });
+        } else {
+            // PDF or Image
+            const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
+            parts.push({ text: promptText });
+            parts.push({
+                inlineData: {
+                    data: cleanBase64,
+                    mimeType: mimeType
+                }
+            });
+        }
     } else {
-        parts.push({ text: `\n\nMaterial to analyze:\n---\n${content}\n---` });
+        parts.push({ text: `${promptText}\n\nMaterial:\n---\n${content}\n---` });
     }
     
     const response = await ai.models.generateContent({
@@ -216,5 +280,29 @@ export const generateStudySet = async (
   } catch (error) {
     console.error(`Error generating ${setType} with Gemini:`, error);
     return [];
+  }
+};
+
+// Kept for backward compatibility if needed elsewhere
+export const describeImage = async (base64Data: string, mimeType: string): Promise<string> => {
+  if (!ai || !apiKey) return "Error: API Key missing.";
+  try {
+    const cleanBase64 = base64Data.replace(/^data:.+;base64,/, '');
+    const prompt = "Analyze this image from a study document. Describe the key information, including any text, diagrams, or main concepts.";
+
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: {
+            parts: [
+                { inlineData: { mimeType, data: cleanBase64 } },
+                { text: prompt }
+            ]
+        }
+    });
+
+    return response.text || "No description generated.";
+  } catch (error) {
+    console.error("Error describing image with Gemini:", error);
+    return "Could not generate a description for the image.";
   }
 };

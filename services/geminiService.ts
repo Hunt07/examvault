@@ -64,37 +64,44 @@ const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
     return bytes.buffer;
 };
 
-// Helper: Generic XML Text Extractor (Namespace Agnostic)
-// targetTag is the localName of the tag containing text (e.g., 't' for both docx and pptx)
-const extractTextFromXmlContent = (xmlContent: string, targetTag: string = 't'): string => {
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(xmlContent, "application/xml");
-    const textNodes: string[] = [];
-
-    // XPath is robust but maybe overkill/slow for simple 't' tags. 
-    // Let's use a TreeWalker or simple recursive search for robustness against namespaces.
-    const elements = xmlDoc.getElementsByTagName("*");
-    for (let i = 0; i < elements.length; i++) {
-        const el = elements[i];
-        // Check localName to ignore namespaces (w:t, a:t, etc.)
-        if (el.localName === targetTag) {
-            if (el.textContent) {
-                textNodes.push(el.textContent);
-            }
+// Helper: Regex-based Text Extractor for Office XML
+// Robustly finds text inside <w:t>, <a:t>, or <t> tags.
+const extractTextFromOfficeXML = (xmlContent: string): string => {
+    // Regex explanation:
+    // < : start of tag
+    // [a-zA-Z0-9:]* : optional namespace (e.g., "w:", "a:")
+    // t : tag name must contain 't' (Office text tag)
+    // [^>]* : attributes
+    // > : end of opening tag
+    // (.*?) : capture content (non-greedy)
+    // <\/ : start of closing tag
+    // ... : matching closing tag
+    
+    // Simple approach: Look for <w:t>...</w:t> or <a:t>...</a:t>
+    // We strictly look for tags that END in ":t" or are just "t" to avoid matching other tags like <template>
+    
+    const textRegex = /<(?:w:t|a:t|t)[^>]*>(.*?)<\/(?:w:t|a:t|t)>/g;
+    
+    let extracted = "";
+    let match;
+    
+    while ((match = textRegex.exec(xmlContent)) !== null) {
+        if (match[1]) {
+            extracted += match[1] + " ";
         }
     }
-    return textNodes.join(" ");
+    
+    return extracted;
 };
 
-// Helper: Extract text from DOCX (using JSZip + XML Parsing)
-// Structure: word/document.xml -> w:body -> ... -> w:t
+// Helper: Extract text from DOCX (using JSZip + Regex)
 const extractTextFromDocx = async (fileBase64: string): Promise<string> => {
     try {
         const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
         const arrayBuffer = base64ToArrayBuffer(cleanBase64);
         const zip = await JSZip.loadAsync(arrayBuffer);
         
-        // Main content is usually in word/document.xml
+        // Main content is in word/document.xml
         const documentXml = zip.file("word/document.xml");
         if (!documentXml) {
             console.warn("word/document.xml not found in docx");
@@ -102,7 +109,7 @@ const extractTextFromDocx = async (fileBase64: string): Promise<string> => {
         }
 
         const xmlContent = await documentXml.async("string");
-        const extractedText = extractTextFromXmlContent(xmlContent, 't'); // w:t
+        const extractedText = extractTextFromOfficeXML(xmlContent);
         
         return extractedText.trim();
     } catch (e) {
@@ -111,8 +118,7 @@ const extractTextFromDocx = async (fileBase64: string): Promise<string> => {
     }
 };
 
-// Helper: Extract text from PPTX (using JSZip + XML Parsing)
-// Structure: ppt/slides/slideX.xml -> ... -> a:t
+// Helper: Extract text from PPTX (using JSZip + Regex)
 const extractTextFromPptx = async (fileBase64: string): Promise<string> => {
     try {
         const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
@@ -124,6 +130,7 @@ const extractTextFromPptx = async (fileBase64: string): Promise<string> => {
         
         if (slideFolder) {
             slideFolder.forEach((relativePath, file) => {
+                // Match slide1.xml, slide2.xml, etc.
                 if (relativePath.match(/slide\d+\.xml/)) {
                     slideFiles.push({ path: relativePath, file: file });
                 }
@@ -143,7 +150,7 @@ const extractTextFromPptx = async (fileBase64: string): Promise<string> => {
 
         for (const slide of slideFiles) {
             const xmlContent = await slide.file.async("string");
-            const slideText = extractTextFromXmlContent(xmlContent, 't'); // a:t
+            const slideText = extractTextFromOfficeXML(xmlContent);
             
             if (slideText.trim().length > 0) {
                 // Formatting for the AI to understand slide separation

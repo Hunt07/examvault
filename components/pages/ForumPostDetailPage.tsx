@@ -2,7 +2,7 @@
 import React, { useContext, useState, useMemo, useRef, useEffect } from 'react';
 import type { ForumPost, ForumReply, Attachment } from '../../types';
 import { AppContext } from '../../App';
-import { ArrowLeft, ThumbsUp, ThumbsDown, CheckCircle, MessageCircle, Paperclip, Image as ImageIcon, X, FileText, Download, Trash2 } from 'lucide-react';
+import { ArrowLeft, ThumbsUp, ThumbsDown, CheckCircle, MessageCircle, Paperclip, Image as ImageIcon, X, FileText, Download, Trash2, Eye } from 'lucide-react';
 import MarkdownRenderer from '../MarkdownRenderer';
 import MarkdownToolbar from '../MarkdownToolbar';
 import UserRankBadge from '../UserRankBadge';
@@ -11,7 +11,8 @@ const ReplyComponent: React.FC<{
     reply: ForumReply;
     post: ForumPost;
     children: React.ReactNode;
-}> = ({ reply, post, children }) => {
+    onPreview: (attachment: Attachment) => void;
+}> = ({ reply, post, children, onPreview }) => {
     const { user, userRanks, setView, handleReplyVote, toggleVerifiedAnswer, addReplyToPost, deleteReplyFromPost } = useContext(AppContext);
     const [isReplying, setIsReplying] = useState(false);
     const [replyText, setReplyText] = useState('');
@@ -96,18 +97,33 @@ const ReplyComponent: React.FC<{
                     {reply.attachment && (
                         <div className="mt-3">
                             {reply.attachment.type === 'image' ? (
-                                <img src={reply.attachment.url} alt="Attachment" className="max-h-60 rounded-lg border border-slate-200 dark:border-zinc-700" />
+                                <button onClick={() => onPreview(reply.attachment!)} className="block cursor-zoom-in">
+                                    <img src={reply.attachment.url} alt="Attachment" className="max-h-60 rounded-lg border border-slate-200 dark:border-zinc-700 hover:opacity-90 transition" />
+                                </button>
                             ) : (
-                                <a href={reply.attachment.url} download={reply.attachment.name} className="flex items-center gap-3 p-3 bg-slate-100 dark:bg-zinc-800 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-200 dark:hover:bg-zinc-700 transition w-fit group">
-                                    <div className="p-2 bg-white dark:bg-zinc-900 rounded-md">
-                                        <FileText size={24} className="text-primary-500" />
-                                    </div>
-                                    <div className="flex flex-col">
-                                        <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{reply.attachment.name}</span>
-                                        <span className="text-xs text-slate-500 dark:text-slate-400">{reply.attachment.size || 'File'}</span>
-                                    </div>
-                                    <Download size={16} className="text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 ml-2" />
-                                </a>
+                                <div className="flex items-center gap-2">
+                                    <button 
+                                        onClick={() => onPreview(reply.attachment!)}
+                                        className="flex items-center gap-3 p-3 bg-slate-100 dark:bg-zinc-800 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-200 dark:hover:bg-zinc-700 transition w-fit group text-left"
+                                    >
+                                        <div className="p-2 bg-white dark:bg-zinc-900 rounded-md">
+                                            <FileText size={24} className="text-primary-500" />
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition">{reply.attachment.name}</span>
+                                            <span className="text-xs text-slate-500 dark:text-slate-400">{reply.attachment.size || 'File'}</span>
+                                        </div>
+                                        <Eye size={16} className="text-slate-400 group-hover:text-primary-500 ml-2" />
+                                    </button>
+                                    <a 
+                                        href={reply.attachment.url} 
+                                        download={reply.attachment.name}
+                                        className="p-3 bg-slate-100 dark:bg-zinc-800 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-200 dark:hover:bg-zinc-700 transition text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                                        title="Download"
+                                    >
+                                        <Download size={20} />
+                                    </a>
+                                </div>
                             )}
                         </div>
                     )}
@@ -235,6 +251,7 @@ const ForumPostDetailPage: React.FC<{ post: ForumPost }> = ({ post }) => {
     const [newReplyText, setNewReplyText] = useState('');
     const [newReplyFile, setNewReplyFile] = useState<File | undefined>(undefined);
     const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+    const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null);
     
     const mainReplyTextareaRef = useRef<HTMLTextAreaElement>(null);
     const mainFileInputRef = useRef<HTMLInputElement>(null);
@@ -321,10 +338,42 @@ const ForumPostDetailPage: React.FC<{ post: ForumPost }> = ({ post }) => {
     const renderReplies = (parentId: string | null) => {
         const replies = repliesByParentId[parentId || 'root'] || [];
         return replies.map(reply => (
-            <ReplyComponent key={reply.id} reply={reply} post={post}>
+            <ReplyComponent key={reply.id} reply={reply} post={post} onPreview={setPreviewAttachment}>
                 {renderReplies(reply.id)}
             </ReplyComponent>
         ));
+    };
+
+    const renderPreviewContent = (attachment: Attachment) => {
+        const ext = attachment.name.split('.').pop()?.toLowerCase();
+        const isPdf = ext === 'pdf';
+        const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext || '');
+        const isOfficeDoc = ['ppt', 'pptx', 'doc', 'docx', 'xls', 'xlsx'].includes(ext || '');
+
+        if (isImage) {
+            return <img src={attachment.url} alt="Preview" className="max-w-full max-h-full object-contain" />;
+        }
+        if (isPdf) {
+            return <iframe src={attachment.url} className="w-full h-full border-none" title="PDF Preview"></iframe>;
+        }
+        if (isOfficeDoc) {
+            return (
+                <iframe 
+                    src={`https://docs.google.com/gview?url=${encodeURIComponent(attachment.url)}&embedded=true`} 
+                    className="w-full h-full border-none" 
+                    title="Office Document Preview" 
+                />
+            );
+        }
+        return (
+            <div className="flex flex-col items-center justify-center h-full text-slate-500 dark:text-slate-400">
+                <FileText size={48} className="mb-4 text-slate-400" />
+                <p>Preview not available for this file type.</p>
+                <a href={attachment.url} download={attachment.name} className="mt-4 text-primary-600 dark:text-primary-400 hover:underline flex items-center gap-2">
+                    <Download size={16} /> Download File
+                </a>
+            </div>
+        );
     };
 
     return (
@@ -394,18 +443,33 @@ const ForumPostDetailPage: React.FC<{ post: ForumPost }> = ({ post }) => {
                 {post.attachment && (
                     <div className="mb-6">
                         {post.attachment.type === 'image' ? (
-                            <img src={post.attachment.url} alt="Attachment" className="max-h-96 rounded-lg border border-slate-200 dark:border-zinc-700 shadow-sm" />
+                            <button onClick={() => setPreviewAttachment(post.attachment!)} className="block cursor-zoom-in">
+                                <img src={post.attachment.url} alt="Attachment" className="max-h-96 rounded-lg border border-slate-200 dark:border-zinc-700 shadow-sm hover:opacity-95 transition" />
+                            </button>
                         ) : (
-                            <a href={post.attachment.url} download={post.attachment.name} className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-zinc-800/50 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-800 transition w-fit group">
-                                <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg shadow-sm group-hover:scale-105 transition-transform">
-                                    <FileText size={28} className="text-primary-500" />
-                                </div>
-                                <div className="flex flex-col">
-                                    <span className="font-semibold text-slate-800 dark:text-slate-200 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition">{post.attachment.name}</span>
-                                    <span className="text-xs text-slate-500 dark:text-slate-400">{post.attachment.size || 'File attachment'}</span>
-                                </div>
-                                <Download size={20} className="text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 ml-4" />
-                            </a>
+                            <div className="flex items-center gap-2">
+                                <button 
+                                    onClick={() => setPreviewAttachment(post.attachment!)}
+                                    className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-zinc-800/50 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-800 transition w-fit group text-left"
+                                >
+                                    <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg shadow-sm group-hover:scale-105 transition-transform">
+                                        <FileText size={28} className="text-primary-500" />
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <span className="font-semibold text-slate-800 dark:text-slate-200 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition">{post.attachment.name}</span>
+                                        <span className="text-xs text-slate-500 dark:text-slate-400">{post.attachment.size || 'File attachment'}</span>
+                                    </div>
+                                    <Eye size={20} className="text-slate-400 group-hover:text-primary-500 ml-4" />
+                                </button>
+                                <a 
+                                    href={post.attachment.url} 
+                                    download={post.attachment.name}
+                                    className="p-4 bg-slate-50 dark:bg-zinc-800/50 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-800 transition text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                                    title="Download"
+                                >
+                                    <Download size={24} />
+                                </a>
+                            </div>
                         )}
                     </div>
                 )}
@@ -504,8 +568,42 @@ const ForumPostDetailPage: React.FC<{ post: ForumPost }> = ({ post }) => {
                 <div>
                     {renderReplies(null)}
                 </div>
-
             </div>
+
+            {/* Preview Modal */}
+            {previewAttachment && (
+                <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="bg-white dark:bg-dark-surface rounded-xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col relative animate-in zoom-in-95 duration-200 border border-transparent dark:border-zinc-700">
+                        <div className="p-4 border-b dark:border-zinc-700 flex justify-between items-center bg-slate-50 dark:bg-zinc-800/50 rounded-t-xl">
+                            <div className="flex items-center gap-3 overflow-hidden">
+                                <div className="p-2 rounded-lg bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400">
+                                    <FileText size={20} />
+                                </div>
+                                <div className="overflow-hidden">
+                                    <h3 className="font-bold text-slate-800 dark:text-white truncate text-lg leading-tight">{previewAttachment.name}</h3>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{previewAttachment.size || 'File'}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                                <a 
+                                    href={previewAttachment.url} 
+                                    download={previewAttachment.name}
+                                    className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-600 dark:text-slate-300 transition"
+                                    title="Download"
+                                >
+                                    <Download size={20} />
+                                </a>
+                                <button onClick={() => setPreviewAttachment(null)} className="p-2 rounded-full hover:bg-red-100 dark:hover:bg-red-900/20 text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 transition">
+                                    <X size={24} />
+                                </button>
+                            </div>
+                        </div>
+                        <div className="flex-grow bg-slate-200 dark:bg-zinc-900 overflow-hidden flex items-center justify-center rounded-b-xl relative">
+                            {renderPreviewContent(previewAttachment)}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

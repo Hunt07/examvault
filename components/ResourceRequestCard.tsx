@@ -1,10 +1,10 @@
 
 import React, { useContext, useState } from 'react';
-import type { ResourceRequest } from '../types';
+import type { ResourceRequest, Attachment } from '../types';
 import { ResourceRequestStatus } from '../types';
 import { AppContext } from '../App';
 import UserRankBadge from './UserRankBadge';
-import { CheckCircle, Clock, Trash2, Paperclip, Download } from 'lucide-react';
+import { CheckCircle, Clock, Trash2, Paperclip, Download, Eye, X, FileText } from 'lucide-react';
 
 interface ResourceRequestCardProps {
   request: ResourceRequest;
@@ -13,6 +13,7 @@ interface ResourceRequestCardProps {
 const ResourceRequestCard: React.FC<ResourceRequestCardProps> = ({ request }) => {
     const { user, userRanks, setView, openUploadForRequest, deleteResourceRequest } = useContext(AppContext);
     const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+    const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null);
 
     const requesterRank = userRanks.get(request.requester.id);
     const isOwnRequest = user?.id === request.requester.id;
@@ -27,6 +28,38 @@ const ResourceRequestCard: React.FC<ResourceRequestCardProps> = ({ request }) =>
 
     const handleDelete = () => {
         deleteResourceRequest(request.id);
+    };
+
+    const renderPreviewContent = (attachment: Attachment) => {
+        const ext = attachment.name.split('.').pop()?.toLowerCase();
+        const isPdf = ext === 'pdf';
+        const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext || '');
+        const isOfficeDoc = ['ppt', 'pptx', 'doc', 'docx', 'xls', 'xlsx'].includes(ext || '');
+
+        if (isImage) {
+            return <img src={attachment.url} alt="Preview" className="max-w-full max-h-full object-contain" />;
+        }
+        if (isPdf) {
+            return <iframe src={attachment.url} className="w-full h-full border-none" title="PDF Preview"></iframe>;
+        }
+        if (isOfficeDoc) {
+            return (
+                <iframe 
+                    src={`https://docs.google.com/gview?url=${encodeURIComponent(attachment.url)}&embedded=true`} 
+                    className="w-full h-full border-none" 
+                    title="Office Document Preview" 
+                />
+            );
+        }
+        return (
+            <div className="flex flex-col items-center justify-center h-full text-slate-500 dark:text-slate-400">
+                <FileText size={48} className="mb-4 text-slate-400" />
+                <p>Preview not available for this file type.</p>
+                <a href={attachment.url} download={attachment.name} className="mt-4 text-primary-600 dark:text-primary-400 hover:underline flex items-center gap-2">
+                    <Download size={16} /> Download File
+                </a>
+            </div>
+        );
     };
     
     return (
@@ -75,17 +108,22 @@ const ResourceRequestCard: React.FC<ResourceRequestCardProps> = ({ request }) =>
             
             {/* Attachment Section */}
             {request.attachment && (
-                <div className="mt-3">
-                    <a 
-                        href={request.attachment.url} 
-                        download={request.attachment.name}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-3 py-2 bg-slate-100 dark:bg-zinc-800 rounded-lg text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-zinc-700 transition border border-slate-200 dark:border-zinc-700 group"
+                <div className="mt-3 flex items-center gap-2">
+                    <button 
+                        onClick={() => setPreviewAttachment(request.attachment!)}
+                        className="inline-flex items-center gap-2 px-3 py-2 bg-slate-100 dark:bg-zinc-800 rounded-lg text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-zinc-700 transition border border-slate-200 dark:border-zinc-700 group max-w-full"
                     >
                         <Paperclip size={14} className="text-slate-500 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors" />
                         <span className="font-medium truncate max-w-[200px]">{request.attachment.name}</span>
-                        <Download size={14} className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity text-slate-500" />
+                        <Eye size={14} className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity text-slate-500 group-hover:text-primary-600" />
+                    </button>
+                    <a 
+                        href={request.attachment.url} 
+                        download={request.attachment.name}
+                        className="p-2 bg-slate-100 dark:bg-zinc-800 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-200 dark:hover:bg-zinc-700 transition text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                        title="Download"
+                    >
+                        <Download size={16} />
                     </a>
                 </div>
             )}
@@ -139,6 +177,41 @@ const ResourceRequestCard: React.FC<ResourceRequestCardProps> = ({ request }) =>
                     </div>
                 )}
             </div>
+
+            {/* Preview Modal */}
+            {previewAttachment && (
+                <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200 cursor-default" onClick={(e) => e.stopPropagation()}>
+                    <div className="bg-white dark:bg-dark-surface rounded-xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col relative animate-in zoom-in-95 duration-200 border border-transparent dark:border-zinc-700">
+                        <div className="p-4 border-b dark:border-zinc-700 flex justify-between items-center bg-slate-50 dark:bg-zinc-800/50 rounded-t-xl">
+                            <div className="flex items-center gap-3 overflow-hidden">
+                                <div className="p-2 rounded-lg bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400">
+                                    <FileText size={20} />
+                                </div>
+                                <div className="overflow-hidden">
+                                    <h3 className="font-bold text-slate-800 dark:text-white truncate text-lg leading-tight">{previewAttachment.name}</h3>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{previewAttachment.size || 'File'}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                                <a 
+                                    href={previewAttachment.url} 
+                                    download={previewAttachment.name}
+                                    className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-600 dark:text-slate-300 transition"
+                                    title="Download"
+                                >
+                                    <Download size={20} />
+                                </a>
+                                <button onClick={() => setPreviewAttachment(null)} className="p-2 rounded-full hover:bg-red-100 dark:hover:bg-red-900/20 text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 transition">
+                                    <X size={24} />
+                                </button>
+                            </div>
+                        </div>
+                        <div className="flex-grow bg-slate-200 dark:bg-zinc-900 overflow-hidden flex items-center justify-center rounded-b-xl relative">
+                            {renderPreviewContent(previewAttachment)}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

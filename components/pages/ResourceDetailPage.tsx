@@ -346,8 +346,12 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
         return;
     }
 
-    // Only include metadata if we actually have a file or it's a mock
-    const textContext = getMetadataContext();
+    let textContext = getMetadataContext();
+    
+    // Fallback for Mock Data: Append text content if file is missing (simulated)
+    if (!base64 && resource.fileUrl === '#') {
+        textContext += `\n\n[Mock Content]:\n${resource.contentForAI}`;
+    }
 
     const result = await summarizeContent(textContext, base64, resource.mimeType);
     setSummary(result);
@@ -366,7 +370,10 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
         return;
     }
 
-    const textContext = getMetadataContext();
+    let textContext = getMetadataContext();
+    if (!base64 && resource.fileUrl === '#') {
+        textContext += `\n\n[Mock Content]:\n${resource.contentForAI}`;
+    }
 
     const result = await summarizeContent(textContext, base64, resource.mimeType);
     setAiGeneratedPreview(result);
@@ -387,7 +394,10 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
         return;
     }
 
-    const textContext = getMetadataContext();
+    let textContext = getMetadataContext();
+    if (!base64 && resource.fileUrl === '#') {
+        textContext += `\n\n[Mock Content]:\n${resource.contentForAI}`;
+    }
     
     const result = await generateStudySet(textContext, type, base64, resource.mimeType);
     setStudySet(result);

@@ -46,50 +46,30 @@ const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
     return bytes.buffer;
 };
 
-// Generic XML Text Extractor (Namespace Agnostic, Tree Traversal & Regex Fallback)
+// "Nuclear" Regex Extraction: Finds text inside any tag ending in 't' (like <w:t>, <a:t>, <t>)
+// This ignores XML namespaces and attributes, ensuring we catch all text content.
 const extractTextFromXmlContent = (xmlContent: string): string => {
-    let extractedText = "";
+    // Regex explanation:
+    // < : start of tag
+    // (?:[\w:]+)? : optional namespace prefix (e.g. "w:", "a:", or nothing)
+    // t : tag name ends in 't' (standard for text in Office XML)
+    // [^>]* : any attributes
+    // > : end of opening tag
+    // (.*?) : capture the text content (non-greedy)
+    // <\/ : start of closing tag
+    const regex = /<(?:\w+:)?t[^>]*>(.*?)<\/(?:\w+:)?t>/g;
     
-    // Strategy 1: DOM Parser (Best for structure)
-    try {
-        const parser = new DOMParser();
-        const xmlDoc = parser.parseFromString(xmlContent, "text/xml");
-        const textParts: string[] = [];
-
-        // Get all elements
-        const elements = xmlDoc.getElementsByTagName("*");
-        
-        for (let i = 0; i < elements.length; i++) {
-            const el = elements[i];
-            // 't' = text in Word/PPT, 'v' = value in Excel
-            if (el.localName === 't' || el.localName === 'v') {
-                if (el.textContent) {
-                    textParts.push(el.textContent);
-                }
-            }
+    let match;
+    let extracted = "";
+    
+    // Iterate through all matches
+    while ((match = regex.exec(xmlContent)) !== null) {
+        if (match[1]) {
+            extracted += match[1] + " ";
         }
-        extractedText = textParts.join(" ");
-    } catch (e) {
-        console.warn("DOM XML Parsing error", e);
     }
-
-    // Strategy 2: Nuclear Regex (Fallback if DOM failed or returned almost nothing)
-    // Matches content between > and < tags for things that look like text nodes (t or v)
-    if (extractedText.length < 10) {
-       // Look for <*:t>...</*:t> or just <t>...</t> ignoring attributes
-       // Regex: < (optional namespace :) t (attributes) > (capture) < / (optional namespace :) t >
-       const regex = /<(?:\w+:)?t[^>]*>(.*?)<\/(?:\w+:)?t>/g;
-       let match;
-       const parts = [];
-       while ((match = regex.exec(xmlContent)) !== null) {
-           parts.push(match[1]);
-       }
-       if (parts.length > 0) {
-           extractedText = parts.join(" ");
-       }
-    }
-
-    return extractedText;
+    
+    return extracted;
 };
 
 const extractTextFromDocx = async (fileBase64: string): Promise<string> => {
@@ -98,6 +78,7 @@ const extractTextFromDocx = async (fileBase64: string): Promise<string> => {
         const arrayBuffer = base64ToArrayBuffer(cleanBase64);
         const zip = await JSZip.loadAsync(arrayBuffer);
         
+        // Try main document
         const documentXml = zip.file("word/document.xml");
         if (documentXml) {
             const xmlContent = await documentXml.async("string");
@@ -127,7 +108,8 @@ const extractTextFromPptx = async (fileBase64: string): Promise<string> => {
                     slideFiles.push({ path: relativePath, file: file });
                 }
             });
-            // Sort naturally: slide1, slide2, slide10
+            
+            // Sort naturally (1, 2, 10 instead of 1, 10, 2)
             slideFiles.sort((a, b) => {
                 const numA = parseInt(a.path.match(/\d+/)?.[0] || "0");
                 const numB = parseInt(b.path.match(/\d+/)?.[0] || "0");
@@ -143,7 +125,7 @@ const extractTextFromPptx = async (fileBase64: string): Promise<string> => {
             }
         }
 
-        // 2. Extract Notes (Speaker Notes) - vital for context
+        // 2. Extract Speaker Notes (often contain the script)
         const notesFolder = zip.folder("ppt/notesSlides");
         if (notesFolder) {
             let notesText = "";
@@ -169,7 +151,7 @@ const extractTextFromPptx = async (fileBase64: string): Promise<string> => {
 };
 
 export const summarizeContent = async (
-  content: string, 
+  content: string, // This is the metadata (Title, Course, etc.)
   fileBase64?: string, 
   mimeType?: string
 ): Promise<string> => {
@@ -197,17 +179,20 @@ Based on the following material, please provide the summary with these exact sec
         if (isWord) {
             const text = await extractTextFromDocx(fileBase64);
             if (!text || text.length < 50) {
-                return "⚠️ **Insufficient Text Content**\n\nWe couldn't extract enough text from this Word document. It might be empty or contain only non-text elements.\n\n**Tip:** Try converting it to PDF.";
+                return "⚠️ **Insufficient Text Content**\n\nWe couldn't extract enough text from this Word document. It might be empty or contain only images.\n\n**Tip:** Convert to PDF for better results.";
             }
-            parts.push({ text: `Analyze this document content:\n\n${text}` });
+            // Combine Metadata + Extracted Text
+            parts.push({ text: `Document Metadata:\n${content}\n\nDocument Content:\n${text}` });
         } else if (isPowerPoint) {
             const text = await extractTextFromPptx(fileBase64);
             if (!text || text.length < 50) {
-                return "⚠️ **Insufficient Text Content**\n\nWe couldn't extract text from this presentation. It likely contains scanned images of slides rather than editable text.\n\n**Tip:** Convert the PPT to PDF and upload the PDF.";
+                return "⚠️ **Insufficient Text Content**\n\nWe couldn't extract text from this presentation. It likely contains images of text (scanned slides). \n\n**Tip:** Convert to PDF and upload the PDF.";
             }
-            parts.push({ text: `Analyze these presentation slides:\n\n${text}` });
+            // Combine Metadata + Extracted Text
+            parts.push({ text: `Presentation Metadata:\n${content}\n\nPresentation Slides & Notes:\n${text}` });
         } else if (isPDF || isImage) {
-            // Native support
+            // Native support - Add metadata as text, file as inlineData
+            parts.push({ text: `Analyze the following document/image. Metadata: ${content}` });
             const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
             parts.push({
                 inlineData: {
@@ -215,11 +200,11 @@ Based on the following material, please provide the summary with these exact sec
                     mimeType: mimeType
                 }
             });
-            parts.push({ text: "Analyze the document/image above." });
         } else {
-            return `⚠️ **Format Not Supported**\n\nAI Summarization supports PDF, Images, Word (.docx), and PowerPoint (.pptx). \n\nDetected Type: ${mimeType}`;
+            return `⚠️ **Format Not Supported**\n\nAI Summarization supports PDF, Images, Word (.docx), and PowerPoint (.pptx).`;
         }
     } else {
+        // No file, just text content (Metadata or Mock content)
         parts.push({ text: `\n\nMaterial to analyze:\n---\n${content}\n---` });
     }
 
@@ -250,7 +235,7 @@ export const generateStudySet = async (
     let schema;
 
     if (setType === 'flashcards') {
-      promptText = `Generate 5-10 flashcards from the material.`;
+      promptText = `Generate 5-10 flashcards based on the material.`;
       schema = {
         type: Type.ARRAY,
         items: {
@@ -263,7 +248,7 @@ export const generateStudySet = async (
         },
       };
     } else {
-      promptText = `Generate 5 multiple-choice questions from the material.`;
+      promptText = `Generate 5 multiple-choice questions based on the material.`;
       schema = {
         type: Type.ARRAY,
         items: {
@@ -289,14 +274,14 @@ export const generateStudySet = async (
         if (isWord) {
             const text = await extractTextFromDocx(fileBase64);
             if (!text || text.length < 50) return []; 
-            parts.push({ text: `${promptText}\n\nMaterial:\n${text}` });
+            parts.push({ text: `${promptText}\n\nMetadata: ${content}\n\nContent:\n${text}` });
         } else if (isPowerPoint) {
             const text = await extractTextFromPptx(fileBase64);
             if (!text || text.length < 50) return [];
-            parts.push({ text: `${promptText}\n\nMaterial:\n${text}` });
+            parts.push({ text: `${promptText}\n\nMetadata: ${content}\n\nContent:\n${text}` });
         } else if (isPDF || isImage) {
             const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
-            parts.push({ text: promptText });
+            parts.push({ text: `${promptText}\n\nMetadata: ${content}` });
             parts.push({
                 inlineData: {
                     data: cleanBase64,
@@ -314,7 +299,7 @@ export const generateStudySet = async (
         model: 'gemini-2.5-flash',
         config: {
             responseMimeType: "application/json",
-            responseSchema: schema  
+            responseSchema: schema
         },
         contents: { parts }
     });

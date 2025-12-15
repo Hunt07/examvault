@@ -1,8 +1,6 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 // @ts-ignore
-import mammoth from "mammoth";
-// @ts-ignore
 import JSZip from "jszip";
 
 // Robustly retrieve API Key
@@ -66,21 +64,55 @@ const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
     return bytes.buffer;
 };
 
-// Helper: Extract text from DOCX
+// Helper: Generic XML Text Extractor (Namespace Agnostic)
+// targetTag is the localName of the tag containing text (e.g., 't' for both docx and pptx)
+const extractTextFromXmlContent = (xmlContent: string, targetTag: string = 't'): string => {
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(xmlContent, "application/xml");
+    const textNodes: string[] = [];
+
+    // XPath is robust but maybe overkill/slow for simple 't' tags. 
+    // Let's use a TreeWalker or simple recursive search for robustness against namespaces.
+    const elements = xmlDoc.getElementsByTagName("*");
+    for (let i = 0; i < elements.length; i++) {
+        const el = elements[i];
+        // Check localName to ignore namespaces (w:t, a:t, etc.)
+        if (el.localName === targetTag) {
+            if (el.textContent) {
+                textNodes.push(el.textContent);
+            }
+        }
+    }
+    return textNodes.join(" ");
+};
+
+// Helper: Extract text from DOCX (using JSZip + XML Parsing)
+// Structure: word/document.xml -> w:body -> ... -> w:t
 const extractTextFromDocx = async (fileBase64: string): Promise<string> => {
     try {
         const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
         const arrayBuffer = base64ToArrayBuffer(cleanBase64);
-        const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
-        return result.value || "";
+        const zip = await JSZip.loadAsync(arrayBuffer);
+        
+        // Main content is usually in word/document.xml
+        const documentXml = zip.file("word/document.xml");
+        if (!documentXml) {
+            console.warn("word/document.xml not found in docx");
+            return "";
+        }
+
+        const xmlContent = await documentXml.async("string");
+        const extractedText = extractTextFromXmlContent(xmlContent, 't'); // w:t
+        
+        return extractedText.trim();
     } catch (e) {
         console.error("DOCX Extraction failed", e);
-        // Don't throw, return empty string so main logic can handle "insufficient content"
         return "";
     }
 };
 
-// Helper: Extract text from PPTX
+// Helper: Extract text from PPTX (using JSZip + XML Parsing)
+// Structure: ppt/slides/slideX.xml -> ... -> a:t
 const extractTextFromPptx = async (fileBase64: string): Promise<string> => {
     try {
         const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
@@ -108,35 +140,18 @@ const extractTextFromPptx = async (fileBase64: string): Promise<string> => {
         });
 
         let extractedText = "";
-        const parser = new DOMParser();
 
         for (const slide of slideFiles) {
             const xmlContent = await slide.file.async("string");
-            const xmlDoc = parser.parseFromString(xmlContent, "application/xml");
+            const slideText = extractTextFromXmlContent(xmlContent, 't'); // a:t
             
-            // Try to find text within <a:t> (drawingml text) or <t>
-            // Note: getElementsByTagName is case-insensitive for HTML but case-sensitive for XML in some browsers?
-            // In standard DOMParser XML mode, it is case sensitive.
-            // PowerPoint OpenXML usually uses 'a:t'
-            
-            let textNodes = Array.from(xmlDoc.getElementsByTagName("a:t"));
-            if (textNodes.length === 0) {
-                // Fallback attempt
-                textNodes = Array.from(xmlDoc.getElementsByTagName("t"));
-            }
-
-            const slideText = textNodes
-                .map(node => node.textContent)
-                .join(" ")
-                .replace(/\s+/g, ' ') // normalize whitespace
-                .trim();
-            
-            if (slideText.length > 0) {
+            if (slideText.trim().length > 0) {
+                // Formatting for the AI to understand slide separation
                 extractedText += `[Slide ${slide.path.match(/\d+/)?.[0]}]: ${slideText}\n\n`;
             }
         }
         
-        return extractedText;
+        return extractedText.trim();
     } catch (e) {
         console.error("PPTX Extraction failed", e);
         return "";
@@ -174,13 +189,13 @@ Based on the following material, please provide the summary with these exact sec
         // Branching logic for extraction
         if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
             const extractedText = await extractTextFromDocx(fileBase64);
-            if (!extractedText || extractedText.trim().length < 50) {
+            if (!extractedText || extractedText.length < 50) {
                 return "⚠️ **Insufficient Content**\n\nWe couldn't extract enough text from this Word document to generate a summary. It might contain mostly images, equations, or be empty. Try converting it to PDF first.";
             }
             parts.push({ text: `Analyze the following document content:\n\n${extractedText}` });
         } else if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
             const extractedText = await extractTextFromPptx(fileBase64);
-            if (!extractedText || extractedText.trim().length < 50) {
+            if (!extractedText || extractedText.length < 50) {
                 return "⚠️ **Insufficient Content**\n\nWe couldn't extract enough text from this PowerPoint presentation. It likely contains images of text (scanned slides) rather than selectable text. \n\n**Tip:** Convert the PPT to PDF and upload the PDF for better results.";
             }
             parts.push({ text: `Analyze the following presentation slides:\n\n${extractedText}` });
@@ -278,11 +293,11 @@ export const generateStudySet = async (
         // Branching logic for extraction
         if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
             const extractedText = await extractTextFromDocx(fileBase64);
-            if (!extractedText || extractedText.trim().length < 50) return []; // Fail silently or handle in UI
+            if (!extractedText || extractedText.length < 50) return []; // Fail silently or handle in UI
             parts.push({ text: `${promptText}\n\nMaterial:\n${extractedText}` });
         } else if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
             const extractedText = await extractTextFromPptx(fileBase64);
-            if (!extractedText || extractedText.trim().length < 50) return []; // Fail silently or handle in UI
+            if (!extractedText || extractedText.length < 50) return []; // Fail silently or handle in UI
             parts.push({ text: `${promptText}\n\nMaterial:\n${extractedText}` });
         } else {
             // PDF or Image

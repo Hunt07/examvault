@@ -590,7 +590,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
 
   return (
     <div>
-      <button onClick={goBack} className="flex items-center gap-2 text-primary-600 dark:text-primary-400 font-semibold hover:text-primary-800 dark:hover:text-primary-300 transition mb-6">
+      <button onClick={() => setView('dashboard')} className="flex items-center gap-2 text-primary-600 dark:text-primary-400 font-semibold hover:text-primary-800 dark:hover:text-primary-300 transition mb-6">
         <ArrowLeft size={20} />
         Back to all resources
       </button>

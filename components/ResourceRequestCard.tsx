@@ -4,7 +4,7 @@ import type { ResourceRequest } from '../types';
 import { ResourceRequestStatus } from '../types';
 import { AppContext } from '../App';
 import UserRankBadge from './UserRankBadge';
-import { CheckCircle, Clock, Trash2 } from 'lucide-react';
+import { CheckCircle, Clock, Trash2, Paperclip, Download } from 'lucide-react';
 
 interface ResourceRequestCardProps {
   request: ResourceRequest;
@@ -72,6 +72,23 @@ const ResourceRequestCard: React.FC<ResourceRequestCardProps> = ({ request }) =>
             )}
 
             <p title={request.details} className="text-slate-600 dark:text-slate-200 mt-2">{request.details}</p>
+            
+            {/* Attachment Section */}
+            {request.attachment && (
+                <div className="mt-3">
+                    <a 
+                        href={request.attachment.url} 
+                        download={request.attachment.name}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-3 py-2 bg-slate-100 dark:bg-zinc-800 rounded-lg text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-zinc-700 transition border border-slate-200 dark:border-zinc-700 group"
+                    >
+                        <Paperclip size={14} className="text-slate-500 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors" />
+                        <span className="font-medium truncate max-w-[200px]">{request.attachment.name}</span>
+                        <Download size={14} className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity text-slate-500" />
+                    </a>
+                </div>
+            )}
             
             {isDeleteConfirmOpen && (
                 <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-100 dark:border-red-900 flex flex-col sm:flex-row items-center justify-between gap-4">

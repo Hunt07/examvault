@@ -390,6 +390,26 @@ const ForumPostDetailPage: React.FC<{ post: ForumPost }> = ({ post }) => {
                     <MarkdownRenderer content={post.body} />
                 </div>
 
+                {/* Post Attachment */}
+                {post.attachment && (
+                    <div className="mb-6">
+                        {post.attachment.type === 'image' ? (
+                            <img src={post.attachment.url} alt="Attachment" className="max-h-96 rounded-lg border border-slate-200 dark:border-zinc-700 shadow-sm" />
+                        ) : (
+                            <a href={post.attachment.url} download={post.attachment.name} className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-zinc-800/50 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-800 transition w-fit group">
+                                <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg shadow-sm group-hover:scale-105 transition-transform">
+                                    <FileText size={28} className="text-primary-500" />
+                                </div>
+                                <div className="flex flex-col">
+                                    <span className="font-semibold text-slate-800 dark:text-slate-200 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition">{post.attachment.name}</span>
+                                    <span className="text-xs text-slate-500 dark:text-slate-400">{post.attachment.size || 'File attachment'}</span>
+                                </div>
+                                <Download size={20} className="text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 ml-4" />
+                            </a>
+                        )}
+                    </div>
+                )}
+
                 <div className="pt-6 border-t border-slate-200 dark:border-zinc-700 flex items-center gap-4">
                      <button
                         onClick={handleUpvote}

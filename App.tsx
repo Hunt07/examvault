@@ -50,14 +50,14 @@ interface AppContextType {
   addCommentToResource: (resourceId: string, text: string, parentId: string | null) => void;
   handleCommentVote: (resourceId: string, commentId: string) => void;
   deleteCommentFromResource: (resourceId: string, comment: Comment) => Promise<void>;
-  addForumPost: (post: { title: string; courseCode: string; body: string; tags: string[] }) => void;
+  addForumPost: (post: { title: string; courseCode: string; body: string; tags: string[] }, file?: File) => void;
   handlePostVote: (postId: string, action: 'up' | 'down') => void;
   deleteForumPost: (postId: string) => Promise<void>;
   addReplyToPost: (postId: string, text: string, parentId: string | null, file?: File) => void;
   handleReplyVote: (postId: string, replyId: string) => void;
   deleteReplyFromPost: (postId: string, reply: ForumReply) => Promise<void>;
   toggleVerifiedAnswer: (postId: string, replyId: string) => void;
-  addResourceRequest: (req: { title: string; courseCode: string; details: string }) => void;
+  addResourceRequest: (req: { title: string; courseCode: string; details: string }, file?: File) => void;
   deleteResourceRequest: (requestId: string) => Promise<void>;
   openUploadForRequest: (requestId: string) => void;
   toggleUserSubscription: (userId: string) => void;
@@ -86,12 +86,11 @@ interface AppContextType {
 
 export const AppContext = React.createContext<AppContextType>({} as AppContextType);
 
-// Helper to remove undefined values which Firestore hates
+// ... (Rest of the helper functions remain the same) ...
 const sanitizeForFirestore = (obj: any): any => {
   return JSON.parse(JSON.stringify(obj));
 };
 
-// Generate a default SVG avatar with the user's first initial
 const generateDefaultAvatar = (name: string): string => {
   const initial = name && name.length > 0 ? name.charAt(0).toUpperCase() : '?';
   const colors = ['#2563eb', '#db2777', '#ca8a04', '#16a34a', '#dc2626', '#7c3aed', '#0891b2', '#be123c'];
@@ -110,7 +109,6 @@ const generateDefaultAvatar = (name: string): string => {
   return `data:image/svg+xml;base64,${btoa(svgString)}`;
 };
 
-// Extracted Helper for Deep Profile Propagation
 const propagateUserUpdates = async (userId: string, updateData: any) => {
     // 1. Propagate to Resources (Author field)
     const resQuery = query(collection(db!, "resources"), where("author.id", "==", userId));
@@ -186,6 +184,7 @@ const propagateUserUpdates = async (userId: string, updateData: any) => {
 };
 
 const App: React.FC = () => {
+  // ... (State declarations remain the same) ...
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [areResourcesLoading, setAreResourcesLoading] = useState(true);
@@ -223,6 +222,7 @@ const App: React.FC = () => {
   const [runTour, setRunTour] = useState(false);
   const [tourStep, setTourStep] = useState(0);
 
+  // ... (Effects for Auth and Data Loading remain the same) ...
   useEffect(() => {
     if (!auth || !db) {
         setIsLoading(false);
@@ -318,6 +318,7 @@ const App: React.FC = () => {
     setAreResourcesLoading(true);
 
     const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
+      // ... (Existing User snapshot logic) ...
       const fetchedUsers: User[] = [];
       const batch = writeBatch(db!);
       let needsCommit = false;
@@ -407,6 +408,7 @@ const App: React.FC = () => {
     };
   }, [user?.id]);
 
+  // ... (sendNotification and message useEffects remain the same) ...
   const sendNotification = async (recipientId: string, senderId: string, type: NotificationType, message: string, linkIds?: { resourceId?: string, forumPostId?: string, conversationId?: string, commentId?: string, replyId?: string, requestId?: string }) => {
       if (recipientId === user?.id || !db) return;
 
@@ -454,6 +456,7 @@ const App: React.FC = () => {
       }
   }, [directMessages, user]);
 
+  // ... (Tour logic remains the same) ...
   useEffect(() => {
     if (user && !isLoading) {
       const hasSeenTour = localStorage.getItem(`examvault_tour_${user.id}`);
@@ -485,6 +488,7 @@ const App: React.FC = () => {
     { selector: 'body', content: "You're all set! Happy Studying!" },
   ];
 
+  // ... (Theme logic remains the same) ...
   useEffect(() => {
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
@@ -495,6 +499,7 @@ const App: React.FC = () => {
     }
   }, [isDarkMode]);
 
+  // ... (Navigation, Login, Logout, Vote, Comment logic remains the same) ...
   const setView = (newView: View, id?: string, options?: { replace?: boolean }) => {
     if (!options?.replace) {
         setViewHistory(prev => [...prev, { view: newView, id }]);
@@ -568,6 +573,7 @@ const App: React.FC = () => {
   };
 
   const handleUpload = async (resourceData: any, file: File, coverImage: File | null) => {
+      // ... (Existing implementation) ...
       if (!user || !db || !storage) {
           showToast("Upload service not initialized.", "error");
           return;
@@ -688,6 +694,7 @@ const App: React.FC = () => {
   };
 
   const deleteResource = async (resourceId: string, fileUrl: string, previewUrl?: string) => {
+      // ... (Existing implementation) ...
       if (!user || !db) return;
       
       setViewState('dashboard');
@@ -738,6 +745,7 @@ const App: React.FC = () => {
   };
 
   const handleVote = async (resourceId: string, action: 'up' | 'down') => {
+    // ... (Existing implementation) ...
     if (!user || !db) return;
     const resource = resources.find(r => r.id === resourceId);
     if (!resource) return;
@@ -787,6 +795,7 @@ const App: React.FC = () => {
   };
 
   const addCommentToResource = async (resourceId: string, text: string, parentId: string | null) => {
+    // ... (Existing implementation) ...
     if (!user || !db) return;
     try {
         const commentId = `c-${Date.now()}`;
@@ -836,6 +845,7 @@ const App: React.FC = () => {
   };
 
   const deleteCommentFromResource = async (resourceId: string, comment: Comment) => {
+      // ... (Existing implementation) ...
       if (!db) return;
       try {
           const resRef = doc(db, "resources", resourceId);
@@ -848,6 +858,7 @@ const App: React.FC = () => {
   };
 
   const handleCommentVote = async (resourceId: string, commentId: string) => {
+     // ... (Existing implementation) ...
      if (!user || !db) return;
      const resRef = doc(db, "resources", resourceId);
      const snap = await getDoc(resRef);
@@ -879,7 +890,7 @@ const App: React.FC = () => {
      }
   };
 
-  const addForumPost = async (postData: { title: string; courseCode: string; body: string; tags: string[] }) => {
+  const addForumPost = async (postData: { title: string; courseCode: string; body: string; tags: string[] }, file?: File) => {
       if (!user || !db) return;
       try {
           const newPost: Omit<ForumPost, 'id'> = {
@@ -892,6 +903,19 @@ const App: React.FC = () => {
               downvotedBy: [],
               replies: []
           };
+
+          if (file && storage) {
+              const storageRef = ref(storage, `forum_attachments/${Date.now()}_${file.name}`);
+              await uploadBytes(storageRef, file);
+              const url = await getDownloadURL(storageRef);
+              newPost.attachment = {
+                  type: file.type.startsWith('image/') ? 'image' : 'file',
+                  url: url,
+                  name: file.name,
+                  size: (file.size / 1024).toFixed(0) + ' KB'
+              };
+          }
+
           const docRef = await addDoc(collection(db, "forumPosts"), sanitizeForFirestore(newPost));
           earnPoints(10, "Discussion posted successfully!");
 
@@ -919,6 +943,7 @@ const App: React.FC = () => {
   };
 
   const deleteForumPost = async (postId: string) => {
+      // ... (Existing implementation) ...
       if (!db) return;
       setViewState('discussions');
       setSelectedId(undefined);
@@ -932,6 +957,7 @@ const App: React.FC = () => {
   };
 
   const handlePostVote = async (postId: string, action: 'up' | 'down') => {
+      // ... (Existing implementation) ...
       if (!user || !db) return;
       const postRef = doc(db, "forumPosts", postId);
       const post = forumPosts.find(p => p.id === postId);
@@ -971,6 +997,7 @@ const App: React.FC = () => {
   };
 
   const addReplyToPost = async (postId: string, text: string, parentId: string | null, file?: File) => {
+      // ... (Existing implementation) ...
       if (!user || !db) return;
       
       try {
@@ -1034,6 +1061,7 @@ const App: React.FC = () => {
   };
 
   const deleteReplyFromPost = async (postId: string, reply: ForumReply) => {
+      // ... (Existing implementation) ...
       if (!db) return;
       try {
           const postRef = doc(db, "forumPosts", postId);
@@ -1046,6 +1074,7 @@ const App: React.FC = () => {
   };
 
   const handleReplyVote = async (postId: string, replyId: string) => {
+      // ... (Existing implementation) ...
       if (!user || !db) return;
       const postRef = doc(db, "forumPosts", postId);
       const snap = await getDoc(postRef);
@@ -1078,6 +1107,7 @@ const App: React.FC = () => {
   };
 
   const toggleVerifiedAnswer = async (postId: string, replyId: string) => {
+      // ... (Existing implementation) ...
       if (!db) return;
       const postRef = doc(db, "forumPosts", postId);
       const snap = await getDoc(postRef);
@@ -1095,7 +1125,7 @@ const App: React.FC = () => {
       }
   };
 
-  const addResourceRequest = async (reqData: { title: string; courseCode: string; details: string }) => {
+  const addResourceRequest = async (reqData: { title: string; courseCode: string; details: string }, file?: File) => {
       if (!user || !db) return;
       try {
           const newReq: Omit<ResourceRequest, 'id'> = {
@@ -1104,6 +1134,19 @@ const App: React.FC = () => {
               status: ResourceRequestStatus.Open,
               ...reqData
           };
+
+          if (file && storage) {
+              const storageRef = ref(storage, `request_attachments/${Date.now()}_${file.name}`);
+              await uploadBytes(storageRef, file);
+              const url = await getDownloadURL(storageRef);
+              newReq.attachment = {
+                  type: file.type.startsWith('image/') ? 'image' : 'file',
+                  url: url,
+                  name: file.name,
+                  size: (file.size / 1024).toFixed(0) + ' KB'
+              };
+          }
+
           const docRef = await addDoc(collection(db, "resourceRequests"), sanitizeForFirestore(newReq));
           earnPoints(5, "Request posted successfully!");
 
@@ -1127,6 +1170,7 @@ const App: React.FC = () => {
   };
 
   const deleteResourceRequest = async (requestId: string) => {
+      // ... (Existing implementation) ...
       if (!db) return;
       try {
           await deleteDoc(doc(db, "resourceRequests", requestId));
@@ -1137,6 +1181,7 @@ const App: React.FC = () => {
       }
   };
 
+  // ... (Rest of the functions: openUploadForRequest, toggles, profile update, messaging) ...
   const openUploadForRequest = (requestId: string) => {
       const req = resourceRequests.find(r => r.id === requestId);
       if (req) {

@@ -2,7 +2,7 @@
 import React, { useContext, useState } from 'react';
 import { AppContext } from '../../App';
 import type { ForumPost } from '../../types';
-import { ThumbsUp, MessageSquare, PlusCircle } from 'lucide-react';
+import { ThumbsUp, MessageSquare, PlusCircle, Paperclip } from 'lucide-react';
 import CreatePostModal from '../CreatePostModal';
 import UserRankBadge from '../UserRankBadge';
 
@@ -15,6 +15,11 @@ const ForumPostCard: React.FC<{ post: ForumPost, onSelect: () => void, onAuthorC
                 <div className="flex-grow min-w-0 w-full">
                     <div className="flex items-center gap-2 mb-2">
                          <span className="text-sm font-bold text-slate-800 dark:text-white px-3 py-1 bg-slate-100 dark:bg-zinc-800 rounded-full">{post.courseCode}</span>
+                         {post.attachment && (
+                             <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-zinc-800 px-2 py-1 rounded-full border border-slate-200 dark:border-zinc-700">
+                                 <Paperclip size={12} /> File
+                             </span>
+                         )}
                     </div>
                     <h3 title={post.title} className="text-xl font-bold text-slate-800 dark:text-white hover:text-primary-700 dark:hover:text-primary-400 truncate">{post.title}</h3>
                 </div>

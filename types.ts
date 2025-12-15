@@ -109,6 +109,7 @@ export interface ForumPost {
   upvotedBy: string[];
   downvotedBy: string[];
   replies: ForumReply[];
+  attachment?: Attachment;
 }
 
 export enum NotificationType {
@@ -185,6 +186,7 @@ export interface ResourceRequest {
   title: string;
   details: string;
   status: ResourceRequestStatus;
+  attachment?: Attachment;
   fulfillment?: {
     fulfiller: User;
     resourceId: string;

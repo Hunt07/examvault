@@ -72,10 +72,11 @@ const extractTextFromDocx = async (fileBase64: string): Promise<string> => {
         const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
         const arrayBuffer = base64ToArrayBuffer(cleanBase64);
         const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
-        return result.value;
+        return result.value || "";
     } catch (e) {
         console.error("DOCX Extraction failed", e);
-        throw new Error("Failed to extract text from Word document.");
+        // Don't throw, return empty string so main logic can handle "insufficient content"
+        return "";
     }
 };
 
@@ -87,11 +88,17 @@ const extractTextFromPptx = async (fileBase64: string): Promise<string> => {
         const zip = await JSZip.loadAsync(arrayBuffer);
         
         const slideFiles: any[] = [];
-        zip.folder("ppt/slides")?.forEach((relativePath, file) => {
-            if (relativePath.match(/slide\d+\.xml/)) {
-                slideFiles.push({ path: relativePath, file: file });
-            }
-        });
+        const slideFolder = zip.folder("ppt/slides");
+        
+        if (slideFolder) {
+            slideFolder.forEach((relativePath, file) => {
+                if (relativePath.match(/slide\d+\.xml/)) {
+                    slideFiles.push({ path: relativePath, file: file });
+                }
+            });
+        }
+
+        if (slideFiles.length === 0) return "";
 
         // Sort slides naturally (slide1, slide2, slide10...)
         slideFiles.sort((a, b) => {
@@ -101,20 +108,38 @@ const extractTextFromPptx = async (fileBase64: string): Promise<string> => {
         });
 
         let extractedText = "";
+        const parser = new DOMParser();
+
         for (const slide of slideFiles) {
             const xmlContent = await slide.file.async("string");
-            // Simple Regex to extract text from XML <a:t> tags (PowerPoint text nodes)
-            const textMatches = xmlContent.match(/<a:t[^>]*>(.*?)<\/a:t>/g);
-            if (textMatches) {
-                const slideText = textMatches.map((t: string) => t.replace(/<\/?a:t[^>]*>/g, '')).join(" ");
-                extractedText += `[Slide]: ${slideText}\n\n`;
+            const xmlDoc = parser.parseFromString(xmlContent, "application/xml");
+            
+            // Try to find text within <a:t> (drawingml text) or <t>
+            // Note: getElementsByTagName is case-insensitive for HTML but case-sensitive for XML in some browsers?
+            // In standard DOMParser XML mode, it is case sensitive.
+            // PowerPoint OpenXML usually uses 'a:t'
+            
+            let textNodes = Array.from(xmlDoc.getElementsByTagName("a:t"));
+            if (textNodes.length === 0) {
+                // Fallback attempt
+                textNodes = Array.from(xmlDoc.getElementsByTagName("t"));
+            }
+
+            const slideText = textNodes
+                .map(node => node.textContent)
+                .join(" ")
+                .replace(/\s+/g, ' ') // normalize whitespace
+                .trim();
+            
+            if (slideText.length > 0) {
+                extractedText += `[Slide ${slide.path.match(/\d+/)?.[0]}]: ${slideText}\n\n`;
             }
         }
         
-        return extractedText || "No text content found in slides.";
+        return extractedText;
     } catch (e) {
         console.error("PPTX Extraction failed", e);
-        throw new Error("Failed to extract text from PowerPoint presentation.");
+        return "";
     }
 };
 
@@ -149,9 +174,15 @@ Based on the following material, please provide the summary with these exact sec
         // Branching logic for extraction
         if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
             const extractedText = await extractTextFromDocx(fileBase64);
+            if (!extractedText || extractedText.trim().length < 50) {
+                return "⚠️ **Insufficient Content**\n\nWe couldn't extract enough text from this Word document to generate a summary. It might contain mostly images, equations, or be empty. Try converting it to PDF first.";
+            }
             parts.push({ text: `Analyze the following document content:\n\n${extractedText}` });
         } else if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
             const extractedText = await extractTextFromPptx(fileBase64);
+            if (!extractedText || extractedText.trim().length < 50) {
+                return "⚠️ **Insufficient Content**\n\nWe couldn't extract enough text from this PowerPoint presentation. It likely contains images of text (scanned slides) rather than selectable text. \n\n**Tip:** Convert the PPT to PDF and upload the PDF for better results.";
+            }
             parts.push({ text: `Analyze the following presentation slides:\n\n${extractedText}` });
         } else {
             // PDF or Image (Native Support)
@@ -247,9 +278,11 @@ export const generateStudySet = async (
         // Branching logic for extraction
         if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
             const extractedText = await extractTextFromDocx(fileBase64);
+            if (!extractedText || extractedText.trim().length < 50) return []; // Fail silently or handle in UI
             parts.push({ text: `${promptText}\n\nMaterial:\n${extractedText}` });
         } else if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
             const extractedText = await extractTextFromPptx(fileBase64);
+            if (!extractedText || extractedText.trim().length < 50) return []; // Fail silently or handle in UI
             parts.push({ text: `${promptText}\n\nMaterial:\n${extractedText}` });
         } else {
             // PDF or Image

@@ -276,6 +276,24 @@ const App: React.FC = () => {
     }
   }, [isDarkMode]);
 
+  const handleVote = async (resourceId: string, action: 'up' | 'down') => {
+      if (!user || !db) return;
+      const resource = resources.find(r => r.id === resourceId);
+      if (!resource) return;
+      const resourceRef = doc(db, "resources", resourceId);
+      const isUpvoted = resource.upvotedBy?.includes(user.id);
+      const isDownvoted = resource.downvotedBy?.includes(user.id);
+      const updates: any = {};
+      if (action === 'up') {
+          if (isUpvoted) { updates.upvotes = increment(-1); updates.upvotedBy = arrayRemove(user.id); }
+          else { updates.upvotes = increment(1); updates.upvotedBy = arrayUnion(user.id); if (isDownvoted) { updates.downvotes = increment(-1); updates.downvotedBy = arrayRemove(user.id); } }
+      } else {
+          if (isDownvoted) { updates.downvotes = increment(-1); updates.downvotedBy = arrayRemove(user.id); }
+          else { updates.downvotes = increment(1); updates.downvotedBy = arrayUnion(user.id); if (isUpvoted) { updates.upvotes = increment(-1); updates.upvotedBy = arrayRemove(user.id); } }
+      }
+      await updateDoc(resourceRef, updates);
+  };
+
   return (
     <AppContext.Provider value={{
       user, users, resources, forumPosts, notifications, conversations, directMessages, resourceRequests, reports,
@@ -285,7 +303,25 @@ const App: React.FC = () => {
         const isSaved = user?.savedResourceIds.includes(id);
         if (user) await updateDoc(doc(db, "users", user.id), { savedResourceIds: isSaved ? arrayRemove(id) : arrayUnion(id) });
       },
-      handleVote: () => {}, addCommentToResource: () => {}, handleCommentVote: () => {}, 
+      handleVote, 
+      addCommentToResource: async (rid, text, pid) => {
+          if (!user || !db) return;
+          const comment = { id: `c-${Date.now()}`, author: sanitizeForFirestore(user), text, timestamp: new Date().toISOString(), parentId: pid, upvotes: 0, upvotedBy: [] };
+          await updateDoc(doc(db, "resources", rid), { comments: arrayUnion(comment) });
+      }, 
+      handleCommentVote: async (rid, cid) => {
+          if (!user || !db) return;
+          const res = resources.find(r => r.id === rid);
+          if (!res) return;
+          const updated = res.comments.map(c => {
+              if (c.id === cid) {
+                  const isUp = c.upvotedBy?.includes(user.id);
+                  return { ...c, upvotes: isUp ? c.upvotes - 1 : c.upvotes + 1, upvotedBy: isUp ? c.upvotedBy.filter(id => id !== user.id) : [...(c.upvotedBy || []), user.id] };
+              }
+              return c;
+          });
+          await updateDoc(doc(db, "resources", rid), { comments: updated });
+      }, 
       deleteCommentFromResource: async (rid, comment) => {
           if (!user?.isAdmin && user?.id !== comment.author.id) return;
           await updateDoc(doc(db, "resources", rid), { comments: arrayRemove(comment) });

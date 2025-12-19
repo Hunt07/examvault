@@ -221,23 +221,39 @@ const App: React.FC = () => {
 
   const logout = async () => { await firebaseAuth.signOut(auth); setUser(null); setViewState('dashboard'); };
 
-  const deleteAccount = async () => {
-    if (!user || !auth.currentUser || !db) return;
-    await deleteDoc(doc(db, "users", user.id));
-    await firebaseAuth.deleteUser(auth.currentUser);
-    setUser(null); setViewState('dashboard'); showToast("Account deleted.", "info");
+  const handleVote = async (resourceId: string, action: 'up' | 'down') => {
+    if (!user || !db) return;
+    const resource = resources.find(r => r.id === resourceId);
+    if (!resource) return;
+    const resourceRef = doc(db, "resources", resourceId);
+    const userId = user.id;
+    const isUpvoted = resource.upvotedBy?.includes(userId);
+    const isDownvoted = resource.downvotedBy?.includes(userId);
+    const updates: any = {};
+    if (action === 'up') {
+        if (isUpvoted) { updates.upvotes = increment(-1); updates.upvotedBy = arrayRemove(userId); }
+        else { updates.upvotes = increment(1); updates.upvotedBy = arrayUnion(userId); if (isDownvoted) { updates.downvotes = increment(-1); updates.downvotedBy = arrayRemove(userId); } }
+    } else {
+        if (isDownvoted) { updates.downvotes = increment(-1); updates.downvotedBy = arrayRemove(userId); }
+        else { updates.downvotes = increment(1); updates.downvotedBy = arrayUnion(userId); if (isUpvoted) { updates.upvotes = increment(-1); updates.upvotedBy = arrayRemove(userId); } }
+    }
+    await updateDoc(resourceRef, updates);
   };
 
-  const resolveReport = async (reportId: string, status: ReportStatus) => {
-    if (!db || !user?.isAdmin) return;
-    await updateDoc(doc(db, "reports", reportId), { status });
-    showToast(`Report ${status}`, "info");
+  const addCommentToResource = async (rid: string, text: string, pid: string | null) => {
+    if (!user || !db) return;
+    const comment = { id: `c-${Date.now()}`, author: sanitizeForFirestore(user), text, timestamp: new Date().toISOString(), parentId: pid, upvotes: 0, upvotedBy: [] };
+    await updateDoc(doc(db, "resources", rid), { comments: arrayUnion(comment) });
   };
 
-  const updateUserStatus = async (userId: string, status: 'active' | 'banned', reason?: string) => {
-    if (!db || !user?.isAdmin) return;
-    await updateDoc(doc(db, "users", userId), { status, banReason: reason || "" });
-    showToast(`User ${status === 'banned' ? 'restricted' : 'activated'}`, "success");
+  const deleteResource = async (id: string, fileUrl: string, previewUrl?: string) => { 
+    if (!db) return;
+    await deleteDoc(doc(db, "resources", id)); 
+    if (storage) {
+        try { if (fileUrl?.startsWith('http')) await deleteObject(ref(storage, fileUrl)); } catch(e) {}
+        try { if (previewUrl?.includes('firebasestorage')) await deleteObject(ref(storage, previewUrl)); } catch(e) {}
+    }
+    showToast("Deleted.", "info"); if (view === 'resourceDetail') setView('dashboard');
   };
 
   const handleUpload = async (resourceData: any, file: File, coverImage: File | null) => {
@@ -263,9 +279,6 @@ const App: React.FC = () => {
     } catch (error) { showToast("Upload failed.", "error"); } finally { setIsUploading(false); }
   };
 
-  const activePost = forumPosts.find(p => p.id === selectedId);
-  const activeResource = resources.find(r => r.id === selectedId);
-
   useEffect(() => {
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
@@ -276,110 +289,80 @@ const App: React.FC = () => {
     }
   }, [isDarkMode]);
 
-  const handleVote = async (resourceId: string, action: 'up' | 'down') => {
-      if (!user || !db) return;
-      const resource = resources.find(r => r.id === resourceId);
-      if (!resource) return;
-      const resourceRef = doc(db, "resources", resourceId);
-      const isUpvoted = resource.upvotedBy?.includes(user.id);
-      const isDownvoted = resource.downvotedBy?.includes(user.id);
-      const updates: any = {};
-      if (action === 'up') {
-          if (isUpvoted) { updates.upvotes = increment(-1); updates.upvotedBy = arrayRemove(user.id); }
-          else { updates.upvotes = increment(1); updates.upvotedBy = arrayUnion(user.id); if (isDownvoted) { updates.downvotes = increment(-1); updates.downvotedBy = arrayRemove(user.id); } }
-      } else {
-          if (isDownvoted) { updates.downvotes = increment(-1); updates.downvotedBy = arrayRemove(user.id); }
-          else { updates.downvotes = increment(1); updates.downvotedBy = arrayUnion(user.id); if (isUpvoted) { updates.upvotes = increment(-1); updates.upvotedBy = arrayRemove(user.id); } }
-      }
-      await updateDoc(resourceRef, updates);
-  };
+  const activePost = forumPosts.find(p => p.id === selectedId);
+  const activeResource = resources.find(r => r.id === selectedId);
 
   return (
     <AppContext.Provider value={{
       user, users, resources, forumPosts, notifications, conversations, directMessages, resourceRequests, reports,
-      view, setView, logout, deleteAccount, isDarkMode, toggleDarkMode: () => setIsDarkMode(!isDarkMode),
+      view, setView, logout, deleteAccount: async () => {}, isDarkMode, toggleDarkMode: () => setIsDarkMode(!isDarkMode),
       userRanks, savedResourceIds: user?.savedResourceIds || [], 
       toggleSaveResource: async (id) => {
         const isSaved = user?.savedResourceIds.includes(id);
         if (user) await updateDoc(doc(db, "users", user.id), { savedResourceIds: isSaved ? arrayRemove(id) : arrayUnion(id) });
       },
-      handleVote, 
-      addCommentToResource: async (rid, text, pid) => {
-          if (!user || !db) return;
-          const comment = { id: `c-${Date.now()}`, author: sanitizeForFirestore(user), text, timestamp: new Date().toISOString(), parentId: pid, upvotes: 0, upvotedBy: [] };
-          await updateDoc(doc(db, "resources", rid), { comments: arrayUnion(comment) });
-      }, 
+      handleVote, addCommentToResource, 
       handleCommentVote: async (rid, cid) => {
-          if (!user || !db) return;
-          const res = resources.find(r => r.id === rid);
-          if (!res) return;
-          const updated = res.comments.map(c => {
-              if (c.id === cid) {
-                  const isUp = c.upvotedBy?.includes(user.id);
-                  return { ...c, upvotes: isUp ? c.upvotes - 1 : c.upvotes + 1, upvotedBy: isUp ? c.upvotedBy.filter(id => id !== user.id) : [...(c.upvotedBy || []), user.id] };
-              }
-              return c;
-          });
-          await updateDoc(doc(db, "resources", rid), { comments: updated });
-      }, 
+        if (!user || !db) return;
+        const res = resources.find(r => r.id === rid);
+        if (!res) return;
+        const updated = res.comments.map(c => {
+            if (c.id === cid) {
+                const isUp = c.upvotedBy?.includes(user.id);
+                return { ...c, upvotes: isUp ? (c.upvotes || 0) - 1 : (c.upvotes || 0) + 1, upvotedBy: isUp ? c.upvotedBy.filter(id => id !== user.id) : [...(c.upvotedBy || []), user.id] };
+            }
+            return c;
+        });
+        await updateDoc(doc(db, "resources", rid), { comments: updated });
+      },
       deleteCommentFromResource: async (rid, comment) => {
-          if (!user?.isAdmin && user?.id !== comment.author.id) return;
-          await updateDoc(doc(db, "resources", rid), { comments: arrayRemove(comment) });
-          showToast("Comment deleted", "info");
+        if (!user?.isAdmin && user?.id !== comment.author.id) return;
+        await updateDoc(doc(db, "resources", rid), { comments: arrayRemove(comment) });
+        showToast("Comment deleted", "info");
       },
       addForumPost: () => {}, handlePostVote: () => {}, 
       deleteForumPost: async (pid) => {
-          if (!db) return;
-          await deleteDoc(doc(db, "forumPosts", pid));
-          showToast("Post deleted", "info");
-          setView('discussions');
-      }, 
-      addReplyToPost: () => {},
-      handleReplyVote: () => {}, 
+        await deleteDoc(doc(db, "forumPosts", pid)); showToast("Post deleted", "info"); setView('discussions');
+      },
+      addReplyToPost: () => {}, handleReplyVote: () => {}, 
       deleteReplyFromPost: async (pid, reply) => {
-          if (!db) return;
-          await updateDoc(doc(db, "forumPosts", pid), { replies: arrayRemove(reply) });
-          showToast("Reply deleted", "info");
-      }, 
-      toggleVerifiedAnswer: () => {},
-      addResourceRequest: () => {}, 
+        await updateDoc(doc(db, "forumPosts", pid), { replies: arrayRemove(reply) }); showToast("Reply deleted", "info");
+      },
+      toggleVerifiedAnswer: () => {}, addResourceRequest: () => {}, 
       deleteResourceRequest: async (rid) => {
-          if (!db) return;
-          await deleteDoc(doc(db, "resourceRequests", rid));
-          showToast("Request deleted", "info");
-      }, 
-      openUploadForRequest: () => {},
-      toggleUserSubscription: () => {}, toggleLecturerSubscription: () => {}, toggleCourseCodeSubscription: () => {},
-      updateUserProfile: () => {}, updateUserStatus, sendMessage: () => {}, editMessage: () => {}, deleteMessage: () => {},
+        await deleteDoc(doc(db, "resourceRequests", rid)); showToast("Request deleted", "info");
+      },
+      openUploadForRequest: () => {}, toggleUserSubscription: () => {}, toggleLecturerSubscription: () => {}, 
+      toggleCourseCodeSubscription: () => {}, updateUserProfile: () => {}, 
+      updateUserStatus: async (uid, status, reason) => {
+        await updateDoc(doc(db, "users", uid), { status, banReason: reason || "" }); showToast(`User ${status}`, "success");
+      },
+      sendMessage: () => {}, editMessage: () => {}, deleteMessage: () => {},
       startConversation: () => {}, sendDirectMessageToUser: () => {}, markNotificationAsRead: () => {},
       markAllNotificationsAsRead: () => {}, clearAllNotifications: () => {}, markMessagesAsRead: () => {},
-      resolveReport, goBack, hasUnreadMessages: false, hasUnreadDiscussions: false, isLoading, areResourcesLoading,
-      deleteResource: async (id, fileUrl, previewUrl) => { 
-        if (!db) return;
-        await deleteDoc(doc(db, "resources", id)); 
-        if (storage) {
-            try { if (fileUrl?.startsWith('http')) await deleteObject(ref(storage, fileUrl)); } catch(e) {}
-            try { if (previewUrl?.includes('firebasestorage')) await deleteObject(ref(storage, previewUrl)); } catch(e) {}
-        }
-        showToast("Deleted.", "info"); if (view === 'resourceDetail') setView('dashboard');
+      resolveReport: async (rid, status) => {
+        await updateDoc(doc(db, "reports", rid), { status }); showToast(`Report ${status}`, "info");
       },
+      goBack, deleteResource, hasUnreadMessages: false, hasUnreadDiscussions: false, isLoading, areResourcesLoading,
       scrollTargetId, setScrollTargetId, showToast
     }}>
       <div className={`${isDarkMode ? 'dark' : ''} min-h-screen bg-slate-50 dark:bg-dark-bg transition-colors duration-300 flex flex-col`}>
         <Header onUploadClick={() => setIsUploadModalOpen(true)} />
         <div className="flex flex-1 relative">
           <SideNav />
-          <main className="flex-1 ml-20 pt-4 px-4 md:px-8 pb-8 transition-all duration-300 min-h-[calc(100vh-5rem)]">
-            {view === 'dashboard' && <DashboardPage />}
-            {view === 'profile' && user && <ProfilePage user={user} allResources={resources} isCurrentUser={true} />}
-            {view === 'publicProfile' && selectedId && <ProfilePage user={users.find(u => u.id === selectedId) || user!} allResources={resources} isCurrentUser={selectedId === user?.id} />}
-            {view === 'resourceDetail' && (activeResource ? <ResourceDetailPage resource={activeResource} /> : <div className="flex justify-center py-20"><Loader2 className="animate-spin text-primary-500" size={40} /></div>)}
-            {view === 'discussions' && <DiscussionsPage />}
-            {view === 'forumDetail' && (activePost ? <ForumPostDetailPage post={activePost} /> : <div className="flex justify-center py-20"><Loader2 className="animate-spin text-primary-500" size={40} /></div>)}
-            {view === 'requests' && <ResourceRequestsPage />}
-            {view === 'messages' && <MessagesPage activeConversationId={selectedId || null} />}
-            {view === 'leaderboard' && <LeaderboardPage />}
-            {view === 'admin' && user?.isAdmin && <AdminPage />}
+          <main className="flex-1 ml-20 transition-all duration-300 min-h-[calc(100vh-5rem)]">
+            <div className="pt-4 px-4 md:px-8 pb-8">
+                {view === 'dashboard' && <DashboardPage />}
+                {view === 'profile' && user && <ProfilePage user={user} allResources={resources} isCurrentUser={true} />}
+                {view === 'publicProfile' && selectedId && <ProfilePage user={users.find(u => u.id === selectedId) || user!} allResources={resources} isCurrentUser={selectedId === user?.id} />}
+                {view === 'resourceDetail' && (activeResource ? <ResourceDetailPage resource={activeResource} /> : <div className="flex justify-center py-20"><Loader2 className="animate-spin text-primary-500" size={40} /></div>)}
+                {view === 'discussions' && <DiscussionsPage />}
+                {view === 'forumDetail' && (activePost ? <ForumPostDetailPage post={activePost} /> : <div className="flex justify-center py-20"><Loader2 className="animate-spin text-primary-500" size={40} /></div>)}
+                {view === 'requests' && <ResourceRequestsPage />}
+                {view === 'messages' && <MessagesPage activeConversationId={selectedId || null} />}
+                {view === 'leaderboard' && <LeaderboardPage />}
+                {view === 'admin' && user?.isAdmin && <AdminPage />}
+            </div>
           </main>
         </div>
         {isUploadModalOpen && <UploadModal onClose={() => setIsUploadModalOpen(false)} onUpload={handleUpload} isLoading={isUploading} />}

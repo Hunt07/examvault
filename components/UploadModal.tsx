@@ -1,11 +1,10 @@
 
-import React, { useState, useEffect, useContext } from 'react';
-import type { Resource, ResourceRequest } from '../types';
-import { ResourceType, ExamType, SemesterIntake } from '../types';
-import { X, UploadCloud, Image as ImageIcon, Info, Loader2 } from 'lucide-react';
-import { AppContext } from '../App';
+import React, { useState, useEffect } from 'react';
+import type { ResourceRequest } from '../types';
+import { ResourceType, SemesterIntake } from '../types';
+import { X, UploadCloud, Image as ImageIcon, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 
-// Re-implementing the high-fidelity SVG generator
+// The high-fidelity SVG cover generator
 export const generateFilePreview = (fileName: string): string => {
   const ext = fileName.split('.').pop()?.toLowerCase();
   let gradientStart, gradientEnd, shapePath;
@@ -56,68 +55,80 @@ const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, fulfilling
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
-      <div className="bg-white dark:bg-zinc-800 rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col md:flex-row animate-in zoom-in-95 duration-300 border dark:border-zinc-700">
-        <div className="hidden md:block w-72 bg-primary-600 p-8 text-white">
-            <h2 className="text-3xl font-bold mb-4">Share Knowledge</h2>
-            <p className="opacity-80 text-sm leading-relaxed">Contribute to the ExamVault community by uploading your notes, papers, or assignments. Help your fellow students succeed!</p>
-            <div className="mt-12 space-y-6">
-                <div className="flex items-start gap-4">
-                    <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center font-bold">1</div>
-                    <p className="text-xs">Fill in document details accurately for better searchability.</p>
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[100] p-4 animate-in fade-in duration-300">
+      <div className="bg-white dark:bg-zinc-800 rounded-[2.5rem] shadow-2xl w-full max-w-5xl max-h-[95vh] overflow-hidden flex flex-col md:flex-row animate-in zoom-in-95 duration-300 border dark:border-zinc-700">
+        <div className="hidden md:flex w-80 bg-primary-600 p-10 flex-col text-white">
+            <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mb-8 backdrop-blur-sm">
+                <UploadCloud size={32} />
+            </div>
+            <h2 className="text-4xl font-black mb-6 leading-tight">Share Your Knowledge.</h2>
+            <p className="opacity-80 text-lg leading-relaxed mb-12">Help fellow students succeed by contributing high-quality study materials to the vault.</p>
+            
+            <div className="mt-auto space-y-8">
+                <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center shrink-0"><CheckCircle2 size={20}/></div>
+                    <p className="text-sm font-bold">Earn +25 Rep Points</p>
                 </div>
-                <div className="flex items-start gap-4">
-                    <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center font-bold">2</div>
-                    <p className="text-xs">Upload clear, readable files (PDFs preferred).</p>
+                <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center shrink-0"><AlertCircle size={20}/></div>
+                    <p className="text-sm font-bold">Clear PDFs Recommended</p>
                 </div>
             </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-8 relative">
-            <button onClick={onClose} className="absolute top-4 right-4 p-2 rounded-full hover:bg-slate-100 dark:hover:bg-zinc-700"><X /></button>
-            <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="flex-1 overflow-y-auto p-10 relative custom-scrollbar">
+            <button onClick={onClose} className="absolute top-6 right-6 p-2 rounded-full hover:bg-slate-100 dark:hover:bg-zinc-700 transition-colors"><X size={24}/></button>
+            <form onSubmit={handleSubmit} className="space-y-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="md:col-span-2">
-                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Title</label>
-                        <input type="text" value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-slate-50 dark:bg-zinc-900 p-3 rounded-xl border border-slate-200 dark:border-zinc-700 outline-none focus:ring-2 focus:ring-primary-500 dark:text-white" required />
+                        <label className="block text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-3">Resource Title</label>
+                        <input type="text" value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-slate-50 dark:bg-zinc-900 p-4 rounded-2xl border border-slate-200 dark:border-zinc-700 outline-none focus:ring-2 focus:ring-primary-500 dark:text-white transition-all text-lg" placeholder="e.g., Final Exam 2023 - Intro to AI" required />
                     </div>
                     <div>
-                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Course Code</label>
-                        <input type="text" value={courseCode} onChange={e => setCourseCode(e.target.value)} className="w-full bg-slate-50 dark:bg-zinc-900 p-3 rounded-xl border border-slate-200 dark:border-zinc-700 outline-none focus:ring-2 focus:ring-primary-500 dark:text-white" required />
+                        <label className="block text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-3">Course Code</label>
+                        <input type="text" value={courseCode} onChange={e => setCourseCode(e.target.value)} className="w-full bg-slate-50 dark:bg-zinc-900 p-4 rounded-2xl border border-slate-200 dark:border-zinc-700 outline-none focus:ring-2 focus:ring-primary-500 dark:text-white transition-all uppercase" placeholder="BCCS101" required />
                     </div>
                     <div>
-                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Type</label>
-                        <select value={type} onChange={e => setType(e.target.value as ResourceType)} className="w-full bg-slate-50 dark:bg-zinc-900 p-3 rounded-xl border border-slate-200 dark:border-zinc-700 outline-none focus:ring-2 focus:ring-primary-500 dark:text-white">
+                        <label className="block text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-3">Resource Category</label>
+                        <select value={type} onChange={e => setType(e.target.value as ResourceType)} className="w-full bg-slate-50 dark:bg-zinc-900 p-4 rounded-2xl border border-slate-200 dark:border-zinc-700 outline-none focus:ring-2 focus:ring-primary-500 dark:text-white transition-all appearance-none cursor-pointer">
                             {Object.values(ResourceType).map(rt => <option key={rt} value={rt}>{rt}</option>)}
                         </select>
                     </div>
                 </div>
                 
                 <div>
-                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Description</label>
-                    <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full bg-slate-50 dark:bg-zinc-900 p-3 rounded-xl border border-slate-200 dark:border-zinc-700 outline-none focus:ring-2 focus:ring-primary-500 dark:text-white" rows={2} required />
+                    <label className="block text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-3">Brief Description</label>
+                    <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full bg-slate-50 dark:bg-zinc-900 p-4 rounded-2xl border border-slate-200 dark:border-zinc-700 outline-none focus:ring-2 focus:ring-primary-500 dark:text-white transition-all min-h-[100px]" placeholder="What should others know about this file?" required />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                     <div className="border-2 border-dashed border-slate-200 dark:border-zinc-700 p-4 rounded-2xl text-center">
-                        <label className="cursor-pointer">
-                            <UploadCloud className="mx-auto text-slate-400 mb-2" size={32} />
-                            <p className="text-[10px] font-bold text-slate-500 uppercase">{file ? file.name : 'Choose Resource'}</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                     <div className={`border-2 border-dashed p-8 rounded-[2rem] text-center transition-all ${file ? 'bg-primary-50/50 border-primary-300 dark:bg-primary-900/10 dark:border-primary-800' : 'bg-slate-50 dark:bg-zinc-900 border-slate-200 dark:border-zinc-700 hover:border-primary-400'}`}>
+                        <label className="cursor-pointer group flex flex-col items-center">
+                            <div className="w-14 h-14 bg-white dark:bg-zinc-800 rounded-2xl shadow-sm flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                                <UploadCloud className={file ? 'text-primary-600' : 'text-slate-400'} size={28} />
+                            </div>
+                            <p className="text-sm font-black text-slate-800 dark:text-white truncate max-w-full px-2">{file ? file.name : 'Select File'}</p>
+                            <p className="text-xs text-slate-500 mt-1 uppercase font-bold tracking-widest">{file ? `${(file.size/1024/1024).toFixed(2)} MB` : 'PDF, DOCX, ZIP'}</p>
                             <input type="file" className="hidden" onChange={e => setFile(e.target.files?.[0] || null)} required={!file} />
                         </label>
                      </div>
-                     <div className="border-2 border-dashed border-slate-200 dark:border-zinc-700 p-4 rounded-2xl text-center">
-                        <label className="cursor-pointer">
-                            <ImageIcon className="mx-auto text-slate-400 mb-2" size={32} />
-                            <p className="text-[10px] font-bold text-slate-500 uppercase">{coverImageFile ? 'Cover Selected' : 'Custom Cover (Optional)'}</p>
+                     <div className={`border-2 border-dashed p-8 rounded-[2rem] text-center transition-all ${coverImageFile ? 'bg-amber-50/50 border-amber-300 dark:bg-amber-900/10 dark:border-amber-800' : 'bg-slate-50 dark:bg-zinc-900 border-slate-200 dark:border-zinc-700 hover:border-amber-400'}`}>
+                        <label className="cursor-pointer group flex flex-col items-center">
+                            <div className="w-14 h-14 bg-white dark:bg-zinc-800 rounded-2xl shadow-sm flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                                <ImageIcon className={coverImageFile ? 'text-amber-600' : 'text-slate-400'} size={28} />
+                            </div>
+                            <p className="text-sm font-black text-slate-800 dark:text-white">{coverImageFile ? 'Custom Cover' : 'Custom Cover'}</p>
+                            <p className="text-xs text-slate-500 mt-1 uppercase font-bold tracking-widest">{coverImageFile ? 'Ready' : 'Optional Image'}</p>
                             <input type="file" className="hidden" accept="image/*" onChange={e => setCoverImageFile(e.target.files?.[0] || null)} />
                         </label>
                      </div>
                 </div>
 
-                <button type="submit" disabled={isLoading} className="w-full py-4 bg-primary-600 text-white rounded-2xl font-bold shadow-lg shadow-primary-500/30 hover:bg-primary-700 transition flex items-center justify-center gap-2">
-                    {isLoading ? <><Loader2 className="animate-spin" /> Uploading...</> : 'Share Resource'}
-                </button>
+                <div className="pt-4">
+                    <button type="submit" disabled={isLoading} className="w-full py-5 bg-primary-600 text-white rounded-3xl font-black text-xl shadow-2xl shadow-primary-500/40 hover:bg-primary-700 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-70 disabled:hover:scale-100">
+                        {isLoading ? <><Loader2 className="animate-spin" size={24} /> Uploading Material...</> : <><UploadCloud size={24}/> Share to Vault</>}
+                    </button>
+                </div>
             </form>
         </div>
       </div>

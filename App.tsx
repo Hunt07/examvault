@@ -52,14 +52,14 @@ interface AppContextType {
   addCommentToResource: (resourceId: string, text: string, parentId: string | null) => void;
   handleCommentVote: (resourceId: string, commentId: string) => void;
   deleteCommentFromResource: (resourceId: string, comment: Comment) => Promise<void>;
-  addForumPost: (post: { title: string; courseCode: string; body: string; tags: string[] }, file?: File) => void;
+  addForumPost: (post: { title: string; courseCode: string; body: string; tags: string[] }) => void;
   handlePostVote: (postId: string, action: 'up' | 'down') => void;
   deleteForumPost: (postId: string) => Promise<void>;
   addReplyToPost: (postId: string, text: string, parentId: string | null, file?: File) => void;
   handleReplyVote: (postId: string, replyId: string) => void;
   deleteReplyFromPost: (postId: string, reply: ForumReply) => Promise<void>;
   toggleVerifiedAnswer: (postId: string, replyId: string) => void;
-  addResourceRequest: (req: { title: string; courseCode: string; details: string }, file?: File) => void;
+  addResourceRequest: (req: { title: string; courseCode: string; details: string }) => void;
   deleteResourceRequest: (requestId: string) => Promise<void>;
   openUploadForRequest: (requestId: string) => void;
   toggleUserSubscription: (userId: string) => void;
@@ -110,37 +110,6 @@ const generateDefaultAvatar = (name: string): string => {
   return `data:image/svg+xml;base64,${btoa(svgString)}`;
 };
 
-const propagateUserUpdates = async (userId: string, updateData: any) => {
-    const resQuery = query(collection(db!, "resources"), where("author.id", "==", userId));
-    const resSnap = await getDocs(resQuery);
-    const batch = writeBatch(db!);
-    let count = 0;
-
-    resSnap.forEach((docSnap) => {
-         const resRef = doc(db!, "resources", docSnap.id);
-         batch.update(resRef, { author: { ...docSnap.data().author, ...updateData } });
-         count++;
-    });
-
-    const postQuery = query(collection(db!, "forumPosts"), where("author.id", "==", userId));
-    const postSnap = await getDocs(postQuery);
-    postSnap.forEach((docSnap) => {
-         const postRef = doc(db!, "forumPosts", docSnap.id);
-         batch.update(postRef, { author: { ...docSnap.data().author, ...updateData } });
-         count++;
-    });
-
-    const reqQuery = query(collection(db!, "resourceRequests"), where("requester.id", "==", userId));
-    const reqSnap = await getDocs(reqQuery);
-    reqSnap.forEach((docSnap) => {
-         const reqRef = doc(db!, "resourceRequests", docSnap.id);
-         batch.update(reqRef, { requester: { ...docSnap.data().requester, ...updateData } });
-         count++;
-    });
-
-    if (count > 0) await batch.commit();
-};
-
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -166,35 +135,28 @@ const App: React.FC = () => {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [fulfillingRequest, setFulfillingRequest] = useState<ResourceRequest | undefined>(undefined);
-
   const [toast, setToast] = useState<{ message: string; points?: number; type?: 'success' | 'error' | 'info' } | null>(null);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info', points?: number) => {
-      setToast({ message, type, points });
+    setToast({ message, type, points });
   };
-
-  const [runTour, setRunTour] = useState(false);
-  const [tourStep, setTourStep] = useState(0);
 
   useEffect(() => {
     const unsubscribe = firebaseAuth.onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         try {
-          const userRef = doc(db!, "users", firebaseUser.uid);
+          const userRef = doc(db, "users", firebaseUser.uid);
           const userSnap = await getDoc(userRef);
-
           if (userSnap.exists()) {
-            const userData = userSnap.data() as User;
-            setUser(userData);
+            setUser(userSnap.data() as User);
           } else {
-            const displayName = firebaseUser.displayName || "Student";
             const newUser: User = {
               id: firebaseUser.uid,
-              name: displayName,
+              name: firebaseUser.displayName || "Student",
               email: firebaseUser.email || "",
-              avatarUrl: generateDefaultAvatar(displayName),
+              avatarUrl: generateDefaultAvatar(firebaseUser.displayName || "S"),
               joinDate: new Date().toISOString(),
-              bio: "New student at ExamVault.",
+              bio: "Academic explorer on ExamVault.",
               points: 0,
               weeklyPoints: 0,
               uploadCount: 0,
@@ -208,11 +170,10 @@ const App: React.FC = () => {
             setUser(newUser);
           }
         } catch (error) {
-          console.error("Error fetching user data:", error);
+          console.error("User fetch error:", error);
         }
       } else {
         setUser(null);
-        setViewState('dashboard');
       }
       setIsLoading(false);
     });
@@ -289,23 +250,45 @@ const App: React.FC = () => {
       await firebaseAuth.deleteUser(auth.currentUser);
       setUser(null);
       setViewState('dashboard');
-      showToast("Account deleted permanently.", "info");
+      showToast("Account permanently deleted.", "info");
     } catch (error: any) {
       if (error.code === 'auth/requires-recent-login') {
-        showToast("Please log out and sign in again to confirm account deletion.", "error");
+        showToast("Session expired. Please log out and back in to delete account.", "error");
       } else {
-        showToast("Failed to delete account.", "error");
+        showToast("Error deleting account.", "error");
       }
     }
   };
 
-  const earnPoints = async (amount: number, message: string) => {
-    if (!user || !db) return;
-    await updateDoc(doc(db, "users", user.id), {
-        points: increment(amount),
-        weeklyPoints: increment(amount)
-    });
-    setToast({ message, points: amount, type: 'success' });
+  const handleUpload = async (resourceData: any, file: File, coverImage: File | null) => {
+    if (!user) return;
+    setIsUploading(true);
+    try {
+        const storageRef = ref(storage, `resources/${Date.now()}_${file.name}`);
+        await uploadBytes(storageRef, file);
+        const downloadURL = await getDownloadURL(storageRef);
+        
+        let previewUrl = coverImage ? await (async () => {
+            const coverRef = ref(storage, `covers/${Date.now()}_${coverImage.name}`);
+            await uploadBytes(coverRef, coverImage);
+            return await getDownloadURL(coverRef);
+        })() : generateFilePreview(file.name);
+
+        const newResource: Omit<Resource, 'id'> = {
+            ...resourceData,
+            author: sanitizeForFirestore(user), 
+            uploadDate: new Date().toISOString(),
+            upvotes: 0, downvotes: 0, upvotedBy: [], downvotedBy: [], comments: [],
+            fileUrl: downloadURL, fileName: file.name, previewImageUrl: previewUrl,
+            mimeType: file.type, contentForAI: "Shared through ExamVault.",
+        };
+
+        await addDoc(collection(db, "resources"), sanitizeForFirestore(newResource));
+        setIsUploadModalOpen(false);
+        showToast("Resource shared!", "success", 25);
+    } catch (error) {
+        showToast("Upload failed.", "error");
+    } finally { setIsUploading(false); }
   };
 
   const userRanks = useMemo(() => {
@@ -315,49 +298,6 @@ const App: React.FC = () => {
     return ranks;
   }, [users]);
 
-  const handleUpload = async (resourceData: any, file: File, coverImage: File | null) => {
-      setIsUploading(true);
-      try {
-          const storageRef = ref(storage, `resources/${Date.now()}_${file.name}`);
-          await uploadBytes(storageRef, file);
-          const downloadURL = await getDownloadURL(storageRef);
-          
-          let previewUrl = coverImage ? await (async () => {
-              const coverRef = ref(storage, `covers/${Date.now()}_${coverImage.name}`);
-              await uploadBytes(coverRef, coverImage);
-              return await getDownloadURL(coverRef);
-          })() : generateFilePreview(file.name);
-
-          const newResource: Omit<Resource, 'id'> = {
-              ...resourceData,
-              author: sanitizeForFirestore(user), 
-              uploadDate: new Date().toISOString(),
-              upvotes: 0, downvotes: 0, upvotedBy: [], downvotedBy: [], comments: [],
-              fileUrl: downloadURL, fileName: file.name, previewImageUrl: previewUrl,
-              mimeType: file.type, contentForAI: "Content extracted on-demand.",
-          };
-
-          await addDoc(collection(db, "resources"), sanitizeForFirestore(newResource));
-          earnPoints(25, "Resource uploaded!");
-          setIsUploadModalOpen(false);
-      } catch (error) {
-          showToast("Upload failed.", "error");
-      } finally { setIsUploading(false); }
-  };
-
-  const deleteResource = async (id: string, url: string) => {
-    await deleteDoc(doc(db, "resources", id));
-    showToast("Resource deleted.", "info");
-  };
-
-  const toggleSaveResource = async (resourceId: string) => {
-    if (!user || !db) return;
-    const isSaved = user.savedResourceIds?.includes(resourceId);
-    await updateDoc(doc(db, "users", user.id), {
-        savedResourceIds: isSaved ? arrayRemove(resourceId) : arrayUnion(resourceId)
-    });
-  };
-
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg"><Loader2 className="animate-spin text-primary-600" size={48} /></div>;
   if (!user) return <AuthPage onLogin={() => {}} />;
 
@@ -365,7 +305,11 @@ const App: React.FC = () => {
     <AppContext.Provider value={{
       user, users, resources, forumPosts, notifications, conversations, directMessages, resourceRequests,
       view, setView, logout, deleteAccount, isDarkMode, toggleDarkMode: () => setIsDarkMode(!isDarkMode),
-      userRanks, savedResourceIds: user.savedResourceIds || [], toggleSaveResource,
+      userRanks, savedResourceIds: user.savedResourceIds || [], 
+      toggleSaveResource: async (id) => {
+        const isSaved = user.savedResourceIds.includes(id);
+        await updateDoc(doc(db, "users", user.id), { savedResourceIds: isSaved ? arrayRemove(id) : arrayUnion(id) });
+      },
       handleVote: () => {}, addCommentToResource: () => {}, handleCommentVote: () => {}, deleteCommentFromResource: async () => {},
       addForumPost: () => {}, handlePostVote: () => {}, deleteForumPost: async () => {}, addReplyToPost: () => {},
       handleReplyVote: () => {}, deleteReplyFromPost: async () => {}, toggleVerifiedAnswer: () => {},
@@ -374,16 +318,18 @@ const App: React.FC = () => {
       updateUserProfile: () => {}, sendMessage: () => {}, editMessage: () => {}, deleteMessage: () => {},
       startConversation: () => {}, sendDirectMessageToUser: () => {}, markNotificationAsRead: () => {},
       markAllNotificationsAsRead: () => {}, clearAllNotifications: () => {}, markMessagesAsRead: () => {},
-      goBack, hasUnreadMessages: false, hasUnreadDiscussions: false, isLoading, deleteResource, areResourcesLoading,
+      goBack, hasUnreadMessages: false, hasUnreadDiscussions: false, isLoading, areResourcesLoading,
+      deleteResource: async (id) => { await deleteDoc(doc(db, "resources", id)); showToast("Deleted.", "info"); },
       scrollTargetId, setScrollTargetId, showToast
     }}>
-      <div className={`${isDarkMode ? 'dark' : ''} min-h-screen bg-slate-50 dark:bg-dark-bg transition-colors`}>
+      <div className={`${isDarkMode ? 'dark' : ''} min-h-screen bg-slate-50 dark:bg-dark-bg transition-colors duration-300`}>
         <Header onUploadClick={() => setIsUploadModalOpen(true)} />
         <SideNav />
-        <main className="ml-20 pt-4 px-4 md:px-8 pb-8">
+        <main className="ml-20 pt-4 px-4 md:px-8 pb-8 max-w-7xl mx-auto">
           {view === 'dashboard' && <DashboardPage />}
           {view === 'profile' && <ProfilePage user={user} allResources={resources} isCurrentUser={true} />}
-          {view === 'resourceDetail' && selectedId && <ResourceDetailPage resource={resources.find(r => r.id === selectedId)!} />}
+          {view === 'publicProfile' && selectedId && <ProfilePage user={users.find(u => u.id === selectedId) || user} allResources={resources} isCurrentUser={selectedId === user.id} />}
+          {view === 'resourceDetail' && selectedId && <ResourceDetailPage resource={resources.find(r => r.id === selectedId) || resources[0]} />}
           {view === 'discussions' && <DiscussionsPage />}
           {view === 'requests' && <ResourceRequestsPage />}
           {view === 'messages' && <MessagesPage activeConversationId={selectedId || null} />}

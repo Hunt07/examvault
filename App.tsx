@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import type { User, Resource, ForumPost, Comment, ForumReply, Notification, Conversation, DirectMessage, ResourceRequest, Attachment } from './types';
 import { NotificationType, MessageStatus, ResourceRequestStatus } from './types';
@@ -64,6 +63,7 @@ interface AppContextType {
   toggleLecturerSubscription: (lecturerName: string) => void;
   toggleCourseCodeSubscription: (courseCode: string) => void;
   updateUserProfile: (data: Partial<User>) => void;
+  deleteAccount: () => Promise<void>;
   sendMessage: (conversationId: string, text: string) => void;
   editMessage: (messageId: string, newText: string) => void;
   deleteMessage: (messageId: string) => void;
@@ -184,7 +184,6 @@ const propagateUserUpdates = async (userId: string, updateData: any) => {
 };
 
 const App: React.FC = () => {
-  // ... (State declarations remain the same) ...
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [areResourcesLoading, setAreResourcesLoading] = useState(true);
@@ -222,7 +221,6 @@ const App: React.FC = () => {
   const [runTour, setRunTour] = useState(false);
   const [tourStep, setTourStep] = useState(0);
 
-  // ... (Effects for Auth and Data Loading remain the same) ...
   useEffect(() => {
     if (!auth || !db) {
         setIsLoading(false);
@@ -318,7 +316,6 @@ const App: React.FC = () => {
     setAreResourcesLoading(true);
 
     const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
-      // ... (Existing User snapshot logic) ...
       const fetchedUsers: User[] = [];
       const batch = writeBatch(db!);
       let needsCommit = false;
@@ -408,7 +405,6 @@ const App: React.FC = () => {
     };
   }, [user?.id]);
 
-  // ... (sendNotification and message useEffects remain the same) ...
   const sendNotification = async (recipientId: string, senderId: string, type: NotificationType, message: string, linkIds?: { resourceId?: string, forumPostId?: string, conversationId?: string, commentId?: string, replyId?: string, requestId?: string }) => {
       if (recipientId === user?.id || !db) return;
 
@@ -456,7 +452,6 @@ const App: React.FC = () => {
       }
   }, [directMessages, user]);
 
-  // ... (Tour logic remains the same) ...
   useEffect(() => {
     if (user && !isLoading) {
       const hasSeenTour = localStorage.getItem(`examvault_tour_${user.id}`);
@@ -488,7 +483,6 @@ const App: React.FC = () => {
     { selector: 'body', content: "You're all set! Happy Studying!" },
   ];
 
-  // ... (Theme logic remains the same) ...
   useEffect(() => {
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
@@ -499,7 +493,6 @@ const App: React.FC = () => {
     }
   }, [isDarkMode]);
 
-  // ... (Navigation, Login, Logout, Vote, Comment logic remains the same) ...
   const setView = (newView: View, id?: string, options?: { replace?: boolean }) => {
     if (!options?.replace) {
         setViewHistory(prev => [...prev, { view: newView, id }]);
@@ -573,7 +566,6 @@ const App: React.FC = () => {
   };
 
   const handleUpload = async (resourceData: any, file: File, coverImage: File | null) => {
-      // ... (Existing implementation) ...
       if (!user || !db || !storage) {
           showToast("Upload service not initialized.", "error");
           return;
@@ -694,7 +686,6 @@ const App: React.FC = () => {
   };
 
   const deleteResource = async (resourceId: string, fileUrl: string, previewUrl?: string) => {
-      // ... (Existing implementation) ...
       if (!user || !db) return;
       
       setViewState('dashboard');
@@ -745,7 +736,6 @@ const App: React.FC = () => {
   };
 
   const handleVote = async (resourceId: string, action: 'up' | 'down') => {
-    // ... (Existing implementation) ...
     if (!user || !db) return;
     const resource = resources.find(r => r.id === resourceId);
     if (!resource) return;
@@ -795,7 +785,6 @@ const App: React.FC = () => {
   };
 
   const addCommentToResource = async (resourceId: string, text: string, parentId: string | null) => {
-    // ... (Existing implementation) ...
     if (!user || !db) return;
     try {
         const commentId = `c-${Date.now()}`;
@@ -845,7 +834,6 @@ const App: React.FC = () => {
   };
 
   const deleteCommentFromResource = async (resourceId: string, comment: Comment) => {
-      // ... (Existing implementation) ...
       if (!db) return;
       try {
           const resRef = doc(db, "resources", resourceId);
@@ -858,7 +846,6 @@ const App: React.FC = () => {
   };
 
   const handleCommentVote = async (resourceId: string, commentId: string) => {
-     // ... (Existing implementation) ...
      if (!user || !db) return;
      const resRef = doc(db, "resources", resourceId);
      const snap = await getDoc(resRef);
@@ -890,7 +877,7 @@ const App: React.FC = () => {
      }
   };
 
-  const addForumPost = async (postData: { title: string; courseCode: string; body: string; tags: string[] }, file?: File) => {
+  const addForumPost = async (postData: { title: string; courseCode: string; body: string; tags: string[] }) => {
       if (!user || !db) return;
       try {
           const newPost: Omit<ForumPost, 'id'> = {
@@ -903,19 +890,6 @@ const App: React.FC = () => {
               downvotedBy: [],
               replies: []
           };
-
-          if (file && storage) {
-              const storageRef = ref(storage, `forum_attachments/${Date.now()}_${file.name}`);
-              await uploadBytes(storageRef, file);
-              const url = await getDownloadURL(storageRef);
-              newPost.attachment = {
-                  type: file.type.startsWith('image/') ? 'image' : 'file',
-                  url: url,
-                  name: file.name,
-                  size: (file.size / 1024).toFixed(0) + ' KB'
-              };
-          }
-
           const docRef = await addDoc(collection(db, "forumPosts"), sanitizeForFirestore(newPost));
           earnPoints(10, "Discussion posted successfully!");
 
@@ -943,7 +917,6 @@ const App: React.FC = () => {
   };
 
   const deleteForumPost = async (postId: string) => {
-      // ... (Existing implementation) ...
       if (!db) return;
       setViewState('discussions');
       setSelectedId(undefined);
@@ -957,7 +930,6 @@ const App: React.FC = () => {
   };
 
   const handlePostVote = async (postId: string, action: 'up' | 'down') => {
-      // ... (Existing implementation) ...
       if (!user || !db) return;
       const postRef = doc(db, "forumPosts", postId);
       const post = forumPosts.find(p => p.id === postId);
@@ -997,7 +969,6 @@ const App: React.FC = () => {
   };
 
   const addReplyToPost = async (postId: string, text: string, parentId: string | null, file?: File) => {
-      // ... (Existing implementation) ...
       if (!user || !db) return;
       
       try {
@@ -1061,7 +1032,6 @@ const App: React.FC = () => {
   };
 
   const deleteReplyFromPost = async (postId: string, reply: ForumReply) => {
-      // ... (Existing implementation) ...
       if (!db) return;
       try {
           const postRef = doc(db, "forumPosts", postId);
@@ -1074,7 +1044,6 @@ const App: React.FC = () => {
   };
 
   const handleReplyVote = async (postId: string, replyId: string) => {
-      // ... (Existing implementation) ...
       if (!user || !db) return;
       const postRef = doc(db, "forumPosts", postId);
       const snap = await getDoc(postRef);
@@ -1107,7 +1076,6 @@ const App: React.FC = () => {
   };
 
   const toggleVerifiedAnswer = async (postId: string, replyId: string) => {
-      // ... (Existing implementation) ...
       if (!db) return;
       const postRef = doc(db, "forumPosts", postId);
       const snap = await getDoc(postRef);
@@ -1125,7 +1093,7 @@ const App: React.FC = () => {
       }
   };
 
-  const addResourceRequest = async (reqData: { title: string; courseCode: string; details: string }, file?: File) => {
+  const addResourceRequest = async (reqData: { title: string; courseCode: string; details: string }) => {
       if (!user || !db) return;
       try {
           const newReq: Omit<ResourceRequest, 'id'> = {
@@ -1134,19 +1102,6 @@ const App: React.FC = () => {
               status: ResourceRequestStatus.Open,
               ...reqData
           };
-
-          if (file && storage) {
-              const storageRef = ref(storage, `request_attachments/${Date.now()}_${file.name}`);
-              await uploadBytes(storageRef, file);
-              const url = await getDownloadURL(storageRef);
-              newReq.attachment = {
-                  type: file.type.startsWith('image/') ? 'image' : 'file',
-                  url: url,
-                  name: file.name,
-                  size: (file.size / 1024).toFixed(0) + ' KB'
-              };
-          }
-
           const docRef = await addDoc(collection(db, "resourceRequests"), sanitizeForFirestore(newReq));
           earnPoints(5, "Request posted successfully!");
 
@@ -1170,7 +1125,6 @@ const App: React.FC = () => {
   };
 
   const deleteResourceRequest = async (requestId: string) => {
-      // ... (Existing implementation) ...
       if (!db) return;
       try {
           await deleteDoc(doc(db, "resourceRequests", requestId));
@@ -1181,7 +1135,6 @@ const App: React.FC = () => {
       }
   };
 
-  // ... (Rest of the functions: openUploadForRequest, toggles, profile update, messaging) ...
   const openUploadForRequest = (requestId: string) => {
       const req = resourceRequests.find(r => r.id === requestId);
       if (req) {
@@ -1239,6 +1192,24 @@ const App: React.FC = () => {
       if (data.name || data.avatarUrl || data.course) {
           propagateUserUpdates(user.id, sanitizeForFirestore(data));
       }
+  };
+
+  /**
+   * Deletes the user account doc from Firestore and signs the user out.
+   * This is required by ProfilePage.
+   */
+  const deleteAccount = async () => {
+    if (!user || !db || !auth) return;
+    try {
+        await deleteDoc(doc(db, "users", user.id));
+        await firebaseAuth.signOut(auth);
+        setUser(null);
+        setViewState('dashboard');
+        showToast("Account deleted successfully.", "info");
+    } catch (error) {
+        console.error("Error deleting account:", error);
+        showToast("Failed to delete account doc.", "error");
+    }
   };
 
   const sendMessage = async (conversationId: string, text: string) => {
@@ -1418,7 +1389,7 @@ const App: React.FC = () => {
       addForumPost, handlePostVote, deleteForumPost, addReplyToPost, handleReplyVote, deleteReplyFromPost, toggleVerifiedAnswer,
       addResourceRequest, deleteResourceRequest, openUploadForRequest,
       toggleUserSubscription, toggleLecturerSubscription, toggleCourseCodeSubscription,
-      updateUserProfile, sendMessage, editMessage, deleteMessage, startConversation, sendDirectMessageToUser, markNotificationAsRead, markAllNotificationsAsRead, markMessagesAsRead,
+      updateUserProfile, deleteAccount, sendMessage, editMessage, deleteMessage, startConversation, sendDirectMessageToUser, markNotificationAsRead, markAllNotificationsAsRead, markMessagesAsRead,
       clearAllNotifications,
       goBack, hasUnreadMessages, hasUnreadDiscussions,
       isLoading, deleteResource,

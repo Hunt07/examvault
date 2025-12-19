@@ -4,7 +4,7 @@ import type { User, Resource } from '../../types';
 import { ResourceRequestStatus } from '../../types';
 import { AppContext } from '../../App';
 import ResourceCard from '../ResourceCard';
-import { Award, UploadCloud, Calendar, MessageSquare as MessageSquareIcon, Edit, X, Save, ArrowLeft, UserPlus, UserMinus, ThumbsUp, MessageSquare, Clock, Loader2 } from 'lucide-react';
+import { Award, UploadCloud, Calendar, MessageSquare as MessageSquareIcon, Edit, X, Save, ArrowLeft, UserPlus, UserMinus, ThumbsUp, MessageSquare, Clock, Loader2, Trash2, AlertTriangle, LogOut } from 'lucide-react';
 import UserRankBadge from '../UserRankBadge';
 import Avatar from '../Avatar';
 import { storage } from '../../services/firebase';
@@ -29,7 +29,7 @@ const StatCard: React.FC<{ icon: React.ReactNode; label: string; value: string |
 );
 
 const ProfilePage: React.FC<ProfilePageProps> = ({ user, allResources, isCurrentUser }) => {
-    const { userRanks, setView, forumPosts, updateUserProfile, user: loggedInUser, goBack, toggleUserSubscription, startConversation, resourceRequests } = useContext(AppContext);
+    const { userRanks, setView, forumPosts, updateUserProfile, deleteAccount, user: loggedInUser, goBack, toggleUserSubscription, startConversation, resourceRequests } = useContext(AppContext);
 
     const [isEditing, setIsEditing] = useState(false);
     const [editedName, setEditedName] = useState(user.name);
@@ -39,6 +39,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, allResources, isCurrent
     const [editedYear, setEditedYear] = useState(user.currentYear);
     const [editedSemester, setEditedSemester] = useState(user.currentSemester);
     const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
     
     const userResources = useMemo(() => {
         return allResources.filter(resource => resource.author.id === user.id);
@@ -134,9 +136,19 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, allResources, isCurrent
         }
     };
 
+    const handleConfirmDelete = async () => {
+        setIsDeleting(true);
+        try {
+            await deleteAccount();
+        } finally {
+            setIsDeleting(false);
+            setIsDeleteModalOpen(false);
+        }
+    };
+
 
     return (
-        <div>
+        <div className="max-w-6xl mx-auto pb-12">
             {!isCurrentUser && (
                 <button onClick={goBack} className="flex items-center gap-2 text-primary-600 dark:text-primary-400 font-semibold hover:text-primary-800 dark:hover:text-primary-300 transition mb-6">
                     <ArrowLeft size={20} />
@@ -281,7 +293,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, allResources, isCurrent
 
             <div>
                 <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-6">{isCurrentUser ? "My Uploads" : `${user.name}'s Uploads`}</h2>
-                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {userResources.length > 0 ? (
                         userResources.map(resource => (
                             <ResourceCard 
@@ -341,7 +353,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, allResources, isCurrent
             </div>
 
             {isCurrentUser && (
-                <div className="mt-8">
+                <>
+                <div className="mt-8 mb-16">
                     <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-6">My Open Requests</h2>
                     {userOpenRequests.length > 0 ? (
                         <div className="space-y-4">
@@ -369,6 +382,74 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, allResources, isCurrent
                             <p className="text-slate-500 dark:text-slate-400">You have no open resource requests.</p>
                         </div>
                     )}
+                </div>
+
+                {/* Danger Zone */}
+                <div className="mt-16 border-t-2 border-red-100 dark:border-red-900/30 pt-8">
+                    <div className="flex items-center gap-2 mb-6">
+                        <AlertTriangle className="text-red-500" size={24} />
+                        <h2 className="text-2xl font-bold text-red-600 dark:text-red-500">Danger Zone</h2>
+                    </div>
+                    <div className="bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 rounded-xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                        <div>
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Delete Account</h3>
+                            <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">Once you delete your account, there is no going back. All your data will be permanently removed.</p>
+                        </div>
+                        <button 
+                            onClick={() => setIsDeleteModalOpen(true)}
+                            className="bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 px-6 rounded-lg transition shadow-md hover:shadow-lg flex items-center justify-center gap-2"
+                        >
+                            <Trash2 size={18} />
+                            Delete My Account
+                        </button>
+                    </div>
+                </div>
+                </>
+            )}
+
+            {/* Deletion Confirmation Modal */}
+            {isDeleteModalOpen && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
+                    <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-red-100 dark:border-red-900/30 animate-in zoom-in-95 duration-300">
+                        <div className="p-8 text-center">
+                            <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-6 text-red-600 dark:text-red-500">
+                                <AlertTriangle size={40} />
+                            </div>
+                            <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Are you absolutely sure?</h3>
+                            <p className="text-slate-600 dark:text-slate-400 mb-8 leading-relaxed">
+                                You are about to permanently delete your ExamVault account. 
+                                <br/><span className="font-bold text-red-600 dark:text-red-500">This action is irreversible.</span>
+                                <br/>All your reputation points, uploads, and posts will be removed from the community.
+                            </p>
+                            
+                            <div className="flex flex-col gap-3">
+                                <button 
+                                    onClick={handleConfirmDelete}
+                                    disabled={isDeleting}
+                                    className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-xl transition flex items-center justify-center gap-2 disabled:opacity-50"
+                                >
+                                    {isDeleting ? (
+                                        <>
+                                            <Loader2 size={20} className="animate-spin" />
+                                            Deleting...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <LogOut size={20} />
+                                            Confirm Permanent Deletion
+                                        </>
+                                    )}
+                                </button>
+                                <button 
+                                    onClick={() => setIsDeleteModalOpen(false)}
+                                    disabled={isDeleting}
+                                    className="w-full bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-white font-bold py-3 px-6 rounded-xl hover:bg-slate-200 dark:hover:bg-zinc-700 transition"
+                                >
+                                    Cancel, Keep my account
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

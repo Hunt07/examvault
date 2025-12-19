@@ -199,6 +199,13 @@ const App: React.FC = () => {
     return () => { unsubUsers(); unsubResources(); unsubPosts(); unsubRequests(); unsubConvos(); unsubMessages(); unsubNotifs(); unsubReports(); };
   }, [user?.id, user?.isAdmin]);
 
+  const userRanks = useMemo(() => {
+    const sorted = [...users].sort((a, b) => (b.points || 0) - (a.points || 0));
+    const ranks = new Map<string, number>();
+    sorted.forEach((u, index) => ranks.set(u.id, index));
+    return ranks;
+  }, [users]);
+
   const setView = (newView: View, id?: string, options?: { replace?: boolean }) => {
     if (!options?.replace) setViewHistory(prev => [...prev, { view: newView, id }]);
     setViewState(newView); setSelectedId(id); window.scrollTo(0, 0);
@@ -259,34 +266,74 @@ const App: React.FC = () => {
   const activePost = forumPosts.find(p => p.id === selectedId);
   const activeResource = resources.find(r => r.id === selectedId);
 
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('examvault_theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('examvault_theme', 'light');
+    }
+  }, [isDarkMode]);
+
   return (
     <AppContext.Provider value={{
       user, users, resources, forumPosts, notifications, conversations, directMessages, resourceRequests, reports,
       view, setView, logout, deleteAccount, isDarkMode, toggleDarkMode: () => setIsDarkMode(!isDarkMode),
-      userRanks: new Map(), savedResourceIds: user?.savedResourceIds || [], 
+      userRanks, savedResourceIds: user?.savedResourceIds || [], 
       toggleSaveResource: async (id) => {
         const isSaved = user?.savedResourceIds.includes(id);
         if (user) await updateDoc(doc(db, "users", user.id), { savedResourceIds: isSaved ? arrayRemove(id) : arrayUnion(id) });
       },
-      handleVote: () => {}, addCommentToResource: () => {}, handleCommentVote: () => {}, deleteCommentFromResource: async () => {},
-      addForumPost: () => {}, handlePostVote: () => {}, deleteForumPost: async () => {}, addReplyToPost: () => {},
-      handleReplyVote: () => {}, deleteReplyFromPost: async () => {}, toggleVerifiedAnswer: () => {},
-      addResourceRequest: () => {}, deleteResourceRequest: async () => {}, openUploadForRequest: () => {},
+      handleVote: () => {}, addCommentToResource: () => {}, handleCommentVote: () => {}, 
+      deleteCommentFromResource: async (rid, comment) => {
+          if (!user?.isAdmin && user?.id !== comment.author.id) return;
+          await updateDoc(doc(db, "resources", rid), { comments: arrayRemove(comment) });
+          showToast("Comment deleted", "info");
+      },
+      addForumPost: () => {}, handlePostVote: () => {}, 
+      deleteForumPost: async (pid) => {
+          if (!db) return;
+          await deleteDoc(doc(db, "forumPosts", pid));
+          showToast("Post deleted", "info");
+          setView('discussions');
+      }, 
+      addReplyToPost: () => {},
+      handleReplyVote: () => {}, 
+      deleteReplyFromPost: async (pid, reply) => {
+          if (!db) return;
+          await updateDoc(doc(db, "forumPosts", pid), { replies: arrayRemove(reply) });
+          showToast("Reply deleted", "info");
+      }, 
+      toggleVerifiedAnswer: () => {},
+      addResourceRequest: () => {}, 
+      deleteResourceRequest: async (rid) => {
+          if (!db) return;
+          await deleteDoc(doc(db, "resourceRequests", rid));
+          showToast("Request deleted", "info");
+      }, 
+      openUploadForRequest: () => {},
       toggleUserSubscription: () => {}, toggleLecturerSubscription: () => {}, toggleCourseCodeSubscription: () => {},
       updateUserProfile: () => {}, updateUserStatus, sendMessage: () => {}, editMessage: () => {}, deleteMessage: () => {},
       startConversation: () => {}, sendDirectMessageToUser: () => {}, markNotificationAsRead: () => {},
       markAllNotificationsAsRead: () => {}, clearAllNotifications: () => {}, markMessagesAsRead: () => {},
       resolveReport, goBack, hasUnreadMessages: false, hasUnreadDiscussions: false, isLoading, areResourcesLoading,
-      deleteResource: async (id) => { 
-        await deleteDoc(doc(db, "resources", id)); showToast("Deleted.", "info"); if (view === 'resourceDetail') setView('dashboard');
+      deleteResource: async (id, fileUrl, previewUrl) => { 
+        if (!db) return;
+        await deleteDoc(doc(db, "resources", id)); 
+        if (storage) {
+            try { if (fileUrl?.startsWith('http')) await deleteObject(ref(storage, fileUrl)); } catch(e) {}
+            try { if (previewUrl?.includes('firebasestorage')) await deleteObject(ref(storage, previewUrl)); } catch(e) {}
+        }
+        showToast("Deleted.", "info"); if (view === 'resourceDetail') setView('dashboard');
       },
       scrollTargetId, setScrollTargetId, showToast
     }}>
       <div className={`${isDarkMode ? 'dark' : ''} min-h-screen bg-slate-50 dark:bg-dark-bg transition-colors duration-300 flex flex-col`}>
         <Header onUploadClick={() => setIsUploadModalOpen(true)} />
-        <div className="flex flex-1">
+        <div className="flex flex-1 relative">
           <SideNav />
-          <main className="flex-1 ml-20 pt-4 px-4 md:px-8 pb-8 transition-all duration-300">
+          <main className="flex-1 ml-20 pt-4 px-4 md:px-8 pb-8 transition-all duration-300 min-h-[calc(100vh-5rem)]">
             {view === 'dashboard' && <DashboardPage />}
             {view === 'profile' && user && <ProfilePage user={user} allResources={resources} isCurrentUser={true} />}
             {view === 'publicProfile' && selectedId && <ProfilePage user={users.find(u => u.id === selectedId) || user!} allResources={resources} isCurrentUser={selectedId === user?.id} />}

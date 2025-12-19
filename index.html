@@ -1,6 +1,6 @@
 
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="h-full">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100' fill='none'%3E%3Ccircle cx='50' cy='50' r='50' fill='%232563eb'/%3E%3Cpath d='M28 34H46C50.4183 34 54 37.5817 54 42V72C54 69.7909 52.2091 68 50 68H28V34Z' stroke='white' stroke-width='6' stroke-linejoin='round'/%3E%3Cpath d='M72 34H54C49.5817 34 46 37.5817 46 42V72C46 69.7909 47.7909 68 50 68H72V34Z' stroke='white' stroke-width='6' stroke-linejoin='round'/%3E%3C/svg%3E" />
@@ -41,8 +41,12 @@
   }
 }
 </script>
+<style>
+  html, body, #root { height: 100%; margin: 0; }
+  body { overflow-x: hidden; }
+</style>
 </head>
-  <body class="bg-slate-50 dark:bg-dark-bg dark:text-slate-200 transition-colors duration-300">
+  <body class="bg-slate-50 dark:bg-dark-bg dark:text-slate-200 transition-colors duration-300 min-h-full">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>

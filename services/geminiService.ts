@@ -3,8 +3,6 @@ import { GoogleGenAI, Type } from "@google/genai";
 // @ts-ignore
 import JSZip from "jszip";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
     const binaryString = window.atob(base64);
     const len = binaryString.length;
@@ -98,7 +96,8 @@ export const summarizeContent = async ({
   mimeType,
   extractedText
 }: AIServiceParams): Promise<string> => {
-  if (!ai) return "Configuration Error: Gemini client not initialized.";
+  // Initialize inside function to ensure API key is available from polyfill/dialog
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   try {
     const systemInstruction = `You are an expert academic assistant. Your task is to analyze the provided study material and create a highly informative, concise summary for a university student, formatted in markdown. 
@@ -160,7 +159,8 @@ export const generateStudySet = async ({
   mimeType,
   extractedText
 }: StudySetParams): Promise<any> => {
-  if (!ai) return [];
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
   try {
     let promptText;
     let schema;

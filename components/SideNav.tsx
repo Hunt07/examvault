@@ -1,22 +1,19 @@
 
 import React, { useContext, useState } from 'react';
 import { AppContext, View } from '../App';
-import { LayoutDashboard, MessageSquare, BarChart3, Send, ClipboardList, ShieldAlert } from 'lucide-react';
+import { LayoutDashboard, MessageSquare, BarChart3, Send, ClipboardList } from 'lucide-react';
 
 const SideNav: React.FC = () => {
-    const { view, setView, user, hasUnreadMessages, hasUnreadDiscussions } = useContext(AppContext);
+    const { view, setView, hasUnreadMessages, hasUnreadDiscussions } = useContext(AppContext);
     const [isHovered, setIsHovered] = useState(false);
 
-    const navItems: { name: string; icon: React.ElementType; view: View; id: string; adminOnly?: boolean }[] = [
+    const navItems: { name: string; icon: React.ElementType; view: View; id: string }[] = [
         { name: 'Dashboard', icon: LayoutDashboard, view: 'dashboard', id: 'tour-dashboard' },
         { name: 'Discussions', icon: MessageSquare, view: 'discussions', id: 'tour-discussions' },
         { name: 'Requests', icon: ClipboardList, view: 'requests', id: 'tour-requests' },
         { name: 'Messages', icon: Send, view: 'messages', id: 'tour-messages' },
         { name: 'Leaderboard', icon: BarChart3, view: 'leaderboard', id: 'tour-leaderboard' },
-        { name: 'Admin Panel', icon: ShieldAlert, view: 'admin', id: 'tour-admin', adminOnly: true },
     ];
-
-    const filteredNavItems = navItems.filter(item => !item.adminOnly || user?.isAdmin);
 
     return (
         <aside 
@@ -26,7 +23,7 @@ const SideNav: React.FC = () => {
             onMouseLeave={() => setIsHovered(false)}
         >
             <nav className="flex flex-col gap-3 p-3 mt-4">
-                {filteredNavItems.map((item) => {
+                {navItems.map((item) => {
                     const hasUnread = (item.view === 'messages' && hasUnreadMessages) || (item.view === 'discussions' && hasUnreadDiscussions);
                     const isActive = view === item.view;
 

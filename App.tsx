@@ -15,14 +15,14 @@ import AdminPage from './components/pages/AdminPage';
 import SideNav from './components/SideNav';
 import Header from './components/Header';
 import UploadModal, { generateFilePreview } from './components/UploadModal';
-import TooltipGuide from './components/TooltipGuide';
 import ToastNotification from './components/ToastNotification';
+import TooltipGuide from './components/TooltipGuide';
 
 // Firebase Imports
 import { auth, db, storage } from './services/firebase';
 import * as firebaseAuth from 'firebase/auth';
 import { 
-  collection, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, getDocs,
+  collection, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc,
   onSnapshot, query, orderBy, arrayUnion, increment, where, arrayRemove, deleteField, writeBatch 
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
@@ -67,6 +67,7 @@ interface AppContextType {
   toggleLecturerSubscription: (lecturerName: string) => void;
   toggleCourseCodeSubscription: (courseCode: string) => void;
   updateUserProfile: (data: Partial<User>) => void;
+  updateUserStatus: (userId: string, status: 'active' | 'banned', reason?: string) => Promise<void>;
   sendMessage: (conversationId: string, text: string) => void;
   editMessage: (messageId: string, newText: string) => void;
   deleteMessage: (messageId: string) => void;
@@ -90,33 +91,20 @@ interface AppContextType {
 
 export const AppContext = React.createContext<AppContextType>({} as AppContextType);
 
-// ==========================================
-// ADMIN CONFIGURATION
-// ==========================================
 const MASTER_ADMIN_EMAILS = [
   'b09220024@student.unimy.edu.my', 
 ];
 
-const sanitizeForFirestore = (obj: any): any => {
-  return JSON.parse(JSON.stringify(obj));
-};
+const sanitizeForFirestore = (obj: any): any => JSON.parse(JSON.stringify(obj));
 
 const generateDefaultAvatar = (name: string): string => {
   const initial = name && name.length > 0 ? name.charAt(0).toUpperCase() : '?';
   const colors = ['#2563eb', '#db2777', '#ca8a04', '#16a34a', '#dc2626', '#7c3aed', '#0891b2', '#be123c'];
   let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
   const color = colors[Math.abs(hash) % colors.length];
-
-  const svgString = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
-      <rect width="100" height="100" fill="${color}"/>
-      <text x="50" y="65" font-family="Arial, sans-serif" font-size="50" font-weight="bold" fill="white" text-anchor="middle">${initial}</text>
-    </svg>
-  `.trim();
-  return `data:image/svg+xml;base64,${btoa(svgString)}`;
+  const svgString = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="${color}"/><text x="50" y="65" font-family="Arial, sans-serif" font-size="50" font-weight="bold" fill="white" text-anchor="middle">${initial}</text></svg>`;
+  return `data:image/svg+xml;base64,${btoa(svgString.trim())}`;
 };
 
 const App: React.FC = () => {
@@ -127,6 +115,7 @@ const App: React.FC = () => {
   const [viewHistory, setViewHistory] = useState<{ view: View; id?: string }[]>([]);
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
   const [scrollTargetId, setScrollTargetId] = useState<string | null>(null);
+  const [banError, setBanError] = useState<string | null>(null);
   
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const savedTheme = localStorage.getItem('examvault_theme');
@@ -158,13 +147,23 @@ const App: React.FC = () => {
           const userSnap = await getDoc(userRef);
           
           const email = firebaseUser.email || "";
-          const shouldBeAdmin = MASTER_ADMIN_EMAILS.includes(email) || !email.includes('student.'); 
+          const isPermittedAdmin = MASTER_ADMIN_EMAILS.includes(email) || !email.includes('student.'); 
 
           if (userSnap.exists()) {
             const userData = userSnap.data() as User;
-            if (userData.isAdmin !== shouldBeAdmin) {
-                await updateDoc(userRef, { isAdmin: shouldBeAdmin });
-                userData.isAdmin = shouldBeAdmin;
+            
+            // Check for ban status
+            if (userData.status === 'banned') {
+              setBanError(`This account has been restricted: ${userData.banReason || 'No reason specified.'}`);
+              await firebaseAuth.signOut(auth);
+              setUser(null);
+              setIsLoading(false);
+              return;
+            }
+
+            if (userData.isAdmin !== isPermittedAdmin) {
+                await updateDoc(userRef, { isAdmin: isPermittedAdmin });
+                userData.isAdmin = isPermittedAdmin;
             }
             setUser(userData);
           } else {
@@ -184,7 +183,8 @@ const App: React.FC = () => {
               currentSemester: 1,
               subscriptions: { users: [], lecturers: [], courseCodes: [] },
               savedResourceIds: [],
-              isAdmin: shouldBeAdmin
+              isAdmin: isPermittedAdmin,
+              status: 'active'
             };
             await setDoc(userRef, newUser);
             setUser(newUser);
@@ -245,7 +245,6 @@ const App: React.FC = () => {
     };
   }, [user?.id, user?.isAdmin]);
 
-  // Apply dark mode class to HTML element for Tailwind's dark: selector
   useEffect(() => {
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
@@ -283,18 +282,13 @@ const App: React.FC = () => {
   const deleteAccount = async () => {
     if (!user || !auth.currentUser || !db) return;
     try {
-      const userId = user.id;
-      await deleteDoc(doc(db, "users", userId));
+      await deleteDoc(doc(db, "users", user.id));
       await firebaseAuth.deleteUser(auth.currentUser);
       setUser(null);
       setViewState('dashboard');
-      showToast("Account permanently deleted.", "info");
+      showToast("Account deleted.", "info");
     } catch (error: any) {
-      if (error.code === 'auth/requires-recent-login') {
-        showToast("Session expired. Please log out and back in.", "error");
-      } else {
-        showToast("Error deleting account.", "error");
-      }
+      showToast("Session expired. Please log out and back in.", "error");
     }
   };
 
@@ -304,6 +298,12 @@ const App: React.FC = () => {
     showToast(`Report ${status}`, "info");
   };
 
+  const updateUserStatus = async (userId: string, status: 'active' | 'banned', reason?: string) => {
+    if (!db || !user?.isAdmin) return;
+    await updateDoc(doc(db, "users", userId), { status, banReason: reason || "" });
+    showToast(`User ${status === 'banned' ? 'restricted' : 'activated'}`, "success");
+  };
+
   const handleUpload = async (resourceData: any, file: File, coverImage: File | null) => {
     if (!user) return;
     setIsUploading(true);
@@ -311,7 +311,6 @@ const App: React.FC = () => {
         const storageRef = ref(storage, `resources/${Date.now()}_${file.name}`);
         await uploadBytes(storageRef, file);
         const downloadURL = await getDownloadURL(storageRef);
-        
         let previewUrl = coverImage ? await (async () => {
             const coverRef = ref(storage, `covers/${Date.now()}_${coverImage.name}`);
             await uploadBytes(coverRef, coverImage);
@@ -343,9 +342,21 @@ const App: React.FC = () => {
   }, [users]);
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg"><Loader2 className="animate-spin text-primary-600" size={48} /></div>;
-  if (!user) return <AuthPage onLogin={() => {}} />;
+  
+  if (!user) return <div className="min-h-screen">
+    <AuthPage onLogin={() => {}} />
+    {banError && (
+      <div className="fixed inset-0 bg-black/60 z-[999] flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-zinc-800 p-8 rounded-xl shadow-2xl border-t-4 border-red-500 max-w-md text-center">
+          <AlertCircle size={48} className="text-red-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Access Denied</h2>
+          <p className="text-slate-600 dark:text-slate-300 mb-6">{banError}</p>
+          <button onClick={() => setBanError(null)} className="bg-primary-600 text-white font-bold py-2 px-6 rounded-lg">Dismiss</button>
+        </div>
+      </div>
+    )}
+  </div>;
 
-  // Data finding logic for details pages
   const activePost = forumPosts.find(p => p.id === selectedId);
   const activeResource = resources.find(r => r.id === selectedId);
 
@@ -358,17 +369,52 @@ const App: React.FC = () => {
         const isSaved = user.savedResourceIds.includes(id);
         await updateDoc(doc(db, "users", user.id), { savedResourceIds: isSaved ? arrayRemove(id) : arrayUnion(id) });
       },
-      handleVote: () => {}, addCommentToResource: () => {}, handleCommentVote: () => {}, deleteCommentFromResource: async () => {},
-      addForumPost: () => {}, handlePostVote: () => {}, deleteForumPost: async () => {}, addReplyToPost: () => {},
-      handleReplyVote: () => {}, deleteReplyFromPost: async () => {}, toggleVerifiedAnswer: () => {},
-      addResourceRequest: () => {}, deleteResourceRequest: async () => {}, openUploadForRequest: () => {},
-      toggleUserSubscription: () => {}, toggleLecturerSubscription: () => {}, toggleCourseCodeSubscription: () => {},
-      updateUserProfile: () => {}, sendMessage: () => {}, editMessage: () => {}, deleteMessage: () => {},
-      startConversation: () => {}, sendDirectMessageToUser: () => {}, markNotificationAsRead: () => {},
-      markAllNotificationsAsRead: () => {}, clearAllNotifications: () => {}, markMessagesAsRead: () => {},
+      handleVote: async (id, act) => {}, 
+      addCommentToResource: async (id, txt, par) => {}, 
+      handleCommentVote: async (id, cid) => {},
+      deleteCommentFromResource: async (rid, c) => {
+        if (!user.isAdmin && user.id !== c.author.id) return;
+        await updateDoc(doc(db, "resources", rid), { comments: arrayRemove(c) });
+        showToast("Comment deleted", "success");
+      },
+      addForumPost: async (p) => {}, 
+      handlePostVote: async (id, act) => {},
+      deleteForumPost: async (id) => {
+          await deleteDoc(doc(db, "forumPosts", id));
+          showToast("Post deleted", "success");
+          setView('discussions');
+      },
+      addReplyToPost: async (id, txt, par, f) => {}, 
+      handleReplyVote: async (id, rid) => {},
+      deleteReplyFromPost: async (pid, r) => {
+          if (!user.isAdmin && user.id !== r.author.id) return;
+          await updateDoc(doc(db, "forumPosts", pid), { replies: arrayRemove(r) });
+          showToast("Reply deleted", "success");
+      },
+      toggleVerifiedAnswer: async (id, rid) => {},
+      addResourceRequest: async (r) => {}, 
+      deleteResourceRequest: async (id) => {
+          await deleteDoc(doc(db, "resourceRequests", id));
+          showToast("Request deleted", "success");
+      },
+      openUploadForRequest: (id) => {},
+      toggleUserSubscription: (id) => {}, 
+      toggleLecturerSubscription: (l) => {}, 
+      toggleCourseCodeSubscription: (c) => {},
+      updateUserProfile: (d) => {}, 
+      updateUserStatus,
+      sendMessage: (cid, txt) => {}, 
+      editMessage: (mid, txt) => {}, 
+      deleteMessage: (mid) => {},
+      startConversation: (id, txt) => {}, 
+      sendDirectMessageToUser: (id, txt) => {}, 
+      markNotificationAsRead: (id) => {},
+      markAllNotificationsAsRead: () => {}, 
+      clearAllNotifications: () => {}, 
+      markMessagesAsRead: (cid) => {},
       resolveReport,
       goBack, hasUnreadMessages: false, hasUnreadDiscussions: false, isLoading, areResourcesLoading,
-      deleteResource: async (id) => { 
+      deleteResource: async (id, f, p) => { 
         await deleteDoc(doc(db, "resources", id)); 
         showToast("Deleted.", "info"); 
         if (view === 'resourceDetail') setView('dashboard');
@@ -382,34 +428,16 @@ const App: React.FC = () => {
           <main className="flex-1 ml-20 pt-4 px-4 md:px-8 pb-8 transition-all duration-300">
             {view === 'dashboard' && <DashboardPage />}
             {view === 'profile' && <ProfilePage user={user} allResources={resources} isCurrentUser={true} />}
-            {view === 'publicProfile' && selectedId && (
-                <ProfilePage 
-                    user={users.find(u => u.id === selectedId) || user} 
-                    allResources={resources} 
-                    isCurrentUser={selectedId === user.id} 
-                />
-            )}
-            
-            {/* Improved Detail View Logic with Loaders to prevent crashes */}
-            {view === 'resourceDetail' && (
-                activeResource ? <ResourceDetailPage resource={activeResource} /> : 
-                <div className="flex flex-col items-center justify-center py-20"><Loader2 className="animate-spin text-primary-500 mb-4" size={40} /><p className="text-slate-500">Loading resource...</p></div>
-            )}
-            
+            {view === 'publicProfile' && selectedId && <ProfilePage user={users.find(u => u.id === selectedId) || user} allResources={resources} isCurrentUser={selectedId === user.id} />}
+            {view === 'resourceDetail' && (activeResource ? <ResourceDetailPage resource={activeResource} /> : <Loader2 className="animate-spin m-auto" />)}
             {view === 'discussions' && <DiscussionsPage />}
-            
-            {view === 'forumDetail' && (
-                activePost ? <ForumPostDetailPage post={activePost} /> : 
-                <div className="flex flex-col items-center justify-center py-20"><Loader2 className="animate-spin text-primary-500 mb-4" size={40} /><p className="text-slate-500">Loading discussion...</p></div>
-            )}
-            
+            {view === 'forumDetail' && (activePost ? <ForumPostDetailPage post={activePost} /> : <Loader2 className="animate-spin m-auto" />)}
             {view === 'requests' && <ResourceRequestsPage />}
             {view === 'messages' && <MessagesPage activeConversationId={selectedId || null} />}
             {view === 'leaderboard' && <LeaderboardPage />}
             {view === 'admin' && user.isAdmin && <AdminPage />}
           </main>
         </div>
-        
         {isUploadModalOpen && <UploadModal onClose={() => setIsUploadModalOpen(false)} onUpload={handleUpload} isLoading={isUploading} />}
         {toast && <ToastNotification message={toast.message} points={toast.points} type={toast.type} onClose={() => setToast(null)} />}
       </div>

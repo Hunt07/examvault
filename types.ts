@@ -14,7 +14,9 @@ export interface User {
   currentSemester: number;
   subscriptions: UserSubscriptions;
   savedResourceIds: string[];
-  isAdmin?: boolean; // New flag for administrative access
+  isAdmin?: boolean;
+  status?: 'active' | 'banned';
+  banReason?: string;
 }
 
 export interface UserSubscriptions {
@@ -79,7 +81,6 @@ export interface Resource {
   contentForAI: string; 
 }
 
-// Moderation System Types
 export enum ReportStatus {
   Pending = 'pending',
   Resolved = 'resolved',

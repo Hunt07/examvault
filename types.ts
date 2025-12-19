@@ -14,12 +14,13 @@ export interface User {
   currentSemester: number;
   subscriptions: UserSubscriptions;
   savedResourceIds: string[];
+  isAdmin?: boolean; // New flag for administrative access
 }
 
 export interface UserSubscriptions {
-  users: string[]; // array of user IDs
-  lecturers: string[]; // array of lecturer names
-  courseCodes: string[]; // array of course codes
+  users: string[]; 
+  lecturers: string[];
+  courseCodes: string[];
 }
 
 export enum ResourceType {
@@ -62,11 +63,12 @@ export interface Resource {
   semester: SemesterIntake;
   examType?: ExamType;
   description: string;
-  fileUrl: string; // URL to PDF/image
-  fileName: string; // Original name of the uploaded file
-  fileBase64?: string; // Base64 data for AI analysis
-  mimeType?: string; // Mime type for AI analysis
-  previewImageUrl: string; // URL for a thumbnail
+  fileUrl: string; 
+  fileName: string; 
+  fileBase64?: string;
+  extractedText?: string;
+  mimeType?: string;
+  previewImageUrl: string;
   author: User;
   uploadDate: string;
   upvotes: number;
@@ -74,7 +76,27 @@ export interface Resource {
   upvotedBy: string[];
   downvotedBy: string[];
   comments: Comment[];
-  contentForAI: string; // Mock text content for Gemini (fallback)
+  contentForAI: string; 
+}
+
+// Moderation System Types
+export enum ReportStatus {
+  Pending = 'pending',
+  Resolved = 'resolved',
+  Dismissed = 'dismissed'
+}
+
+export interface CommunityReport {
+  id: string;
+  resourceId: string;
+  resourceTitle: string;
+  uploaderId: string;
+  uploaderName: string;
+  reporterId: string;
+  reporterName: string;
+  reason: string;
+  timestamp: string;
+  status: ReportStatus;
 }
 
 export interface Attachment {
@@ -158,7 +180,7 @@ export interface DirectMessage {
 
 export interface Conversation {
   id: string;
-  participants: [string, string]; // Array of two user IDs
+  participants: [string, string]; 
   lastMessageTimestamp: string;
 }
 

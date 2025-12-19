@@ -90,10 +90,11 @@ interface AppContextType {
 
 export const AppContext = React.createContext<AppContextType>({} as AppContextType);
 
-// --- ADMIN CONFIGURATION ---
-// Add your university email here to become the Master Admin
+// ==========================================
+// ADMIN CONFIGURATION - YOUR EMAIL IS HERE
+// ==========================================
 const MASTER_ADMIN_EMAILS = [
-  'Osama@unimy.edu.my', // Put your email here!
+  'b09220024@student.unimy.edu.my', // Your account is now designated as Admin
 ];
 
 const sanitizeForFirestore = (obj: any): any => {
@@ -157,19 +158,16 @@ const App: React.FC = () => {
           const userRef = doc(db, "users", firebaseUser.uid);
           const userSnap = await getDoc(userRef);
           
-          // Logic to check if user should be an admin
           const email = firebaseUser.email || "";
+          // Check if user is in master list or is staff (doesn't have 'student.' in domain)
           const shouldBeAdmin = MASTER_ADMIN_EMAILS.includes(email) || !email.includes('student.'); 
 
           if (userSnap.exists()) {
             const userData = userSnap.data() as User;
-            
-            // Sync admin status if it needs updating
             if (userData.isAdmin !== shouldBeAdmin) {
                 await updateDoc(userRef, { isAdmin: shouldBeAdmin });
                 userData.isAdmin = shouldBeAdmin;
             }
-            
             setUser(userData);
           } else {
             const displayName = firebaseUser.displayName || "Student";
@@ -177,7 +175,7 @@ const App: React.FC = () => {
               id: firebaseUser.uid,
               name: displayName,
               email: email,
-              avatarUrl: generateDefaultAvatar(firebaseUser.displayName || "S"),
+              avatarUrl: generateDefaultAvatar(displayName),
               joinDate: new Date().toISOString(),
               bio: "Academic explorer on ExamVault.",
               points: 0,
@@ -237,7 +235,6 @@ const App: React.FC = () => {
       setNotifications(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Notification)));
     });
 
-    // Admin only subscriptions
     let unsubReports = () => {};
     if (user.isAdmin) {
        unsubReports = onSnapshot(query(collection(db, "reports"), orderBy("timestamp", "desc")), (snapshot) => {
@@ -368,7 +365,8 @@ const App: React.FC = () => {
       <div className={`${isDarkMode ? 'dark' : ''} min-h-screen bg-slate-50 dark:bg-dark-bg transition-colors duration-300`}>
         <Header onUploadClick={() => setIsUploadModalOpen(true)} />
         <SideNav />
-        <main className="ml-20 pt-4 px-4 md:px-8 pb-8 max-w-7xl mx-auto">
+        {/* Main layout: fills width properly with ml-20 and allows dashboard to scale */}
+        <main className="ml-20 pt-4 px-4 md:px-8 pb-8 transition-all duration-300">
           {view === 'dashboard' && <DashboardPage />}
           {view === 'profile' && <ProfilePage user={user} allResources={resources} isCurrentUser={true} />}
           {view === 'publicProfile' && selectedId && <ProfilePage user={users.find(u => u.id === selectedId) || user} allResources={resources} isCurrentUser={selectedId === user.id} />}

@@ -91,10 +91,10 @@ interface AppContextType {
 export const AppContext = React.createContext<AppContextType>({} as AppContextType);
 
 // ==========================================
-// ADMIN CONFIGURATION - YOUR EMAIL IS HERE
+// ADMIN CONFIGURATION
 // ==========================================
 const MASTER_ADMIN_EMAILS = [
-  'b09220024@student.unimy.edu.my', // Your account is now designated as Admin
+  'b09220024@student.unimy.edu.my', 
 ];
 
 const sanitizeForFirestore = (obj: any): any => {
@@ -144,7 +144,6 @@ const App: React.FC = () => {
   
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [fulfillingRequest, setFulfillingRequest] = useState<ResourceRequest | undefined>(undefined);
   const [toast, setToast] = useState<{ message: string; points?: number; type?: 'success' | 'error' | 'info' } | null>(null);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info', points?: number) => {
@@ -159,7 +158,6 @@ const App: React.FC = () => {
           const userSnap = await getDoc(userRef);
           
           const email = firebaseUser.email || "";
-          // Check if user is in master list or is staff (doesn't have 'student.' in domain)
           const shouldBeAdmin = MASTER_ADMIN_EMAILS.includes(email) || !email.includes('student.'); 
 
           if (userSnap.exists()) {
@@ -247,6 +245,17 @@ const App: React.FC = () => {
     };
   }, [user?.id, user?.isAdmin]);
 
+  // Apply dark mode class to HTML element for Tailwind's dark: selector
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('examvault_theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('examvault_theme', 'light');
+    }
+  }, [isDarkMode]);
+
   const setView = (newView: View, id?: string, options?: { replace?: boolean }) => {
     if (!options?.replace) setViewHistory(prev => [...prev, { view: newView, id }]);
     setViewState(newView);
@@ -282,7 +291,7 @@ const App: React.FC = () => {
       showToast("Account permanently deleted.", "info");
     } catch (error: any) {
       if (error.code === 'auth/requires-recent-login') {
-        showToast("Session expired. Please log out and back in to delete account.", "error");
+        showToast("Session expired. Please log out and back in.", "error");
       } else {
         showToast("Error deleting account.", "error");
       }
@@ -336,6 +345,10 @@ const App: React.FC = () => {
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg"><Loader2 className="animate-spin text-primary-600" size={48} /></div>;
   if (!user) return <AuthPage onLogin={() => {}} />;
 
+  // Data finding logic for details pages
+  const activePost = forumPosts.find(p => p.id === selectedId);
+  const activeResource = resources.find(r => r.id === selectedId);
+
   return (
     <AppContext.Provider value={{
       user, users, resources, forumPosts, notifications, conversations, directMessages, resourceRequests, reports,
@@ -362,21 +375,41 @@ const App: React.FC = () => {
       },
       scrollTargetId, setScrollTargetId, showToast
     }}>
-      <div className={`${isDarkMode ? 'dark' : ''} min-h-screen bg-slate-50 dark:bg-dark-bg transition-colors duration-300`}>
+      <div className={`${isDarkMode ? 'dark' : ''} min-h-screen bg-slate-50 dark:bg-dark-bg transition-colors duration-300 flex flex-col`}>
         <Header onUploadClick={() => setIsUploadModalOpen(true)} />
-        <SideNav />
-        {/* Main layout: fills width properly with ml-20 and allows dashboard to scale */}
-        <main className="ml-20 pt-4 px-4 md:px-8 pb-8 transition-all duration-300">
-          {view === 'dashboard' && <DashboardPage />}
-          {view === 'profile' && <ProfilePage user={user} allResources={resources} isCurrentUser={true} />}
-          {view === 'publicProfile' && selectedId && <ProfilePage user={users.find(u => u.id === selectedId) || user} allResources={resources} isCurrentUser={selectedId === user.id} />}
-          {view === 'resourceDetail' && selectedId && <ResourceDetailPage resource={resources.find(r => r.id === selectedId) || resources[0]} />}
-          {view === 'discussions' && <DiscussionsPage />}
-          {view === 'requests' && <ResourceRequestsPage />}
-          {view === 'messages' && <MessagesPage activeConversationId={selectedId || null} />}
-          {view === 'leaderboard' && <LeaderboardPage />}
-          {view === 'admin' && user.isAdmin && <AdminPage />}
-        </main>
+        <div className="flex flex-1">
+          <SideNav />
+          <main className="flex-1 ml-20 pt-4 px-4 md:px-8 pb-8 transition-all duration-300">
+            {view === 'dashboard' && <DashboardPage />}
+            {view === 'profile' && <ProfilePage user={user} allResources={resources} isCurrentUser={true} />}
+            {view === 'publicProfile' && selectedId && (
+                <ProfilePage 
+                    user={users.find(u => u.id === selectedId) || user} 
+                    allResources={resources} 
+                    isCurrentUser={selectedId === user.id} 
+                />
+            )}
+            
+            {/* Improved Detail View Logic with Loaders to prevent crashes */}
+            {view === 'resourceDetail' && (
+                activeResource ? <ResourceDetailPage resource={activeResource} /> : 
+                <div className="flex flex-col items-center justify-center py-20"><Loader2 className="animate-spin text-primary-500 mb-4" size={40} /><p className="text-slate-500">Loading resource...</p></div>
+            )}
+            
+            {view === 'discussions' && <DiscussionsPage />}
+            
+            {view === 'forumDetail' && (
+                activePost ? <ForumPostDetailPage post={activePost} /> : 
+                <div className="flex flex-col items-center justify-center py-20"><Loader2 className="animate-spin text-primary-500 mb-4" size={40} /><p className="text-slate-500">Loading discussion...</p></div>
+            )}
+            
+            {view === 'requests' && <ResourceRequestsPage />}
+            {view === 'messages' && <MessagesPage activeConversationId={selectedId || null} />}
+            {view === 'leaderboard' && <LeaderboardPage />}
+            {view === 'admin' && user.isAdmin && <AdminPage />}
+          </main>
+        </div>
+        
         {isUploadModalOpen && <UploadModal onClose={() => setIsUploadModalOpen(false)} onUpload={handleUpload} isLoading={isUploading} />}
         {toast && <ToastNotification message={toast.message} points={toast.points} type={toast.type} onClose={() => setToast(null)} />}
       </div>

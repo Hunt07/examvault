@@ -90,6 +90,12 @@ interface AppContextType {
 
 export const AppContext = React.createContext<AppContextType>({} as AppContextType);
 
+// --- ADMIN CONFIGURATION ---
+// Add your university email here to become the Master Admin
+const MASTER_ADMIN_EMAILS = [
+  'Osama@unimy.edu.my', // Put your email here!
+];
+
 const sanitizeForFirestore = (obj: any): any => {
   return JSON.parse(JSON.stringify(obj));
 };
@@ -150,13 +156,27 @@ const App: React.FC = () => {
         try {
           const userRef = doc(db, "users", firebaseUser.uid);
           const userSnap = await getDoc(userRef);
+          
+          // Logic to check if user should be an admin
+          const email = firebaseUser.email || "";
+          const shouldBeAdmin = MASTER_ADMIN_EMAILS.includes(email) || !email.includes('student.'); 
+
           if (userSnap.exists()) {
-            setUser(userSnap.data() as User);
+            const userData = userSnap.data() as User;
+            
+            // Sync admin status if it needs updating
+            if (userData.isAdmin !== shouldBeAdmin) {
+                await updateDoc(userRef, { isAdmin: shouldBeAdmin });
+                userData.isAdmin = shouldBeAdmin;
+            }
+            
+            setUser(userData);
           } else {
+            const displayName = firebaseUser.displayName || "Student";
             const newUser: User = {
               id: firebaseUser.uid,
-              name: firebaseUser.displayName || "Student",
-              email: firebaseUser.email || "",
+              name: displayName,
+              email: email,
               avatarUrl: generateDefaultAvatar(firebaseUser.displayName || "S"),
               joinDate: new Date().toISOString(),
               bio: "Academic explorer on ExamVault.",
@@ -168,7 +188,7 @@ const App: React.FC = () => {
               currentSemester: 1,
               subscriptions: { users: [], lecturers: [], courseCodes: [] },
               savedResourceIds: [],
-              isAdmin: false // Defaults to standard user
+              isAdmin: shouldBeAdmin
             };
             await setDoc(userRef, newUser);
             setUser(newUser);

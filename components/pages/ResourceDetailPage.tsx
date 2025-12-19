@@ -275,7 +275,14 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     }
     let textContext = `Title: ${resource.title}\nCourse: ${resource.courseCode}\nType: ${resource.type}\n`;
     if (!base64 && !resource.extractedText && resource.fileUrl === '#') textContext += `\n[Mock Content]:\n${resource.contentForAI}`;
-    const result = await summarizeContent(textContext, base64, resource.mimeType, resource.extractedText);
+    
+    // Using object params to fix build error
+    const result = await summarizeContent({ 
+      content: textContext, 
+      fileBase64: base64, 
+      mimeType: resource.mimeType, 
+      extractedText: resource.extractedText 
+    });
     setSummary(result); setIsSummarizing(false);
   };
 
@@ -291,7 +298,14 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     }
     let textContext = `Title: ${resource.title}\nCourse: ${resource.courseCode}\nType: ${resource.type}\n`;
     if (!base64 && !resource.extractedText && resource.fileUrl === '#') textContext += `\n[Mock Content]:\n${resource.contentForAI}`;
-    const result = await summarizeContent(textContext, base64, resource.mimeType, resource.extractedText);
+    
+    // Using object params to fix build error
+    const result = await summarizeContent({ 
+      content: textContext, 
+      fileBase64: base64, 
+      mimeType: resource.mimeType, 
+      extractedText: resource.extractedText 
+    });
     setAiGeneratedPreview(result); setIsGeneratingPreview(false);
   };
 
@@ -305,7 +319,15 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     }
     let textContext = `Title: ${resource.title}\nCourse: ${resource.courseCode}\nType: ${resource.type}\n`;
     if (!base64 && !resource.extractedText && resource.fileUrl === '#') textContext += `\n[Mock Content]:\n${resource.contentForAI}`;
-    const result = await generateStudySet(textContext, type, base64, resource.mimeType, resource.extractedText);
+    
+    // Using object params to fix build error
+    const result = await generateStudySet({ 
+      content: textContext, 
+      setType: type, 
+      fileBase64: base64, 
+      mimeType: resource.mimeType, 
+      extractedText: resource.extractedText 
+    });
     setStudySet(result); setIsGeneratingStudySet(false);
   };
 
@@ -314,23 +336,6 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     if (newComment.trim() && user) {
       addCommentToResource(resource.id, newComment, null);
       setNewComment('');
-    }
-  };
-
-  const handleSubmitReport = async () => {
-    if (reportReason.trim() !== "") {
-      await addDoc(collection(db, "reports"), {
-          resourceId: resource.id,
-          resourceTitle: resource.title,
-          uploaderId: resource.author.id,
-          uploaderName: resource.author.name,
-          reporterId: user?.id || 'anonymous',
-          reporterName: user?.name || 'Anonymous',
-          reason: reportReason,
-          timestamp: new Date().toISOString(),
-          status: 'pending'
-      });
-      setIsReporting(false); setReportReason(''); setHasReported(true);
     }
   };
 

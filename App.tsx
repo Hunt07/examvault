@@ -16,6 +16,7 @@ import Header from './components/Header';
 import UploadModal, { generateFilePreview } from './components/UploadModal';
 import TooltipGuide from './components/TooltipGuide';
 import ToastNotification from './components/ToastNotification';
+import { extractTextFromDocx, extractTextFromPptx } from './services/geminiService';
 
 // Firebase Imports
 import { auth, db, storage } from './services/firebase';
@@ -41,6 +42,7 @@ interface AppContextType {
   view: View;
   setView: (view: View, id?: string, options?: { replace?: boolean }) => void;
   logout: () => void;
+  deleteAccount: () => Promise<void>;
   isDarkMode: boolean;
   toggleDarkMode: () => void;
   userRanks: Map<string, number>;
@@ -86,11 +88,12 @@ interface AppContextType {
 
 export const AppContext = React.createContext<AppContextType>({} as AppContextType);
 
-// ... (Rest of the helper functions remain the same) ...
+// Helper to remove undefined values which Firestore hates
 const sanitizeForFirestore = (obj: any): any => {
   return JSON.parse(JSON.stringify(obj));
 };
 
+// Generate a default SVG avatar with the user's first initial
 const generateDefaultAvatar = (name: string): string => {
   const initial = name && name.length > 0 ? name.charAt(0).toUpperCase() : '?';
   const colors = ['#2563eb', '#db2777', '#ca8a04', '#16a34a', '#dc2626', '#7c3aed', '#0891b2', '#be123c'];
@@ -109,6 +112,7 @@ const generateDefaultAvatar = (name: string): string => {
   return `data:image/svg+xml;base64,${btoa(svgString)}`;
 };
 
+// Extracted Helper for Deep Profile Propagation
 const propagateUserUpdates = async (userId: string, updateData: any) => {
     // 1. Propagate to Resources (Author field)
     const resQuery = query(collection(db!, "resources"), where("author.id", "==", userId));
@@ -184,7 +188,6 @@ const propagateUserUpdates = async (userId: string, updateData: any) => {
 };
 
 const App: React.FC = () => {
-  // ... (State declarations remain the same) ...
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [areResourcesLoading, setAreResourcesLoading] = useState(true);
@@ -222,7 +225,6 @@ const App: React.FC = () => {
   const [runTour, setRunTour] = useState(false);
   const [tourStep, setTourStep] = useState(0);
 
-  // ... (Effects for Auth and Data Loading remain the same) ...
   useEffect(() => {
     if (!auth || !db) {
         setIsLoading(false);
@@ -318,7 +320,6 @@ const App: React.FC = () => {
     setAreResourcesLoading(true);
 
     const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
-      // ... (Existing User snapshot logic) ...
       const fetchedUsers: User[] = [];
       const batch = writeBatch(db!);
       let needsCommit = false;
@@ -408,7 +409,6 @@ const App: React.FC = () => {
     };
   }, [user?.id]);
 
-  // ... (sendNotification and message useEffects remain the same) ...
   const sendNotification = async (recipientId: string, senderId: string, type: NotificationType, message: string, linkIds?: { resourceId?: string, forumPostId?: string, conversationId?: string, commentId?: string, replyId?: string, requestId?: string }) => {
       if (recipientId === user?.id || !db) return;
 
@@ -456,7 +456,6 @@ const App: React.FC = () => {
       }
   }, [directMessages, user]);
 
-  // ... (Tour logic remains the same) ...
   useEffect(() => {
     if (user && !isLoading) {
       const hasSeenTour = localStorage.getItem(`examvault_tour_${user.id}`);
@@ -488,7 +487,6 @@ const App: React.FC = () => {
     { selector: 'body', content: "You're all set! Happy Studying!" },
   ];
 
-  // ... (Theme logic remains the same) ...
   useEffect(() => {
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
@@ -499,7 +497,6 @@ const App: React.FC = () => {
     }
   }, [isDarkMode]);
 
-  // ... (Navigation, Login, Logout, Vote, Comment logic remains the same) ...
   const setView = (newView: View, id?: string, options?: { replace?: boolean }) => {
     if (!options?.replace) {
         setViewHistory(prev => [...prev, { view: newView, id }]);
@@ -531,6 +528,32 @@ const App: React.FC = () => {
     setUser(null);
     setViewState('dashboard');
     setViewHistory([]);
+  };
+
+  const deleteAccount = async () => {
+    if (!user || !auth.currentUser || !db) return;
+
+    try {
+      const userId = user.id;
+      // 1. Delete Firestore user document
+      await deleteDoc(doc(db, "users", userId));
+
+      // 2. Delete Auth User
+      await firebaseAuth.deleteUser(auth.currentUser);
+
+      // 3. Reset application state
+      setUser(null);
+      setViewState('dashboard');
+      setViewHistory([]);
+      showToast("Your account has been permanently deleted.", "info");
+    } catch (error: any) {
+      console.error("Failed to delete account:", error);
+      if (error.code === 'auth/requires-recent-login') {
+        showToast("For security, please log out and sign in again before deleting your account.", "error");
+      } else {
+        showToast("Failed to delete account. Please try again.", "error");
+      }
+    }
   };
 
   const toggleSaveResource = async (resourceId: string) => {
@@ -573,7 +596,6 @@ const App: React.FC = () => {
   };
 
   const handleUpload = async (resourceData: any, file: File, coverImage: File | null) => {
-      // ... (Existing implementation) ...
       if (!user || !db || !storage) {
           showToast("Upload service not initialized.", "error");
           return;
@@ -598,10 +620,19 @@ const App: React.FC = () => {
           }
 
           let fileBase64 = '';
+          let extractedText = '';
+
           try {
             fileBase64 = await fileToBase64(file);
+            
+            // Text extraction logic
+            if (file.name.endsWith('.docx') || file.type.includes('wordprocessingml')) {
+                extractedText = await extractTextFromDocx(fileBase64);
+            } else if (file.name.endsWith('.pptx') || file.type.includes('presentationml')) {
+                extractedText = await extractTextFromPptx(fileBase64);
+            }
           } catch (e) {
-            console.warn("Failed to convert file to base64, AI features may be limited", e);
+            console.warn("Failed to process file locally", e);
           }
 
           const newResource: Omit<Resource, 'id'> = {
@@ -616,9 +647,9 @@ const App: React.FC = () => {
               fileUrl: downloadURL,
               fileName: file.name,
               previewImageUrl: previewUrl, 
-              // Prevent storing large base64 strings in Firestore to avoid document size limit errors (1MB limit)
-              // Only store if roughly < 800KB to allow room for other fields
+              // Store base64 only if small (< 800KB)
               fileBase64: fileBase64.length < 800000 ? fileBase64 : null,
+              extractedText: extractedText.length > 50 ? extractedText : undefined,
               mimeType: file.type,
               contentForAI: "Content is in the file...", 
           };
@@ -694,7 +725,6 @@ const App: React.FC = () => {
   };
 
   const deleteResource = async (resourceId: string, fileUrl: string, previewUrl?: string) => {
-      // ... (Existing implementation) ...
       if (!user || !db) return;
       
       setViewState('dashboard');
@@ -745,7 +775,6 @@ const App: React.FC = () => {
   };
 
   const handleVote = async (resourceId: string, action: 'up' | 'down') => {
-    // ... (Existing implementation) ...
     if (!user || !db) return;
     const resource = resources.find(r => r.id === resourceId);
     if (!resource) return;
@@ -795,7 +824,6 @@ const App: React.FC = () => {
   };
 
   const addCommentToResource = async (resourceId: string, text: string, parentId: string | null) => {
-    // ... (Existing implementation) ...
     if (!user || !db) return;
     try {
         const commentId = `c-${Date.now()}`;
@@ -845,7 +873,6 @@ const App: React.FC = () => {
   };
 
   const deleteCommentFromResource = async (resourceId: string, comment: Comment) => {
-      // ... (Existing implementation) ...
       if (!db) return;
       try {
           const resRef = doc(db, "resources", resourceId);
@@ -858,7 +885,6 @@ const App: React.FC = () => {
   };
 
   const handleCommentVote = async (resourceId: string, commentId: string) => {
-     // ... (Existing implementation) ...
      if (!user || !db) return;
      const resRef = doc(db, "resources", resourceId);
      const snap = await getDoc(resRef);
@@ -903,9 +929,9 @@ const App: React.FC = () => {
               downvotedBy: [],
               replies: []
           };
-
+          
           if (file && storage) {
-              const storageRef = ref(storage, `forum_attachments/${Date.now()}_${file.name}`);
+              const storageRef = ref(storage, `attachments/${Date.now()}_${file.name}`);
               await uploadBytes(storageRef, file);
               const url = await getDownloadURL(storageRef);
               newPost.attachment = {
@@ -943,7 +969,6 @@ const App: React.FC = () => {
   };
 
   const deleteForumPost = async (postId: string) => {
-      // ... (Existing implementation) ...
       if (!db) return;
       setViewState('discussions');
       setSelectedId(undefined);
@@ -957,7 +982,6 @@ const App: React.FC = () => {
   };
 
   const handlePostVote = async (postId: string, action: 'up' | 'down') => {
-      // ... (Existing implementation) ...
       if (!user || !db) return;
       const postRef = doc(db, "forumPosts", postId);
       const post = forumPosts.find(p => p.id === postId);
@@ -997,7 +1021,6 @@ const App: React.FC = () => {
   };
 
   const addReplyToPost = async (postId: string, text: string, parentId: string | null, file?: File) => {
-      // ... (Existing implementation) ...
       if (!user || !db) return;
       
       try {
@@ -1061,7 +1084,6 @@ const App: React.FC = () => {
   };
 
   const deleteReplyFromPost = async (postId: string, reply: ForumReply) => {
-      // ... (Existing implementation) ...
       if (!db) return;
       try {
           const postRef = doc(db, "forumPosts", postId);
@@ -1074,7 +1096,6 @@ const App: React.FC = () => {
   };
 
   const handleReplyVote = async (postId: string, replyId: string) => {
-      // ... (Existing implementation) ...
       if (!user || !db) return;
       const postRef = doc(db, "forumPosts", postId);
       const snap = await getDoc(postRef);
@@ -1107,7 +1128,6 @@ const App: React.FC = () => {
   };
 
   const toggleVerifiedAnswer = async (postId: string, replyId: string) => {
-      // ... (Existing implementation) ...
       if (!db) return;
       const postRef = doc(db, "forumPosts", postId);
       const snap = await getDoc(postRef);
@@ -1136,7 +1156,7 @@ const App: React.FC = () => {
           };
 
           if (file && storage) {
-              const storageRef = ref(storage, `request_attachments/${Date.now()}_${file.name}`);
+              const storageRef = ref(storage, `attachments/${Date.now()}_${file.name}`);
               await uploadBytes(storageRef, file);
               const url = await getDownloadURL(storageRef);
               newReq.attachment = {
@@ -1170,7 +1190,6 @@ const App: React.FC = () => {
   };
 
   const deleteResourceRequest = async (requestId: string) => {
-      // ... (Existing implementation) ...
       if (!db) return;
       try {
           await deleteDoc(doc(db, "resourceRequests", requestId));
@@ -1181,7 +1200,6 @@ const App: React.FC = () => {
       }
   };
 
-  // ... (Rest of the functions: openUploadForRequest, toggles, profile update, messaging) ...
   const openUploadForRequest = (requestId: string) => {
       const req = resourceRequests.find(r => r.id === requestId);
       if (req) {
@@ -1413,7 +1431,7 @@ const App: React.FC = () => {
   return (
     <AppContext.Provider value={{
       user, users, resources, forumPosts, notifications, conversations, directMessages, resourceRequests,
-      view, setView, logout, isDarkMode, toggleDarkMode: () => setIsDarkMode(!isDarkMode),
+      view, setView, logout, deleteAccount, isDarkMode, toggleDarkMode: () => setIsDarkMode(!isDarkMode),
       userRanks, savedResourceIds: user.savedResourceIds || [], toggleSaveResource, handleVote, addCommentToResource, handleCommentVote, deleteCommentFromResource,
       addForumPost, handlePostVote, deleteForumPost, addReplyToPost, handleReplyVote, deleteReplyFromPost, toggleVerifiedAnswer,
       addResourceRequest, deleteResourceRequest, openUploadForRequest,

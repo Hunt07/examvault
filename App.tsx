@@ -400,9 +400,18 @@ const App: React.FC = () => {
         await updateDoc(doc(db!, "users", user.id), { savedResourceIds: isS ? arrayRemove(id) : arrayUnion(id) });
       },
       handleVote: async (id, act) => {
-        const r = resources.find(x => x.id === id); if (!r) return;
-        const isUp = r.upvotedBy?.includes(user.id);
-        await updateDoc(doc(db!, "resources", id), { upvotes: isUp ? increment(-1) : increment(1), upvotedBy: isUp ? arrayRemove(user.id) : arrayUnion(user.id) });
+        const r = resources.find(x => x.id === id); if (!r || !user) return;
+        const upvoted = r.upvotedBy?.includes(user.id);
+        const downvoted = r.downvotedBy?.includes(user.id);
+        const updates: any = {};
+        if (act === 'up') {
+          if (upvoted) { updates.upvotes = increment(-1); updates.upvotedBy = arrayRemove(user.id); }
+          else { updates.upvotes = increment(1); updates.upvotedBy = arrayUnion(user.id); if (downvoted) { updates.downvotes = increment(-1); updates.downvotedBy = arrayRemove(user.id); } }
+        } else {
+          if (downvoted) { updates.downvotes = increment(-1); updates.downvotedBy = arrayRemove(user.id); }
+          else { updates.downvotes = increment(1); updates.downvotedBy = arrayUnion(user.id); if (upvoted) { updates.upvotes = increment(-1); updates.upvotedBy = arrayRemove(user.id); } }
+        }
+        await updateDoc(doc(db!, "resources", id), updates);
       },
       addCommentToResource: async (resId, text, pId) => {
         await updateDoc(doc(db!, "resources", resId), { comments: arrayUnion({ id: `c-${Date.now()}`, author: sanitizeForFirestore(user), text, timestamp: new Date().toISOString(), parentId: pId, upvotes: 0, upvotedBy: [] }) });
@@ -419,9 +428,18 @@ const App: React.FC = () => {
         await addDoc(collection(db!, "forumPosts"), { ...post, author: sanitizeForFirestore(user), timestamp: new Date().toISOString(), upvotes: 0, downvotes: 0, upvotedBy: [], downvotedBy: [], replies: [] });
       },
       handlePostVote: async (id, act) => {
-        const p = forumPosts.find(x => x.id === id); if (!p) return;
-        const isUp = p.upvotedBy?.includes(user.id);
-        await updateDoc(doc(db!, "forumPosts", id), { upvotes: isUp ? increment(-1) : increment(1), upvotedBy: isUp ? arrayRemove(user.id) : arrayUnion(user.id) });
+        const p = forumPosts.find(x => x.id === id); if (!p || !user) return;
+        const upvoted = p.upvotedBy?.includes(user.id);
+        const downvoted = p.downvotedBy?.includes(user.id);
+        const updates: any = {};
+        if (act === 'up') {
+          if (upvoted) { updates.upvotes = increment(-1); updates.upvotedBy = arrayRemove(user.id); }
+          else { updates.upvotes = increment(1); updates.upvotedBy = arrayUnion(user.id); if (downvoted) { updates.downvotes = increment(-1); updates.downvotedBy = arrayRemove(user.id); } }
+        } else {
+          if (downvoted) { updates.downvotes = increment(-1); updates.downvotedBy = arrayRemove(user.id); }
+          else { updates.downvotes = increment(1); updates.downvotedBy = arrayUnion(user.id); if (upvoted) { updates.upvotes = increment(-1); updates.upvotedBy = arrayRemove(user.id); } }
+        }
+        await updateDoc(doc(db!, "forumPosts", id), updates);
       },
       deleteForumPost: async (id) => { 
           setViewState('discussions'); 

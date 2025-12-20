@@ -129,7 +129,6 @@ const App: React.FC = () => {
   const [runTour, setRunTour] = useState(false);
   const [tourStep, setTourStep] = useState(0);
 
-  // FIX: Defined tourSteps to fix the "Cannot find name 'tourSteps'" error on line 498
   const tourSteps = [
     { selector: 'body', content: "Welcome to ExamVault! Let's take a quick tour of your new study hub." },
     { selector: '#tour-sidenav', content: "Use the sidebar to navigate between the Dashboard, Discussions, Requests, Messages, and Leaderboard." },
@@ -224,7 +223,6 @@ const App: React.FC = () => {
     return () => { unsubUsers(); unsubResources(); unsubPosts(); unsubRequests(); unsubConvos(); unsubMessages(); unsubNotifs(); };
   }, [user?.id]);
 
-  // FIX: Added tour initialization logic
   useEffect(() => {
     if (user && !isLoading) {
       const hasSeenTour = localStorage.getItem(`examvault_tour_${user.id}`);
@@ -271,24 +269,17 @@ const App: React.FC = () => {
         const currentUser = auth.currentUser;
         const batch = writeBatch(db);
 
-        // 1. Delete user resources
         const resSnap = await getDocs(query(collection(db, "resources"), where("author.id", "==", userId)));
         resSnap.forEach(d => batch.delete(d.ref));
 
-        // 2. Delete forum posts
         const postSnap = await getDocs(query(collection(db, "forumPosts"), where("author.id", "==", userId)));
         postSnap.forEach(d => batch.delete(d.ref));
 
-        // 3. Delete requests
         const reqSnap = await getDocs(query(collection(db, "resourceRequests"), where("requester.id", "==", userId)));
         reqSnap.forEach(d => batch.delete(d.ref));
 
-        // 4. Delete user document
         batch.delete(doc(db, "users", userId));
-        
         await batch.commit();
-
-        // 5. Delete Auth record
         await deleteUser(currentUser);
 
         setUser(null);
@@ -375,6 +366,74 @@ const App: React.FC = () => {
       await updateDoc(doc(db, "users", user.id), { uploadCount: increment(-1) });
       apiEarnPoints(-25, "Resource deleted.");
     } catch (e) { console.error(e); }
+  };
+
+  const handleUpload = async (resourceData: any, file: File, coverImage: File | null) => {
+    if (!user || !db || !storage) return;
+    setIsUploading(true);
+    try {
+        const storageRef = ref(storage, `resources/${Date.now()}_${file.name}`);
+        await uploadBytes(storageRef, file);
+        const downloadURL = await getDownloadURL(storageRef);
+        
+        let previewUrl;
+        if (coverImage) {
+            const coverRef = ref(storage, `covers/${Date.now()}_${coverImage.name}`);
+            await uploadBytes(coverRef, coverImage);
+            previewUrl = await getDownloadURL(coverRef);
+        } else {
+            previewUrl = generateFilePreview(file.name);
+        }
+
+        const newResource: Omit<Resource, 'id'> = {
+            ...resourceData,
+            author: sanitizeForFirestore(user),
+            uploadDate: new Date().toISOString(),
+            upvotes: 0,
+            downvotes: 0,
+            upvotedBy: [],
+            downvotedBy: [],
+            comments: [],
+            fileUrl: downloadURL,
+            fileName: file.name,
+            previewImageUrl: previewUrl,
+            mimeType: file.type,
+            contentForAI: `Title: ${resourceData.title}. Course: ${resourceData.courseCode}. Type: ${resourceData.type}.`,
+        };
+
+        const docRef = await addDoc(collection(db, "resources"), sanitizeForFirestore(newResource));
+
+        // Reputation Logic
+        const basePoints = 25;
+        const totalPoints = fulfillingRequest ? basePoints + 25 : basePoints;
+        
+        await updateDoc(doc(db, "users", user.id), {
+            uploadCount: increment(1),
+            points: increment(totalPoints),
+            weeklyPoints: increment(totalPoints)
+        });
+
+        if (fulfillingRequest) {
+            await updateDoc(doc(db, "resourceRequests", fulfillingRequest.id), {
+                status: ResourceRequestStatus.Fulfilled,
+                fulfillment: {
+                    fulfiller: sanitizeForFirestore(user),
+                    resourceId: docRef.id,
+                    timestamp: new Date().toISOString()
+                }
+            });
+            apiSendNotification(fulfillingRequest.requester.id, user.id, NotificationType.RequestFulfilled, `${user.name} fulfilled your request!`, { resourceId: docRef.id });
+        }
+
+        showToast(fulfillingRequest ? "Request fulfilled! +50 Points" : "Resource uploaded! +25 Points", "success");
+        setIsUploadModalOpen(false);
+        setFulfillingRequest(undefined);
+    } catch (error: any) {
+        console.error("Upload failed:", error);
+        showToast("Upload failed. Please try again.", "error");
+    } finally {
+        setIsUploading(false);
+    }
   };
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg"><Loader2 size={48} className="animate-spin text-primary-600" /></div>;
@@ -520,7 +579,7 @@ const App: React.FC = () => {
           {view === 'leaderboard' && <LeaderboardPage />}
           {view === 'requests' && <ResourceRequestsPage />}
         </main>
-        {isUploadModalOpen && <UploadModal onClose={() => setIsUploadModalOpen(false)} onUpload={() => {}} isLoading={isUploading} />}
+        {isUploadModalOpen && <UploadModal onClose={() => setIsUploadModalOpen(false)} onUpload={handleUpload} isLoading={isUploading} fulfillingRequest={fulfillingRequest} />}
         {runTour && <TooltipGuide targetSelector={tourSteps[tourStep-1]?.selector || 'body'} content={tourSteps[tourStep-1]?.content || ''} currentStep={tourStep} totalSteps={tourSteps.length} onNext={() => tourStep < tourSteps.length ? setTourStep(tourStep+1) : setRunTour(false)} onPrev={() => setTourStep(Math.max(1, tourStep-1))} onSkip={() => setRunTour(false)} />}
         {toast && <ToastNotification message={toast.message} points={toast.points} type={toast.type} onClose={() => setToast(null)} />}
       </div>

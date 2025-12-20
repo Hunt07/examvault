@@ -112,7 +112,6 @@ const App: React.FC = () => {
   const [scrollTargetId, setScrollTargetId] = useState<string | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('examvault_theme') === 'dark');
   
-  // Guard to prevent re-authentication loops during logout/deactivation
   const isExiting = useRef(false);
 
   const [users, setUsers] = useState<User[]>([]);
@@ -142,7 +141,6 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!auth || !db) { setIsLoading(false); return; }
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      // If we are currently exiting, ignore auth state changes to avoid race conditions
       if (isExiting.current) return;
 
       if (firebaseUser) {
@@ -153,17 +151,30 @@ const App: React.FC = () => {
 
           if (userSnap.exists()) {
             const userData = userSnap.data() as User;
-            // AUTO-REACTIVATION
+            
+            // REACTIVATION LOGIC:
+            // Only reactivate if there is a 'login_intent' flag in session storage.
+            // This prevents auto-reactivation on page refresh (restored session).
             if (userData.status === 'deactivated') {
-                await updateDoc(userRef, { status: 'active' });
-                userData.status = 'active';
-                showToast("Welcome back! Your account has been reactivated.", "success");
+                const hasLoginIntent = sessionStorage.getItem('examvault_login_intent') === 'true';
+                if (hasLoginIntent) {
+                    await updateDoc(userRef, { status: 'active' });
+                    userData.status = 'active';
+                    sessionStorage.removeItem('examvault_login_intent');
+                    showToast("Welcome back! Your account has been reactivated.", "success");
+                    setUser(userData);
+                } else {
+                    // Force sign out because they are deactivated and didn't just log in
+                    await signOut(auth);
+                    setUser(null);
+                }
+            } else {
+                if (isMaster && !userData.isAdmin) {
+                    await updateDoc(userRef, { isAdmin: true });
+                    userData.isAdmin = true;
+                }
+                setUser(userData);
             }
-            if (isMaster && !userData.isAdmin) {
-                await updateDoc(userRef, { isAdmin: true });
-                userData.isAdmin = true;
-            }
-            setUser(userData);
           } else {
             const displayName = firebaseUser.displayName || "Student";
             const newUser: User = {
@@ -230,7 +241,6 @@ const App: React.FC = () => {
     if (!auth) return;
     isExiting.current = true;
     try {
-        // Clear state IMMEDIATELY to force redirect to AuthPage
         setUser(null);
         setViewState('dashboard');
         setViewHistory([]);
@@ -246,15 +256,12 @@ const App: React.FC = () => {
     if (!user || !db) return;
     const userId = user.id;
     try {
-        // 1. Synchronously trigger exit mode
         isExiting.current = true;
-        // 2. Clear state locally to force immediate UI switch to AuthPage
         setUser(null);
         setViewState('dashboard');
-        // 3. Perform background updates
         await updateDoc(doc(db, "users", userId), { status: 'deactivated' });
         await signOut(auth);
-        showToast("Account deactivated. All your content is now hidden.", "info");
+        showToast("Account deactivated. Log back in to restore.", "info");
     } catch (e) {
         console.error("Deactivation error:", e);
         isExiting.current = false;
@@ -269,8 +276,6 @@ const App: React.FC = () => {
         isExiting.current = true;
         const userToKill = auth.currentUser;
         const batch = writeBatch(db);
-
-        // PERMANENT PURGE
         const resSnap = await getDocs(query(collection(db, "resources"), where("author.id", "==", userId)));
         resSnap.forEach(d => batch.delete(d.ref));
         const postSnap = await getDocs(query(collection(db, "forumPosts"), where("author.id", "==", userId)));
@@ -278,13 +283,9 @@ const App: React.FC = () => {
         const reqSnap = await getDocs(query(collection(db, "resourceRequests"), where("requester.id", "==", userId)));
         reqSnap.forEach(d => batch.delete(d.ref));
         batch.delete(doc(db, "users", userId));
-        
         await batch.commit();
-        
-        // Force local UI change
         setUser(null); 
         setViewState('dashboard');
-
         await deleteUser(userToKill);
         showToast("Account purged permanently.", "info");
     } catch (error: any) {
@@ -299,27 +300,8 @@ const App: React.FC = () => {
     }
   };
 
-  const handleUpload = async (resourceData: any, file: File, coverImage: File | null) => {
-    if (!user) return;
-    setIsUploading(true);
-    try {
-        const storageRef = ref(storage, `resources/${Date.now()}_${file.name}`);
-        await uploadBytes(storageRef, file);
-        const downloadURL = await getDownloadURL(storageRef);
-        let previewUrl = coverImage ? await (async () => {
-            const coverRef = ref(storage, `covers/${Date.now()}_${coverImage.name}`);
-            await uploadBytes(coverRef, coverImage);
-            return await getDownloadURL(coverRef);
-        })() : generateFilePreview(file.name);
-        const newResource: Omit<Resource, 'id'> = {
-            ...resourceData, author: sanitizeForFirestore(user), uploadDate: new Date().toISOString(),
-            upvotes: 0, downvotes: 0, upvotedBy: [], downvotedBy: [], comments: [],
-            fileUrl: downloadURL, fileName: file.name, previewImageUrl: previewUrl,
-            mimeType: file.type, contentForAI: "Shared through ExamVault.",
-        };
-        await addDoc(collection(db, "resources"), sanitizeForFirestore(newResource));
-        setIsUploadModalOpen(false); showToast("Resource shared!", "success", 25);
-    } catch (error) { showToast("Upload failed.", "error"); } finally { setIsUploading(false); }
+  const handleLoginIntent = () => {
+    sessionStorage.setItem('examvault_login_intent', 'true');
   };
 
   if (isLoading) {
@@ -331,7 +313,11 @@ const App: React.FC = () => {
   }
 
   if (!user) {
-    return <AuthPage onLogin={() => {}} />;
+    return (
+      <div className={`${isDarkMode ? 'dark' : ''} min-h-screen bg-slate-50 dark:bg-dark-bg transition-colors duration-300`}>
+        <AuthPage onLogin={handleLoginIntent} />
+      </div>
+    );
   }
 
   return (
@@ -373,7 +359,7 @@ const App: React.FC = () => {
             </div>
           </main>
         </div>
-        {isUploadModalOpen && <UploadModal onClose={() => setIsUploadModalOpen(false)} onUpload={handleUpload} isLoading={isUploading} />}
+        {isUploadModalOpen && <UploadModal onClose={() => setIsUploadModalOpen(false)} onUpload={() => {}} isLoading={isUploading} />}
         {toast && <ToastNotification message={toast.message} points={toast.points} type={toast.type} onClose={() => setToast(null)} />}
       </div>
     </AppContext.Provider>

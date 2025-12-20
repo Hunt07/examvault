@@ -258,7 +258,7 @@ const App: React.FC = () => {
     showToast(message, 'success', amount);
   };
 
-  const apiSendNotification = async (recipientId: string, senderId: string, type: NotificationType, message: string, linkIds?: any) => {
+  const sendNotification = async (recipientId: string, senderId: string, type: NotificationType, message: string, linkIds?: any) => {
     if (recipientId === user?.id || !db) return;
     await addDoc(collection(db, "notifications"), { recipientId, senderId, type, message, timestamp: new Date().toISOString(), isRead: false, ...linkIds });
   };
@@ -333,7 +333,7 @@ const App: React.FC = () => {
     if (!recipientId) return;
     await addDoc(collection(db, "directMessages"), { conversationId, senderId: user.id, recipientId, text, timestamp: new Date().toISOString(), status: MessageStatus.Sent });
     await updateDoc(doc(db, "conversations", conversationId), { lastMessageTimestamp: new Date().toISOString() });
-    apiSendNotification(recipientId, user.id, NotificationType.NewMessage, `New message from ${user.name}`, { conversationId });
+    sendNotification(recipientId, user.id, NotificationType.NewMessage, `New message from ${user.name}`, { conversationId });
   };
 
   const apiStartConversation = async (userId: string, initialMessage?: string) => {
@@ -450,7 +450,18 @@ const App: React.FC = () => {
     addResourceRequest: async (req) => { await addDoc(collection(db!, "resourceRequests"), { ...req, requester: sanitizeForFirestore(user), status: ResourceRequestStatus.Open, timestamp: new Date().toISOString() }); },
     deleteResourceRequest: async (id) => { await deleteDoc(doc(db!, "resourceRequests", id)); },
     openUploadForRequest: (id) => { const r = resourceRequests.find(x => x.id === id); if (r) { setFulfillingRequest(r); setIsUploadModalOpen(true); } },
-    toggleUserSubscription: async (id) => { if (user) await updateDoc(doc(db!, "users", user.id), { "subscriptions.users": user.subscriptions?.users?.includes(id) ? arrayRemove(id) : arrayUnion(id) }); },
+    toggleUserSubscription: async (id) => { 
+        if (!user || !db) return;
+        const isCurrentlyFollowing = user.subscriptions?.users?.includes(id);
+        const userRef = doc(db, "users", user.id);
+        if (isCurrentlyFollowing) {
+            await updateDoc(userRef, { "subscriptions.users": arrayRemove(id) });
+        } else {
+            await updateDoc(userRef, { "subscriptions.users": arrayUnion(id) });
+            // Send notification to the user being followed
+            sendNotification(id, user.id, NotificationType.Subscription, `${user.name} started following you!`, { senderId: user.id });
+        }
+    },
     toggleLecturerSubscription: async (n) => { if (user) await updateDoc(doc(db!, "users", user.id), { "subscriptions.lecturers": user.subscriptions?.lecturers?.includes(n) ? arrayRemove(n) : arrayUnion(n) }); },
     toggleCourseCodeSubscription: async (c) => { if (user) await updateDoc(doc(db!, "users", user.id), { "subscriptions.courseCodes": user.subscriptions?.courseCodes?.includes(c) ? arrayRemove(c) : arrayUnion(c) }); },
     updateUserProfile: async (d) => { if (user) await updateDoc(doc(db!, "users", user.id), d); },

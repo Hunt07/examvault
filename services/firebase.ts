@@ -1,8 +1,7 @@
 
 // services/firebase.ts
-// Fix: Import individual functions from modular SDK
 import { initializeApp } from "firebase/app";
-import { getAuth, OAuthProvider } from "firebase/auth";
+import * as firebaseAuth from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
@@ -19,7 +18,7 @@ const getEnv = (key: string, fallback: string = "") => {
 // 🔹 Your Firebase config using Environment Variables
 // Prioritize Vite env vars, fallback to the hardcoded demo values if necessary
 const firebaseConfig = {
-  apiKey: getEnv("VITE_FIREBASE_API_KEY", " "), // Ensure you set VITE_FIREBASE_API_KEY in .env
+  apiKey: getEnv("VITE_FIREBASE_API_KEY", "AIzaSyCuN5mDneFpeI9ZVaiD6DRahRvSPGKGHZs"), // Ensure you set VITE_FIREBASE_API_KEY in .env
   authDomain: getEnv("VITE_FIREBASE_AUTH_DOMAIN", "examvault-live-07.firebaseapp.com"),
   projectId: getEnv("VITE_FIREBASE_PROJECT_ID", "examvault-live-07"),
   storageBucket: getEnv("VITE_FIREBASE_STORAGE_BUCKET", "examvault-live-07.firebasestorage.app"),
@@ -28,16 +27,13 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-// Fix: Use initializeApp directly as it's a named export in v9+
 const app = initializeApp(firebaseConfig);
 
 // 🔹 Auth
-// Fix: Use getAuth(app) directly
-export const auth = getAuth(app);
+export const auth = firebaseAuth.getAuth(app);
 
 // 🔹 Microsoft SSO Provider
-// Fix: Use OAuthProvider directly
-export const microsoftProvider = new OAuthProvider("microsoft.com");
+export const microsoftProvider = new firebaseAuth.OAuthProvider("microsoft.com");
 
 // Required scopes & parameters for SSO
 microsoftProvider.setCustomParameters({ prompt: "select_account" });

@@ -1,4 +1,5 @@
 
+// App.tsx
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import type { User, Resource, ForumPost, Comment, ForumReply, Notification, Conversation, DirectMessage, ResourceRequest, Attachment } from './types';
 import { NotificationType, MessageStatus, ResourceRequestStatus } from './types';
@@ -210,7 +211,21 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!user || !db) return;
     setAreResourcesLoading(true);
-    const unsubUsers = onSnapshot(collection(db, "users"), (s) => setUsers(s.docs.map(d => d.data() as User)));
+    
+    // Filter out deactivated users and ensure uniqueness to fix leaderboard ghosting
+    // Fix: Explicitly type the Map constructor as Map<string, User> to ensure Array.from returns User[] instead of unknown[]
+    const unsubUsers = onSnapshot(collection(db, "users"), (s) => {
+        const rawUsers = s.docs.map(d => d.data() as User);
+        const uniqueActiveUsers: User[] = Array.from(
+            new Map<string, User>(
+                rawUsers
+                    .filter(u => u.status !== 'deactivated')
+                    .map(u => [u.id, u] as [string, User])
+            ).values()
+        );
+        setUsers(uniqueActiveUsers);
+    });
+
     const unsubResources = onSnapshot(query(collection(db, "resources"), orderBy("uploadDate", "desc")), (s) => {
       setResources(s.docs.map(d => ({ id: d.id, ...d.data() } as Resource)));
       setAreResourcesLoading(false);

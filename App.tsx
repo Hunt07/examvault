@@ -19,7 +19,6 @@ import ToastNotification from './components/ToastNotification';
 
 // Firebase Imports
 import { auth, db, storage } from './services/firebase';
-// Fix: Use named imports for Firebase Auth functions
 import { onAuthStateChanged, signOut, deleteUser } from 'firebase/auth';
 import { 
   collection, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, getDocs,
@@ -123,14 +122,27 @@ const App: React.FC = () => {
   
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [fulfillingRequest, setFulfillingRequest] = useState<ResourceRequest | undefined>(undefined);
   const [toast, setToast] = useState<{ message: string; points?: number; type?: 'success' | 'error' | 'info' } | null>(null);
   const [runTour, setRunTour] = useState(false);
   const [tourStep, setTourStep] = useState(0);
 
+  // Added tourSteps definition to fix the "Cannot find name 'tourSteps'" error
+  const tourSteps = [
+    { selector: 'body', content: "Welcome to ExamVault! Let's take a quick tour of your new study hub." },
+    { selector: '#tour-sidenav', content: "Use the sidebar to navigate between the Dashboard, Discussions, Requests, Messages, and Leaderboard." },
+    { selector: '#tour-search-bar', content: "Quickly find resources, users, or courses using the global search." },
+    { selector: '#tour-filter-button', content: "Use filters to narrow down resources by year, semester, lecturer, or type." },
+    { selector: '#tour-requests', content: "Can't find what you need? Check the Requests page to ask the community or help others." },
+    { selector: '#tour-upload-button', content: "Contribute to the community by uploading your own past papers and notes." },
+    { selector: '#tour-saved-items', content: "Access your bookmarked resources quickly from here." },
+    { selector: '#tour-notifications', content: "Stay updated with new uploads, replies, and messages." },
+    { selector: '#tour-dark-mode', content: "Toggle between Light and Dark mode for comfortable reading." },
+    { selector: '#tour-profile-menu', content: "Manage your profile and settings here." },
+    { selector: 'body', content: "You're all set! Happy Studying!" },
+  ];
+
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info', points?: number) => setToast({ message, type, points });
 
-  // Filtering Logic: Hide content from deactivated or banned users
   const activeUserIds = useMemo(() => {
     return new Set(users.filter(u => !u.status || u.status === 'active').map(u => u.id));
   }, [users]);
@@ -141,7 +153,6 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!auth || !db) { setIsLoading(false); return; }
-    // Fix: Use onAuthStateChanged directly
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         try {
@@ -151,11 +162,14 @@ const App: React.FC = () => {
 
           if (userSnap.exists()) {
             const userData = userSnap.data() as User;
-            // AUTO-REACTIVATION: If user logs in while deactivated, restore them
             if (userData.status === 'deactivated') {
-                await updateDoc(userRef, { status: 'active' });
-                userData.status = 'active';
-                showToast("Welcome back! Your account has been reactivated.", "success");
+                try {
+                    await updateDoc(userRef, { status: 'active' });
+                    userData.status = 'active';
+                    showToast("Welcome back! Your account has been reactivated.", "success");
+                } catch (e) {
+                    console.error("Reactivation failed:", e);
+                }
             }
             if (isMaster && !userData.isAdmin) {
                 await updateDoc(userRef, { isAdmin: true });
@@ -175,8 +189,15 @@ const App: React.FC = () => {
             await setDoc(userRef, newUser);
             setUser(newUser);
           }
-        } catch (error) { console.error("Auth fetch error:", error); }
-      } else { setUser(null); setViewState('dashboard'); }
+        } catch (error) { 
+            console.error("Auth fetch error:", error); 
+            // Wipe user to be safe if fetch fails
+            setUser(null);
+        }
+      } else { 
+          setUser(null); 
+          setViewState('dashboard'); 
+      }
       setIsLoading(false);
     });
     return () => unsubscribe();
@@ -218,40 +239,55 @@ const App: React.FC = () => {
     } else setViewState('dashboard');
   };
 
-  // Fix: Use signOut directly
-  const logout = async () => { await signOut(auth); setUser(null); setViewState('dashboard'); };
+  const logout = async () => {
+    if (!auth) return;
+    try {
+        await signOut(auth);
+    } catch (e) {
+        console.error("Sign out failed:", e);
+    } finally {
+        // Force state reset even if Firebase signOut hangs
+        setUser(null);
+        setViewState('dashboard');
+        setViewHistory([]);
+    }
+  };
 
   const deactivateAccount = async () => {
     if (!user || !db) return;
-    await updateDoc(doc(db, "users", user.id), { status: 'deactivated' });
-    showToast("Account deactivated. Log in anytime to restore your data.", "info");
-    await logout();
+    try {
+        const userId = user.id;
+        // Perform the Firestore update FIRST
+        await updateDoc(doc(db, "users", userId), { status: 'deactivated' });
+        showToast("Account deactivated. Log in anytime to restore.", "info");
+        // THEN logout
+        await logout();
+    } catch (e) {
+        console.error("Deactivation error:", e);
+        showToast("Deactivation failed. Please try again.", "error");
+    }
   };
 
   const deleteAccount = async () => {
     if (!user || !db || !auth.currentUser) return;
     try {
         const batch = writeBatch(db);
-        // Purge Resources
-        const resSnap = await getDocs(query(collection(db, "resources"), where("author.id", "==", user.id)));
+        const userId = user.id;
+        const resSnap = await getDocs(query(collection(db, "resources"), where("author.id", "==", userId)));
         resSnap.forEach(d => batch.delete(d.ref));
-        // Purge Posts
-        const postSnap = await getDocs(query(collection(db, "forumPosts"), where("author.id", "==", user.id)));
+        const postSnap = await getDocs(query(collection(db, "forumPosts"), where("author.id", "==", userId)));
         postSnap.forEach(d => batch.delete(d.ref));
-        // Purge Requests
-        const reqSnap = await getDocs(query(collection(db, "resourceRequests"), where("requester.id", "==", user.id)));
+        const reqSnap = await getDocs(query(collection(db, "resourceRequests"), where("requester.id", "==", userId)));
         reqSnap.forEach(d => batch.delete(d.ref));
-        // Purge User
-        batch.delete(doc(db, "users", user.id));
+        batch.delete(doc(db, "users", userId));
         
         await batch.commit();
-        // Fix: Use deleteUser directly
         await deleteUser(auth.currentUser);
         setUser(null); setViewState('dashboard');
-        showToast("Account and all associated content permanently deleted.", "info");
+        showToast("Account purged permanently.", "info");
     } catch (error) {
         console.error("Purge failed:", error);
-        showToast("Failed to purge account data. Try again later.", "error");
+        showToast("Failed to delete account.", "error");
     }
   };
 
@@ -277,21 +313,6 @@ const App: React.FC = () => {
         setIsUploadModalOpen(false); showToast("Resource shared!", "success", 25);
     } catch (error) { showToast("Upload failed.", "error"); } finally { setIsUploading(false); }
   };
-
-  useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('examvault_theme', 'dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('examvault_theme', 'light');
-    }
-  }, [isDarkMode]);
-
-  const tourSteps = [
-    { selector: 'body', content: "Welcome back! Content from deactivated users is now hidden." },
-    { selector: '#tour-sidenav', content: "Use the sidebar to explore." }
-  ];
 
   return (
     <AppContext.Provider value={{

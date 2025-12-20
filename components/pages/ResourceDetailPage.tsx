@@ -50,6 +50,7 @@ const CommentComponent: React.FC<{
               <div className="flex items-center gap-2">
                  <button onClick={() => handleUserClick(comment.author.id)} className="font-bold text-slate-900 dark:text-slate-100 hover:text-primary-600 dark:hover:text-primary-400 text-sm hover:underline">{comment.author.name}</button>
                  <UserRankBadge rank={authorRank} size={14} />
+                 {user?.isAdmin && !isOwnComment && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-black uppercase">Mod</span>}
               </div>
               <p className="text-xs text-slate-400 mt-1">{new Date(comment.timestamp).toLocaleDateString()}</p>
             </div>
@@ -74,9 +75,11 @@ const CommentComponent: React.FC<{
         </div>
       </div>
       {isDeleteConfirmOpen && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-              <div className="bg-white dark:bg-zinc-800 p-6 rounded-xl text-center max-w-xs w-full">
-                  <h3 className="font-bold mb-4 dark:text-white">Delete comment?</h3>
+          <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
+              <div className="bg-white dark:bg-zinc-800 p-6 rounded-xl text-center max-w-xs w-full shadow-2xl">
+                  <Trash2 size={40} className="mx-auto text-red-500 mb-4" />
+                  <h3 className="font-bold mb-2 dark:text-white">Delete comment?</h3>
+                  <p className="text-xs text-slate-500 mb-6">{user?.isAdmin && !isOwnComment ? "You are deleting this as a moderator." : "This cannot be undone."}</p>
                   <div className="flex gap-2">
                       <button onClick={() => setIsDeleteConfirmOpen(false)} className="flex-1 py-2 bg-slate-100 dark:bg-zinc-700 dark:text-white rounded">Cancel</button>
                       <button onClick={() => deleteCommentFromResource(resourceId, comment)} className="flex-1 py-2 bg-red-600 text-white rounded font-bold">Delete</button>
@@ -103,7 +106,6 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   const canDelete = isAuthor || isAdmin;
   
   const isUpvoted = resource.upvotedBy?.includes(user?.id || '');
-  const isDownvoted = resource.downvotedBy?.includes(user?.id || '');
 
   const resolveFileBase64 = async (): Promise<string | undefined> => {
     if (resource.fileBase64) return resource.fileBase64;
@@ -125,7 +127,6 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     let base64;
     if (!resource.extractedText) base64 = await resolveFileBase64();
     let textContext = `Title: ${resource.title}\nCourse: ${resource.courseCode}`;
-    // Updated call to use configuration object
     const result = await summarizeContent({
         content: textContext, 
         fileBase64: base64, 
@@ -182,11 +183,6 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
                     <button onClick={() => handleVote(resource.id, 'up')} className={`flex-1 py-2.5 rounded-lg flex items-center justify-center gap-2 transition font-bold ${isUpvoted ? 'bg-green-600 text-white' : 'bg-slate-100 dark:bg-zinc-800 dark:text-white hover:bg-slate-200 dark:hover:bg-zinc-700'}`}>
                         <ThumbsUp size={18}/> {resource.upvotes || 0}
                     </button>
-                    <button onClick={() => handleVote(resource.id, 'down')} className={`flex-1 py-2.5 rounded-lg flex items-center justify-center gap-2 transition font-bold ${isDownvoted ? 'bg-red-600 text-white' : 'bg-slate-100 dark:bg-zinc-800 dark:text-white hover:bg-slate-200 dark:hover:bg-zinc-700'}`}>
-                        <ThumbsDown size={18}/> {resource.downvotes || 0}
-                    </button>
-                </div>
-                <div className="flex gap-2">
                     <button onClick={() => toggleSaveResource(resource.id)} className={`flex-1 py-2.5 rounded-lg flex items-center justify-center gap-2 transition font-bold ${isSaved ? 'text-amber-500 bg-amber-50 border border-amber-200 dark:bg-amber-900/20 dark:border-amber-700' : 'bg-slate-100 dark:bg-zinc-800 dark:text-white hover:bg-slate-200 dark:hover:bg-zinc-700'}`}>
                         <Bookmark size={18}/> {isSaved ? 'Saved' : 'Save'}
                     </button>
@@ -215,15 +211,15 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
         </div>
       </div>
       {isPreviewOpen && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-zinc-900 w-full max-w-5xl h-[85vh] rounded-xl flex flex-col overflow-hidden">
+        <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-zinc-900 w-full max-w-5xl h-[85vh] rounded-xl flex flex-col overflow-hidden shadow-2xl">
                 <div className="p-4 border-b dark:border-zinc-700 flex justify-between items-center bg-white dark:bg-zinc-800"><h3 className="font-bold truncate dark:text-white">{resource.fileName}</h3><button onClick={() => setIsPreviewOpen(false)} className="p-2 dark:text-white"><X size={24}/></button></div>
                 <div className="flex-grow bg-slate-200 overflow-auto">{renderPreviewContent()}</div>
             </div>
         </div>
       )}
       {isDeleteConfirmOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
             <div className="bg-white dark:bg-zinc-800 p-8 rounded-xl max-w-sm text-center shadow-2xl border dark:border-zinc-700">
                 <Trash2 size={48} className="mx-auto text-red-500 mb-4" />
                 <h3 className="text-xl font-bold mb-2 dark:text-white">Delete Resource?</h3>

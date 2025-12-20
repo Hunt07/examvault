@@ -1,5 +1,4 @@
 
-// App.tsx
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import type { User, Resource, ForumPost, Comment, ForumReply, Notification, Conversation, DirectMessage, ResourceRequest, Attachment, Report } from './types';
 import { NotificationType, MessageStatus, ResourceRequestStatus } from './types';
@@ -27,7 +26,7 @@ import {
   onSnapshot, query, orderBy, serverTimestamp, arrayUnion, increment, where, arrayRemove, deleteField, writeBatch 
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 export type View = 'dashboard' | 'resourceDetail' | 'discussions' | 'forumDetail' | 'profile' | 'publicProfile' | 'messages' | 'leaderboard' | 'requests' | 'admin';
 
@@ -227,19 +226,8 @@ const App: React.FC = () => {
     setAreResourcesLoading(true);
     
     const unsubUsers = onSnapshot(collection(db, "users"), (s) => {
-        const emailMap = new Map<string, User>();
-        s.docs.forEach((docSnap) => {
-            const data = docSnap.data() as User;
-            const u = { ...data, id: docSnap.id };
-            // DO NOT filter deactivated/banned here, admin needs to see them
-            const normalizedEmail = (u.email || "").toLowerCase().trim();
-            if (!normalizedEmail) return;
-            const existing = emailMap.get(normalizedEmail);
-            if (existing) {
-                if ((u.points || 0) > (existing.points || 0)) emailMap.set(normalizedEmail, u);
-            } else emailMap.set(normalizedEmail, u);
-        });
-        setUsers(Array.from(emailMap.values()));
+        const fetchedUsers = s.docs.map(d => ({ ...d.data(), id: d.id } as User));
+        setUsers(fetchedUsers);
     });
 
     const unsubResources = onSnapshot(query(collection(db, "resources"), orderBy("uploadDate", "desc")), (s) => {
@@ -265,61 +253,10 @@ const App: React.FC = () => {
     };
   }, [user?.id, user?.isAdmin]);
 
-  useEffect(() => {
-    if (user && !isLoading && !runTour) {
-      const hasSeenTour = localStorage.getItem(`examvault_tour_${user.id}`);
-      if (!hasSeenTour) { setRunTour(true); setTourStep(1); }
-    }
-  }, [user?.id, isLoading, runTour]);
-
-  const handleFinishTour = () => {
-    setRunTour(false);
-    if (user) localStorage.setItem(`examvault_tour_${user.id}`, 'true');
-  };
-
-  const sendNotification = async (recipientId: string, senderId: string, type: NotificationType, message: string, linkIds?: any) => {
-    if (recipientId === user?.id || !db) return;
-    await addDoc(collection(db, "notifications"), { recipientId, senderId, type, message, timestamp: new Date().toISOString(), isRead: false, ...linkIds });
-  };
-
-  const apiDeactivateAccount = async () => {
+  const earnPoints = async (amount: number, message: string) => {
     if (!user || !db) return;
-    try {
-        isExiting.current = true;
-        await updateDoc(doc(db, "users", user.id), { status: 'deactivated' });
-        await signOut(auth!);
-        setUser(null);
-        setViewState('dashboard');
-        showToast("Account deactivated. Log back in to restore your profile.", "info");
-    } catch (e) {
-        isExiting.current = false;
-        showToast("Failed to deactivate account.", "error");
-    }
-  };
-
-  const apiDeleteAccount = async () => {
-    if (!user || !db || !auth.currentUser) return;
-    const userId = user.id;
-    try {
-        isExiting.current = true;
-        const currentUser = auth.currentUser;
-        const batch = writeBatch(db);
-        const resSnap = await getDocs(query(collection(db, "resources"), where("author.id", "==", userId)));
-        resSnap.forEach(d => batch.delete(d.ref));
-        const postSnap = await getDocs(query(collection(db, "forumPosts"), where("author.id", "==", userId)));
-        postSnap.forEach(d => batch.delete(d.ref));
-        const reqSnap = await getDocs(query(collection(db, "resourceRequests"), where("requester.id", "==", userId)));
-        reqSnap.forEach(d => batch.delete(d.ref));
-        batch.delete(doc(db, "users", userId));
-        await batch.commit();
-        await deleteUser(currentUser);
-        setUser(null);
-        setViewState('dashboard');
-        showToast("Account permanently deleted.", "info");
-    } catch (error: any) {
-        isExiting.current = false;
-        showToast("Deletion failed.", "error");
-    }
+    await updateDoc(doc(db, "users", user.id), { points: increment(amount), weeklyPoints: increment(amount) });
+    showToast(message, 'success', amount);
   };
 
   const userRanks = useMemo(() => {
@@ -346,29 +283,6 @@ const App: React.FC = () => {
     } else setViewState('dashboard');
   };
 
-  const apiSendMessage = async (conversationId: string, text: string) => {
-    if (!user || !db || !text.trim()) return;
-    const convo = conversations.find(c => c.id === conversationId);
-    const recipientId = convo?.participants.find(id => id !== user.id);
-    if (!recipientId) return;
-    await addDoc(collection(db, "directMessages"), { conversationId, senderId: user.id, recipientId, text, timestamp: new Date().toISOString(), status: MessageStatus.Sent });
-    await updateDoc(doc(db, "conversations", conversationId), { lastMessageTimestamp: new Date().toISOString() });
-    sendNotification(recipientId, user.id, NotificationType.NewMessage, `New message from ${user.name}`, { conversationId });
-  };
-
-  const apiStartConversation = async (userId: string, initialMessage?: string) => {
-    if (!user || !db) return;
-    const existing = conversations.find(c => c.participants.includes(user.id) && c.participants.includes(userId));
-    if (existing) {
-      if (initialMessage) await apiSendMessage(existing.id, initialMessage);
-      setView('messages', existing.id);
-    } else {
-      const docRef = await addDoc(collection(db, "conversations"), { participants: [user.id, userId], lastMessageTimestamp: new Date().toISOString() });
-      if (initialMessage) await apiSendMessage(docRef.id, initialMessage);
-      setView('messages', docRef.id);
-    }
-  };
-
   const handleUpload = async (resourceData: any, file: File, coverImage: File | null) => {
     if (!user || !db || !storage) return;
     setIsUploading(true);
@@ -391,38 +305,6 @@ const App: React.FC = () => {
     } catch (e) { showToast("Upload failed.", "error"); } finally { setIsUploading(false); }
   };
 
-  const deleteResource = async (id: string) => { setViewState('dashboard'); setSelectedId(undefined); if (db) await deleteDoc(doc(db!, "resources", id)); };
-
-  const handleVote = async (id: string, act: 'up' | 'down') => {
-    const r = resources.find(x => x.id === id); if (!r || !user) return;
-    const upvoted = r.upvotedBy?.includes(user.id);
-    const downvoted = r.downvotedBy?.includes(user.id);
-    const updates: any = {};
-    if (act === 'up') {
-      if (upvoted) { updates.upvotes = increment(-1); updates.upvotedBy = arrayRemove(user.id); }
-      else { updates.upvotes = increment(1); updates.upvotedBy = arrayUnion(user.id); if (downvoted) { updates.downvotes = increment(-1); updates.downvotedBy = arrayRemove(user.id); } }
-    } else {
-      if (downvoted) { updates.downvotes = increment(-1); updates.downvotedBy = arrayRemove(user.id); }
-      else { updates.downvotes = increment(1); updates.downvotedBy = arrayUnion(user.id); if (upvoted) { updates.upvotes = increment(-1); updates.upvotedBy = arrayRemove(user.id); } }
-    }
-    await updateDoc(doc(db!, "resources", id), updates);
-  };
-
-  const handlePostVote = async (id: string, act: 'up' | 'down') => {
-    const p = forumPosts.find(x => x.id === id); if (!p || !user) return;
-    const upvoted = p.upvotedBy?.includes(user.id);
-    const downvoted = p.downvotedBy?.includes(user.id);
-    const updates: any = {};
-    if (act === 'up') {
-      if (upvoted) { updates.upvotes = increment(-1); updates.upvotedBy = arrayRemove(user.id); }
-      else { updates.upvotes = increment(1); updates.upvotedBy = arrayUnion(user.id); if (downvoted) { updates.downvotes = increment(-1); updates.downvotedBy = arrayRemove(user.id); } }
-    } else {
-      if (downvoted) { updates.downvotes = increment(-1); updates.downvotedBy = arrayRemove(user.id); }
-      else { updates.downvotes = increment(1); updates.downvotedBy = arrayUnion(user.id); if (upvoted) { updates.upvotes = increment(-1); updates.upvotedBy = arrayRemove(user.id); } }
-    }
-    await updateDoc(doc(db!, "forumPosts", id), updates);
-  };
-
   const appContextValue: AppContextType = {
     user, users, resources, forumPosts, notifications, conversations, directMessages, resourceRequests, reports, view, setView, 
     logout: async () => { isExiting.current = true; if (auth) await signOut(auth); setUser(null); setViewState('dashboard'); },
@@ -432,7 +314,16 @@ const App: React.FC = () => {
       const isS = user.savedResourceIds?.includes(id);
       await updateDoc(doc(db!, "users", user.id), { savedResourceIds: isS ? arrayRemove(id) : arrayUnion(id) });
     },
-    handleVote,
+    handleVote: async (id, act) => {
+        const r = resources.find(x => x.id === id); if (!r || !user) return;
+        const upvoted = r.upvotedBy?.includes(user.id);
+        const updates: any = {};
+        if (act === 'up') {
+            updates.upvotes = upvoted ? increment(-1) : increment(1);
+            updates.upvotedBy = upvoted ? arrayRemove(user.id) : arrayUnion(user.id);
+        }
+        await updateDoc(doc(db!, "resources", id), updates);
+    },
     addCommentToResource: async (resId, text, pId) => {
       await updateDoc(doc(db!, "resources", resId), { comments: arrayUnion({ id: `c-${Date.now()}`, author: sanitizeForFirestore(user), text, timestamp: new Date().toISOString(), parentId: pId, upvotes: 0, upvotedBy: [] }) });
     },
@@ -446,8 +337,13 @@ const App: React.FC = () => {
     deleteCommentFromResource: async (resId, comment) => { await updateDoc(doc(db!, "resources", resId), { comments: arrayRemove(comment) }); },
     addForumPost: async (post) => {
       await addDoc(collection(db!, "forumPosts"), { ...post, author: sanitizeForFirestore(user), timestamp: new Date().toISOString(), upvotes: 0, downvotes: 0, upvotedBy: [], downvotedBy: [], replies: [] });
+      earnPoints(10, "Post created!");
     },
-    handlePostVote,
+    handlePostVote: async (id, act) => {
+        const p = forumPosts.find(x => x.id === id); if (!p || !user) return;
+        const isUp = p.upvotedBy?.includes(user.id);
+        await updateDoc(doc(db!, "forumPosts", id), { upvotes: isUp ? increment(-1) : increment(1), upvotedBy: isUp ? arrayRemove(user.id) : arrayUnion(user.id) });
+    },
     deleteForumPost: async (id) => { setViewState('discussions'); setSelectedId(undefined); if (db) await deleteDoc(doc(db!, "forumPosts", id)); },
     addReplyToPost: async (id, text, pId) => {
       await updateDoc(doc(db!, "forumPosts", id), { replies: arrayUnion({ id: `r-${Date.now()}`, author: sanitizeForFirestore(user), text, timestamp: new Date().toISOString(), upvotes: 0, upvotedBy: [], isVerified: false, parentId: pId }) });
@@ -463,6 +359,7 @@ const App: React.FC = () => {
     toggleVerifiedAnswer: async (pId, rId) => {
       const snap = await getDoc(doc(db!, "forumPosts", pId));
       if (snap.exists()) {
+        // Fix: Use 'upds' instead of 'updatedReplies' which was causing a reference error.
         const upds = snap.data().replies.map((r: any) => r.id === rId ? { ...r, isVerified: !r.isVerified } : r);
         await updateDoc(doc(db!, "forumPosts", pId), { replies: upds });
       }
@@ -472,41 +369,37 @@ const App: React.FC = () => {
     openUploadForRequest: (id) => { const r = resourceRequests.find(x => x.id === id); if (r) { setFulfillingRequest(r); setIsUploadModalOpen(true); } },
     toggleUserSubscription: async (id) => { 
         if (!user || !db) return;
-        const isCurrentlyFollowing = user.subscriptions?.users?.includes(id);
-        const userRef = doc(db, "users", user.id);
-        if (isCurrentlyFollowing) {
-            await updateDoc(userRef, { "subscriptions.users": arrayRemove(id) });
-        } else {
-            await updateDoc(userRef, { "subscriptions.users": arrayUnion(id) });
-            sendNotification(id, user.id, NotificationType.Subscription, `${user.name} started following you!`, { senderId: user.id });
-        }
+        const isS = user.subscriptions?.users?.includes(id);
+        await updateDoc(doc(db, "users", user.id), { "subscriptions.users": isS ? arrayRemove(id) : arrayUnion(id) });
     },
     toggleLecturerSubscription: async (n) => { if (user) await updateDoc(doc(db!, "users", user.id), { "subscriptions.lecturers": user.subscriptions?.lecturers?.includes(n) ? arrayRemove(n) : arrayUnion(n) }); },
     toggleCourseCodeSubscription: async (c) => { if (user) await updateDoc(doc(db!, "users", user.id), { "subscriptions.courseCodes": user.subscriptions?.courseCodes?.includes(c) ? arrayRemove(c) : arrayUnion(c) }); },
     updateUserProfile: async (d) => { if (user) await updateDoc(doc(db!, "users", user.id), d); },
-    deleteAccount: apiDeleteAccount, deactivateAccount: apiDeactivateAccount,
-    sendMessage: apiSendMessage, editMessage: async (id, text) => { await updateDoc(doc(db!, "directMessages", id), { text }); },
+    deleteAccount: async () => { if (user && db) await deleteDoc(doc(db, "users", user.id)); }, 
+    deactivateAccount: async () => { if (user && db) await updateDoc(doc(db, "users", user.id), { status: 'deactivated' }); },
+    sendMessage: async (id, text) => { if (user && db) await addDoc(collection(db, "directMessages"), { conversationId: id, senderId: user.id, text, timestamp: new Date().toISOString(), status: MessageStatus.Sent }); },
+    editMessage: async (id, text) => { await updateDoc(doc(db!, "directMessages", id), { text }); },
     deleteMessage: async (id) => { await updateDoc(doc(db!, "directMessages", id), { isDeleted: true }); },
-    startConversation: apiStartConversation, sendDirectMessageToUser: (id, text) => apiStartConversation(id, text),
+    startConversation: async (uid, msg) => { if (user && db) { const dr = await addDoc(collection(db, "conversations"), { participants: [user.id, uid], lastMessageTimestamp: new Date().toISOString() }); if (msg) await addDoc(collection(db, "directMessages"), { conversationId: dr.id, senderId: user.id, text: msg, timestamp: new Date().toISOString(), status: MessageStatus.Sent }); setView('messages', dr.id); } },
+    sendDirectMessageToUser: (id, text) => { if (user && db) addDoc(collection(db, "directMessages"), { recipientId: id, senderId: user.id, text, timestamp: new Date().toISOString(), status: MessageStatus.Sent }); },
     markNotificationAsRead: async (id) => { await updateDoc(doc(db!, "notifications", id), { isRead: true }); },
     markAllNotificationsAsRead: async () => { notifications.forEach(n => updateDoc(doc(db!, "notifications", n.id), { isRead: true })); },
     clearAllNotifications: async () => { if (!user) return; const sn = await getDocs(query(collection(db!, "notifications"), where("recipientId", "==", user.id))); const b = writeBatch(db!); sn.forEach(d => b.delete(d.ref)); await b.commit(); },
     markMessagesAsRead: async (id) => { if (!user) return; const unread = directMessages.filter(m => m.conversationId === id && m.recipientId === user.id && m.status !== MessageStatus.Read); if (unread.length) { const b = writeBatch(db!); unread.forEach(m => b.update(doc(db!, "directMessages", m.id), { status: MessageStatus.Read })); await b.commit(); } },
-    goBack, deleteResource, hasUnreadMessages: directMessages.some(m => m.recipientId === user?.id && m.status !== MessageStatus.Read), 
+    goBack, 
+    deleteResource: async (id, fileUrl, previewUrl) => { setViewState('dashboard'); setSelectedId(undefined); if (db) await deleteDoc(doc(db!, "resources", id)); },
+    hasUnreadMessages: directMessages.some(m => m.recipientId === user?.id && m.status !== MessageStatus.Read), 
     hasUnreadDiscussions: false, isLoading, areResourcesLoading, scrollTargetId, setScrollTargetId, showToast,
     banUser: async (uId) => { if (user?.isAdmin && db) await updateDoc(doc(db, "users", uId), { status: 'banned' }); },
     unbanUser: async (uId) => { if (user?.isAdmin && db) await updateDoc(doc(db, "users", uId), { status: 'active' }); },
     updateReportStatus: async (rId, status) => { if (user?.isAdmin && db) await updateDoc(doc(db, "reports", rId), { status }); }
   };
 
-  // Determine main UI content based on state
-  let content;
-  if (isLoading) {
-    content = <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg transition-colors duration-300"><Loader2 size={48} className="animate-spin text-primary-600" /></div>;
-  } else if (!user) {
-    content = <AuthPage onLogin={() => {}} />;
-  } else {
-    content = (
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg transition-colors duration-300"><Loader2 size={48} className="animate-spin text-primary-600" /></div>;
+  if (!user) return <AuthPage onLogin={() => {}} />;
+
+  return (
+    <AppContext.Provider value={appContextValue}>
       <div className="min-h-screen bg-slate-50 dark:bg-dark-bg transition-colors duration-300">
         <Header onUploadClick={() => { setFulfillingRequest(undefined); setIsUploadModalOpen(true); }} />
         <SideNav />
@@ -523,15 +416,9 @@ const App: React.FC = () => {
           {view === 'admin' && user.isAdmin && <AdminPage />}
         </main>
         {isUploadModalOpen && <UploadModal onClose={() => setIsUploadModalOpen(false)} onUpload={handleUpload} isLoading={isUploading} fulfillingRequest={fulfillingRequest} />}
-        {runTour && <TooltipGuide targetSelector={tourSteps[tourStep-1]?.selector || 'body'} content={tourSteps[tourStep-1]?.content || ''} currentStep={tourStep} totalSteps={tourSteps.length} onNext={() => tourStep < tourSteps.length ? setTourStep(tourStep + 1) : handleFinishTour()} onPrev={() => setTourStep(Math.max(1, tourStep-1))} onSkip={handleFinishTour} />}
+        {runTour && <TooltipGuide targetSelector={tourSteps[tourStep-1]?.selector || 'body'} content={tourSteps[tourStep-1]?.content || ''} currentStep={tourStep} totalSteps={tourSteps.length} onNext={() => tourStep < tourSteps.length ? setTourStep(tourStep + 1) : setRunTour(false)} onPrev={() => setTourStep(Math.max(1, tourStep-1))} onSkip={() => setRunTour(false)} />}
+        {toast && <ToastNotification message={toast.message} points={toast.points} type={toast.type} onClose={() => setToast(null)} />}
       </div>
-    );
-  }
-
-  return (
-    <AppContext.Provider value={appContextValue}>
-      {content}
-      {toast && <ToastNotification message={toast.message} points={toast.points} type={toast.type} onClose={() => setToast(null)} />}
     </AppContext.Provider>
   );
 };

@@ -130,7 +130,7 @@ const App: React.FC = () => {
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info', points?: number) => setToast({ message, type, points });
 
-  // Sync dark mode class to HTML element for global theme support
+  // Sync dark mode class to root HTML element for reliable dashboard backgrounds
   useEffect(() => {
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
@@ -172,7 +172,6 @@ const App: React.FC = () => {
                     showToast("Welcome back! Your account has been reactivated.", "success");
                     setUser(userData);
                 } else {
-                    // Persistent session detected for deactivated user - force clean logout
                     await signOut(auth);
                     setUser(null);
                 }
@@ -249,7 +248,6 @@ const App: React.FC = () => {
     if (!auth) return;
     isExiting.current = true;
     try {
-        // Clear local state IMMEDIATELY to trigger redirection to AuthPage
         setUser(null);
         setViewState('dashboard');
         setViewHistory([]);
@@ -266,10 +264,8 @@ const App: React.FC = () => {
     const userId = user.id;
     try {
         isExiting.current = true;
-        // Clear locally first
         setUser(null);
         setViewState('dashboard');
-        // Update database in background
         await updateDoc(doc(db, "users", userId), { status: 'deactivated' });
         await signOut(auth);
         showToast("Account deactivated. Log back in to restore.", "info");
@@ -287,6 +283,11 @@ const App: React.FC = () => {
         isExiting.current = true;
         const userToKill = auth.currentUser;
         const batch = writeBatch(db);
+
+        // CLEAR LOCAL FLAGS so the tour restarts on next login
+        localStorage.removeItem(`examvault_tour_${userId}`);
+        localStorage.removeItem(`examvault_saved_viewed_count_${userId}`);
+
         const resSnap = await getDocs(query(collection(db, "resources"), where("author.id", "==", userId)));
         resSnap.forEach(d => batch.delete(d.ref));
         const postSnap = await getDocs(query(collection(db, "forumPosts"), where("author.id", "==", userId)));
@@ -294,6 +295,7 @@ const App: React.FC = () => {
         const reqSnap = await getDocs(query(collection(db, "resourceRequests"), where("requester.id", "==", userId)));
         reqSnap.forEach(d => batch.delete(d.ref));
         batch.delete(doc(db, "users", userId));
+        
         await batch.commit();
         setUser(null); 
         setViewState('dashboard');
@@ -308,6 +310,37 @@ const App: React.FC = () => {
         } else {
             showToast("Failed to delete account.", "error");
         }
+    }
+  };
+
+  const tourSteps = [
+    { selector: 'body', content: "Welcome to ExamVault! Let's take a quick tour of your new study hub." },
+    { selector: '#tour-sidenav', content: "Use the sidebar to navigate between the Dashboard, Discussions, Requests, Messages, and Leaderboard." },
+    { selector: '#tour-search-bar', content: "Quickly find resources, users, or courses using the global search." },
+    { selector: '#tour-filter-button', content: "Use filters to narrow down resources by year, semester, lecturer, or type." },
+    { selector: '#tour-requests', content: "Can't find what you need? Check the Requests page to ask the community or help others." },
+    { selector: '#tour-upload-button', content: "Contribute to the community by uploading your own past papers and notes." },
+    { selector: '#tour-saved-items', content: "Access your bookmarked resources quickly from here." },
+    { selector: '#tour-notifications', content: "Stay updated with new uploads, replies, and messages." },
+    { selector: '#tour-dark-mode', content: "Toggle between Light and Dark mode for comfortable reading." },
+    { selector: '#tour-profile-menu', content: "Manage your profile and settings here." },
+    { selector: 'body', content: "You're all set! Happy Studying!" },
+  ];
+
+  useEffect(() => {
+    if (user && !isLoading) {
+      const hasSeenTour = localStorage.getItem(`examvault_tour_${user.id}`);
+      if (!hasSeenTour) {
+        setRunTour(true);
+        setTourStep(1);
+      }
+    }
+  }, [user, isLoading]);
+
+  const finishTour = () => {
+    setRunTour(false);
+    if (user) {
+      localStorage.setItem(`examvault_tour_${user.id}`, 'true');
     }
   };
 
@@ -367,6 +400,23 @@ const App: React.FC = () => {
           </main>
         </div>
         {isUploadModalOpen && <UploadModal onClose={() => setIsUploadModalOpen(false)} onUpload={() => {}} isLoading={isUploading} />}
+        {runTour && (
+            <TooltipGuide
+                targetSelector={tourSteps[tourStep - 1]?.selector || 'body'}
+                content={tourSteps[tourStep - 1]?.content || ''}
+                currentStep={tourStep}
+                totalSteps={tourSteps.length}
+                onNext={() => {
+                    if (tourStep < tourSteps.length) {
+                        setTourStep(tourStep + 1);
+                    } else {
+                        finishTour();
+                    }
+                }}
+                onPrev={() => setTourStep(Math.max(1, tourStep - 1))}
+                onSkip={finishTour}
+            />
+        )}
         {toast && <ToastNotification message={toast.message} points={toast.points} type={toast.type} onClose={() => setToast(null)} />}
       </div>
     </AppContext.Provider>

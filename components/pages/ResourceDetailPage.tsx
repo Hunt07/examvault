@@ -125,7 +125,13 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     let base64;
     if (!resource.extractedText) base64 = await resolveFileBase64();
     let textContext = `Title: ${resource.title}\nCourse: ${resource.courseCode}`;
-    const result = await summarizeContent(textContext, base64, resource.mimeType, resource.extractedText);
+    // Updated call to use configuration object
+    const result = await summarizeContent({
+        content: textContext, 
+        fileBase64: base64, 
+        mimeType: resource.mimeType, 
+        extractedText: resource.extractedText
+    });
     setSummary(result); setIsSummarizing(false);
   };
 

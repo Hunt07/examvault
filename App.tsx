@@ -180,7 +180,9 @@ const App: React.FC = () => {
             }
             const isMaster = MASTER_ADMIN_EMAILS.includes(firebaseUser.email || '');
             if (isMaster && !userData.isAdmin) await updateDoc(doc(db!, "users", firebaseUser.uid), { isAdmin: true });
-            setUser(userData);
+            
+            // Sync user state ensuring Document ID matches internal ID
+            setUser({ ...userData, id: docSnap.id });
           } else {
             const displayName = firebaseUser.displayName || "Student";
             const newUser: User = {
@@ -212,18 +214,26 @@ const App: React.FC = () => {
     if (!user || !db) return;
     setAreResourcesLoading(true);
     
-    // Filter out deactivated users and ensure uniqueness to fix leaderboard ghosting
-    // Fix: Explicitly type the Map constructor as Map<string, User> to ensure Array.from returns User[] instead of unknown[]
+    // Strict uniqueness filtering by email AND id to prevent ghosting
     const unsubUsers = onSnapshot(collection(db, "users"), (s) => {
-        const rawUsers = s.docs.map(d => d.data() as User);
-        const uniqueActiveUsers: User[] = Array.from(
-            new Map<string, User>(
-                rawUsers
-                    .filter(u => u.status !== 'deactivated')
-                    .map(u => [u.id, u] as [string, User])
-            ).values()
-        );
-        setUsers(uniqueActiveUsers);
+        const emailMap = new Map<string, User>();
+        s.docs.forEach((docSnap) => {
+            const data = docSnap.data() as User;
+            const u = { ...data, id: docSnap.id };
+            
+            if (u.status === 'deactivated' || u.status === 'banned' || !u.email) return;
+
+            const existing = emailMap.get(u.email);
+            // If duplicate found, keep the one with more points (likely the active one)
+            if (existing) {
+                if ((u.points || 0) > (existing.points || 0)) {
+                    emailMap.set(u.email, u);
+                }
+            } else {
+                emailMap.set(u.email, u);
+            }
+        });
+        setUsers(Array.from(emailMap.values()));
     });
 
     const unsubResources = onSnapshot(query(collection(db, "resources"), orderBy("uploadDate", "desc")), (s) => {
@@ -238,7 +248,7 @@ const App: React.FC = () => {
     return () => { unsubUsers(); unsubResources(); unsubPosts(); unsubRequests(); unsubConvos(); unsubMessages(); unsubNotifs(); };
   }, [user?.id]);
 
-  // Handle tour logic properly
+  // Handle tour logic
   useEffect(() => {
     if (user && !isLoading && !runTour) {
       const hasSeenTour = localStorage.getItem(`examvault_tour_${user.id}`);
@@ -251,9 +261,7 @@ const App: React.FC = () => {
 
   const handleFinishTour = () => {
     setRunTour(false);
-    if (user) {
-      localStorage.setItem(`examvault_tour_${user.id}`, 'true');
-    }
+    if (user) localStorage.setItem(`examvault_tour_${user.id}`, 'true');
   };
 
   const apiEarnPoints = async (amount: number, message: string) => {
@@ -269,16 +277,14 @@ const App: React.FC = () => {
 
   const apiDeactivateAccount = async () => {
     if (!user || !db) return;
-    const userId = user.id;
     try {
         isExiting.current = true;
-        await updateDoc(doc(db, "users", userId), { status: 'deactivated' });
+        await updateDoc(doc(db, "users", user.id), { status: 'deactivated' });
         await signOut(auth!);
         setUser(null);
         setViewState('dashboard');
-        showToast("Account deactivated. Log back in any time to restore your profile.", "info");
+        showToast("Account deactivated.", "info");
     } catch (e) {
-        console.error("Deactivate failed:", e);
         isExiting.current = false;
         showToast("Failed to deactivate account.", "error");
     }
@@ -291,32 +297,21 @@ const App: React.FC = () => {
         isExiting.current = true;
         const currentUser = auth.currentUser;
         const batch = writeBatch(db);
-
         const resSnap = await getDocs(query(collection(db, "resources"), where("author.id", "==", userId)));
         resSnap.forEach(d => batch.delete(d.ref));
-
         const postSnap = await getDocs(query(collection(db, "forumPosts"), where("author.id", "==", userId)));
         postSnap.forEach(d => batch.delete(d.ref));
-
         const reqSnap = await getDocs(query(collection(db, "resourceRequests"), where("requester.id", "==", userId)));
         reqSnap.forEach(d => batch.delete(d.ref));
-
         batch.delete(doc(db, "users", userId));
         await batch.commit();
         await deleteUser(currentUser);
-
         setUser(null);
         setViewState('dashboard');
-        showToast("Account and all data permanently deleted.", "info");
+        showToast("Account permanently deleted.", "info");
     } catch (error: any) {
-        console.error("Delete account failed:", error);
         isExiting.current = false;
-        if (error.code === 'auth/requires-recent-login') {
-            showToast("Please log in again before performing this sensitive action.", "error");
-            await signOut(auth!);
-        } else {
-            showToast("Failed to delete account.", "error");
-        }
+        showToast("Deletion failed. Re-authenticate and try again.", "error");
     }
   };
 
@@ -360,35 +355,9 @@ const App: React.FC = () => {
       const docRef = await addDoc(collection(db, "conversations"), { participants: [user.id, userId], lastMessageTimestamp: new Date().toISOString() });
       if (initialMessage) {
         await addDoc(collection(db, "directMessages"), { conversationId: docRef.id, senderId: user.id, recipientId: userId, text: initialMessage, timestamp: new Date().toISOString(), status: MessageStatus.Sent });
-        apiSendNotification(userId, user.id, NotificationType.NewMessage, `New message from ${user.name}`, { conversationId: docRef.id });
       }
       setView('messages', docRef.id);
     }
-  };
-
-  const apiDeleteForumPost = async (postId: string) => {
-    if (!db) return;
-    setSelectedId(undefined);
-    setViewState('discussions');
-    try {
-      await deleteDoc(doc(db, "forumPosts", postId));
-      apiEarnPoints(-10, "Post deleted.");
-    } catch (e) { console.error(e); }
-  };
-
-  const apiDeleteResource = async (resourceId: string, fileUrl: string, previewUrl?: string) => {
-    if (!user || !db) return;
-    setSelectedId(undefined);
-    setViewState('dashboard');
-    try {
-      await deleteDoc(doc(db, "resources", resourceId));
-      if (storage) {
-        if (fileUrl?.startsWith('http')) try { await deleteObject(ref(storage, fileUrl)); } catch (e) {}
-        if (previewUrl?.includes('firebasestorage')) try { await deleteObject(ref(storage, previewUrl)); } catch (e) {}
-      }
-      await updateDoc(doc(db, "users", user.id), { uploadCount: increment(-1) });
-      apiEarnPoints(-25, "Resource deleted.");
-    } catch (e) { console.error(e); }
   };
 
   const handleUpload = async (resourceData: any, file: File, coverImage: File | null) => {
@@ -398,65 +367,19 @@ const App: React.FC = () => {
         const storageRef = ref(storage, `resources/${Date.now()}_${file.name}`);
         await uploadBytes(storageRef, file);
         const downloadURL = await getDownloadURL(storageRef);
-        
-        let previewUrl;
-        if (coverImage) {
-            const coverRef = ref(storage, `covers/${Date.now()}_${coverImage.name}`);
-            await uploadBytes(coverRef, coverImage);
-            previewUrl = await getDownloadURL(coverRef);
-        } else {
-            previewUrl = generateFilePreview(file.name);
-        }
-
+        let previewUrl = coverImage ? await getDownloadURL(ref(storage, `covers/${Date.now()}_${coverImage.name}`)) : generateFilePreview(file.name);
         const newResource: Omit<Resource, 'id'> = {
-            ...resourceData,
-            author: sanitizeForFirestore(user),
-            uploadDate: new Date().toISOString(),
-            upvotes: 0,
-            downvotes: 0,
-            upvotedBy: [],
-            downvotedBy: [],
-            comments: [],
-            fileUrl: downloadURL,
-            fileName: file.name,
-            previewImageUrl: previewUrl,
-            mimeType: file.type,
-            contentForAI: `Title: ${resourceData.title}. Course: ${resourceData.courseCode}. Type: ${resourceData.type}.`,
+            ...resourceData, author: sanitizeForFirestore(user), uploadDate: new Date().toISOString(), upvotes: 0, downvotes: 0, upvotedBy: [], downvotedBy: [], comments: [], fileUrl: downloadURL, fileName: file.name, previewImageUrl: previewUrl, mimeType: file.type, contentForAI: `Title: ${resourceData.title}.`,
         };
-
         const docRef = await addDoc(collection(db, "resources"), sanitizeForFirestore(newResource));
-
-        // Reputation Logic
-        const basePoints = 25;
-        const totalPoints = fulfillingRequest ? basePoints + 25 : basePoints;
-        
-        await updateDoc(doc(db, "users", user.id), {
-            uploadCount: increment(1),
-            points: increment(totalPoints),
-            weeklyPoints: increment(totalPoints)
-        });
-
+        const pts = fulfillingRequest ? 50 : 25;
+        await updateDoc(doc(db, "users", user.id), { uploadCount: increment(1), points: increment(pts), weeklyPoints: increment(pts) });
         if (fulfillingRequest) {
-            await updateDoc(doc(db, "resourceRequests", fulfillingRequest.id), {
-                status: ResourceRequestStatus.Fulfilled,
-                fulfillment: {
-                    fulfiller: sanitizeForFirestore(user),
-                    resourceId: docRef.id,
-                    timestamp: new Date().toISOString()
-                }
-            });
-            apiSendNotification(fulfillingRequest.requester.id, user.id, NotificationType.RequestFulfilled, `${user.name} fulfilled your request!`, { resourceId: docRef.id });
+            await updateDoc(doc(db, "resourceRequests", fulfillingRequest.id), { status: ResourceRequestStatus.Fulfilled, fulfillment: { fulfiller: sanitizeForFirestore(user), resourceId: docRef.id, timestamp: new Date().toISOString() } });
         }
-
-        showToast(fulfillingRequest ? "Request fulfilled! +50 Points" : "Resource uploaded! +25 Points", "success");
+        showToast("Uploaded!", "success", pts);
         setIsUploadModalOpen(false);
-        setFulfillingRequest(undefined);
-    } catch (error: any) {
-        console.error("Upload failed:", error);
-        showToast("Upload failed. Please try again.", "error");
-    } finally {
-        setIsUploading(false);
-    }
+    } catch (e) { showToast("Upload failed.", "error"); } finally { setIsUploading(false); }
   };
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg"><Loader2 size={48} className="animate-spin text-primary-600" /></div>;
@@ -464,128 +387,81 @@ const App: React.FC = () => {
 
   return (
     <AppContext.Provider value={{
-      user, users, resources, forumPosts, notifications, conversations, directMessages, resourceRequests,
-      view, setView, logout: async () => { isExiting.current = true; if (auth) await signOut(auth); setUser(null); setViewState('dashboard'); },
-      isDarkMode, toggleDarkMode: () => setIsDarkMode(!isDarkMode),
-      userRanks, savedResourceIds: user.savedResourceIds || [],
+      user, users, resources, forumPosts, notifications, conversations, directMessages, resourceRequests, view, setView, 
+      logout: async () => { isExiting.current = true; if (auth) await signOut(auth); setUser(null); setViewState('dashboard'); },
+      isDarkMode, toggleDarkMode: () => setIsDarkMode(!isDarkMode), userRanks, savedResourceIds: user.savedResourceIds || [],
       toggleSaveResource: async (id) => {
         const isS = user.savedResourceIds?.includes(id);
         await updateDoc(doc(db!, "users", user.id), { savedResourceIds: isS ? arrayRemove(id) : arrayUnion(id) });
-        showToast(isS ? "Removed bookmark" : "Bookmarked!", "info");
       },
       handleVote: async (id, act) => {
         const r = resources.find(x => x.id === id); if (!r) return;
-        const ref = doc(db!, "resources", id);
-        const up = r.upvotedBy?.includes(user.id); const dn = r.downvotedBy?.includes(user.id);
-        const upds: any = {};
-        if (act === 'up') {
-          if (up) { upds.upvotes = increment(-1); upds.upvotedBy = arrayRemove(user.id); }
-          else { upds.upvotes = increment(1); upds.upvotedBy = arrayUnion(user.id); if (dn) { upds.downvotes = increment(-1); upds.downvotedBy = arrayRemove(user.id); } }
-        } else {
-          if (dn) { upds.downvotes = increment(-1); upds.downvotedBy = arrayRemove(user.id); }
-          else { upds.downvotes = increment(1); upds.downvotedBy = arrayUnion(user.id); if (up) { upds.upvotes = increment(-1); upds.upvotedBy = arrayRemove(user.id); } }
-        }
-        await updateDoc(ref, upds);
+        const isUp = r.upvotedBy?.includes(user.id);
+        await updateDoc(doc(db!, "resources", id), { upvotes: isUp ? increment(-1) : increment(1), upvotedBy: isUp ? arrayRemove(user.id) : arrayUnion(user.id) });
       },
       addCommentToResource: async (resId, text, pId) => {
-        const comment = { id: `c-${Date.now()}`, author: sanitizeForFirestore(user), text, timestamp: new Date().toISOString(), parentId: pId, upvotes: 0, upvotedBy: [] };
-        await updateDoc(doc(db!, "resources", resId), { comments: arrayUnion(sanitizeForFirestore(comment)) });
+        await updateDoc(doc(db!, "resources", resId), { comments: arrayUnion({ id: `c-${Date.now()}`, author: sanitizeForFirestore(user), text, timestamp: new Date().toISOString(), parentId: pId, upvotes: 0, upvotedBy: [] }) });
       },
       handleCommentVote: async (resId, cId) => {
-        const resRef = doc(db!, "resources", resId); const snap = await getDoc(resRef);
+        const snap = await getDoc(doc(db!, "resources", resId));
         if (snap.exists()) {
-          const upds = (snap.data().comments || []).map((c: any) => {
-            if (c.id === cId) {
-              const isUp = c.upvotedBy?.includes(user.id);
-              return { ...c, upvotes: isUp ? c.upvotes - 1 : c.upvotes + 1, upvotedBy: isUp ? arrayRemove(user.id) : arrayUnion(user.id) };
-            }
-            return c;
-          });
-          await updateDoc(resRef, { comments: upds });
+          const upds = snap.data().comments.map((c: any) => c.id === cId ? { ...c, upvotes: c.upvotedBy.includes(user.id) ? c.upvotes - 1 : c.upvotes + 1, upvotedBy: c.upvotedBy.includes(user.id) ? arrayRemove(user.id) : arrayUnion(user.id) } : c);
+          await updateDoc(doc(db!, "resources", resId), { comments: upds });
         }
       },
       deleteCommentFromResource: async (resId, comment) => { await updateDoc(doc(db!, "resources", resId), { comments: arrayRemove(comment) }); },
       addForumPost: async (post) => {
-        const newPost = { ...post, author: sanitizeForFirestore(user), timestamp: new Date().toISOString(), upvotes: 0, downvotes: 0, upvotedBy: [], downvotedBy: [], replies: [] };
-        await addDoc(collection(db!, "forumPosts"), sanitizeForFirestore(newPost));
-        apiEarnPoints(10, "Post created!");
+        await addDoc(collection(db!, "forumPosts"), { ...post, author: sanitizeForFirestore(user), timestamp: new Date().toISOString(), upvotes: 0, downvotes: 0, upvotedBy: [], downvotedBy: [], replies: [] });
       },
       handlePostVote: async (id, act) => {
         const p = forumPosts.find(x => x.id === id); if (!p) return;
-        const ref = doc(db!, "forumPosts", id);
-        const up = p.upvotedBy?.includes(user.id); const dn = p.downvotedBy?.includes(user.id);
-        const upds: any = {};
-        if (act === 'up') {
-          if (up) { upds.upvotes = increment(-1); upds.upvotedBy = arrayRemove(user.id); }
-          else { upds.upvotes = increment(1); upds.upvotedBy = arrayUnion(user.id); if (dn) { upds.downvotes = increment(-1); upds.downvotedBy = arrayRemove(user.id); } }
-        } else {
-          if (dn) { upds.downvotes = increment(-1); upds.downvotedBy = arrayRemove(user.id); }
-          else { upds.downvotes = increment(1); upds.downvotedBy = arrayUnion(user.id); if (up) { upds.upvotes = increment(-1); upds.upvotedBy = arrayRemove(user.id); } }
-        }
-        await updateDoc(ref, upds);
+        const isUp = p.upvotedBy?.includes(user.id);
+        await updateDoc(doc(db!, "forumPosts", id), { upvotes: isUp ? increment(-1) : increment(1), upvotedBy: isUp ? arrayRemove(user.id) : arrayUnion(user.id) });
       },
-      deleteForumPost: apiDeleteForumPost,
-      addReplyToPost: async (postId, text, pId, file) => {
-        const reply: any = { id: `r-${Date.now()}`, author: sanitizeForFirestore(user), text, timestamp: new Date().toISOString(), upvotes: 0, upvotedBy: [], isVerified: false, parentId: pId };
-        if (file) {
-          const sRef = ref(storage!, `atts/${Date.now()}`); await uploadBytes(sRef, file);
-          reply.attachment = { type: file.type.startsWith('image/') ? 'image' : 'file', url: await getDownloadURL(sRef), name: file.name };
-        }
-        await updateDoc(doc(db!, "forumPosts", postId), { replies: arrayUnion(sanitizeForFirestore(reply)) });
+      deleteForumPost: async (id) => { await deleteDoc(doc(db!, "forumPosts", id)); },
+      addReplyToPost: async (id, text, pId) => {
+        await updateDoc(doc(db!, "forumPosts", id), { replies: arrayUnion({ id: `r-${Date.now()}`, author: sanitizeForFirestore(user), text, timestamp: new Date().toISOString(), upvotes: 0, upvotedBy: [], isVerified: false, parentId: pId }) });
       },
       handleReplyVote: async (pId, rId) => {
-        const pRef = doc(db!, "forumPosts", pId); const snap = await getDoc(pRef);
+        const snap = await getDoc(doc(db!, "forumPosts", pId));
         if (snap.exists()) {
-          const upds = (snap.data().replies || []).map((r: any) => {
-            if (r.id === rId) {
-              const isUp = r.upvotedBy?.includes(user.id);
-              return { ...r, upvotes: isUp ? r.upvotes - 1 : r.upvotes + 1, upvotedBy: isUp ? arrayRemove(user.id) : arrayUnion(user.id) };
-            }
-            return r;
-          });
-          await updateDoc(pRef, { replies: upds });
+          const upds = snap.data().replies.map((r: any) => r.id === rId ? { ...r, upvotes: r.upvotedBy.includes(user.id) ? r.upvotes - 1 : r.upvotes + 1, upvotedBy: r.upvotedBy.includes(user.id) ? arrayRemove(user.id) : arrayUnion(user.id) } : r);
+          await updateDoc(doc(db!, "forumPosts", pId), { replies: upds });
         }
       },
       deleteReplyFromPost: async (pId, r) => { await updateDoc(doc(db!, "forumPosts", pId), { replies: arrayRemove(r) }); },
       toggleVerifiedAnswer: async (pId, rId) => {
-        const pRef = doc(db!, "forumPosts", pId); const snap = await getDoc(pRef);
+        const snap = await getDoc(doc(db!, "forumPosts", pId));
         if (snap.exists()) {
-          const upds = (snap.data().replies || []).map((r: any) => {
-            if (r.id === rId) { const next = !r.isVerified; if (next) apiEarnPoints(15, "Verified!"); return { ...r, isVerified: next }; }
-            return r;
-          });
-          await updateDoc(pRef, { replies: upds });
+          const upds = snap.data().replies.map((r: any) => r.id === rId ? { ...r, isVerified: !r.isVerified } : r);
+          await updateDoc(doc(db!, "forumPosts", pId), { replies: upds });
         }
       },
-      addResourceRequest: async (req) => { await addDoc(collection(db!, "resourceRequests"), { ...req, requester: sanitizeForFirestore(user), status: ResourceRequestStatus.Open, timestamp: new Date().toISOString() }); apiEarnPoints(5, "Request posted!"); },
+      addResourceRequest: async (req) => { await addDoc(collection(db!, "resourceRequests"), { ...req, requester: sanitizeForFirestore(user), status: ResourceRequestStatus.Open, timestamp: new Date().toISOString() }); },
       deleteResourceRequest: async (id) => { await deleteDoc(doc(db!, "resourceRequests", id)); },
       openUploadForRequest: (id) => { const r = resourceRequests.find(x => x.id === id); if (r) { setFulfillingRequest(r); setIsUploadModalOpen(true); } },
       toggleUserSubscription: async (id) => {
         const isF = user.subscriptions?.users?.includes(id);
         await updateDoc(doc(db!, "users", user.id), { "subscriptions.users": isF ? arrayRemove(id) : arrayUnion(id) });
-        if (!isF) apiSendNotification(id, user.id, NotificationType.Subscription, `${user.name} followed you.`);
-        showToast(isF ? "Unfollowed" : "Following!", "info");
       },
-      toggleLecturerSubscription: async (name) => {
-        const isF = user.subscriptions?.lecturers?.includes(name);
-        await updateDoc(doc(db!, "users", user.id), { "subscriptions.lecturers": isF ? arrayRemove(name) : arrayUnion(name) });
-        showToast(isF ? "Unfollowed" : "Following!", "info");
+      toggleLecturerSubscription: async (n) => {
+        const isF = user.subscriptions?.lecturers?.includes(n);
+        await updateDoc(doc(db!, "users", user.id), { "subscriptions.lecturers": isF ? arrayRemove(n) : arrayUnion(n) });
       },
-      toggleCourseCodeSubscription: async (code) => {
-        const isF = user.subscriptions?.courseCodes?.includes(code);
-        await updateDoc(doc(db!, "users", user.id), { "subscriptions.courseCodes": isF ? arrayRemove(code) : arrayUnion(code) });
-        showToast(isF ? "Unfollowed" : "Following!", "info");
+      toggleCourseCodeSubscription: async (c) => {
+        const isF = user.subscriptions?.courseCodes?.includes(c);
+        await updateDoc(doc(db!, "users", user.id), { "subscriptions.courseCodes": isF ? arrayRemove(c) : arrayUnion(c) });
       },
       updateUserProfile: async (d) => { await updateDoc(doc(db!, "users", user.id), d); },
       deleteAccount: apiDeleteAccount, deactivateAccount: apiDeactivateAccount,
-      sendMessage: apiSendMessage, editMessage: async (id, text) => { await updateDoc(doc(db!, "directMessages", id), { text, editedAt: new Date().toISOString() }); },
-      deleteMessage: async (id) => { await updateDoc(doc(db!, "directMessages", id), { isDeleted: true, text: "" }); },
+      sendMessage: apiSendMessage, editMessage: async (id, text) => { await updateDoc(doc(db!, "directMessages", id), { text }); },
+      deleteMessage: async (id) => { await updateDoc(doc(db!, "directMessages", id), { isDeleted: true }); },
       startConversation: apiStartConversation, sendDirectMessageToUser: (id, text) => apiStartConversation(id, text),
       markNotificationAsRead: async (id) => { await updateDoc(doc(db!, "notifications", id), { isRead: true }); },
-      markAllNotificationsAsRead: async () => { notifications.filter(n => !n.isRead).forEach(n => updateDoc(doc(db!, "notifications", n.id), { isRead: true })); },
-      clearAllNotifications: async () => { const q = query(collection(db!, "notifications"), where("recipientId", "==", user.id)); const sn = await getDocs(q); const b = writeBatch(db!); sn.forEach(d => b.delete(d.ref)); await b.commit(); },
+      markAllNotificationsAsRead: async () => { notifications.forEach(n => updateDoc(doc(db!, "notifications", n.id), { isRead: true })); },
+      clearAllNotifications: async () => { const sn = await getDocs(query(collection(db!, "notifications"), where("recipientId", "==", user.id))); const b = writeBatch(db!); sn.forEach(d => b.delete(d.ref)); await b.commit(); },
       markMessagesAsRead: async (id) => { const unread = directMessages.filter(m => m.conversationId === id && m.recipientId === user.id && m.status !== MessageStatus.Read); if (unread.length) { const b = writeBatch(db!); unread.forEach(m => b.update(doc(db!, "directMessages", m.id), { status: MessageStatus.Read })); await b.commit(); } },
-      goBack, deleteResource: apiDeleteResource, hasUnreadMessages: directMessages.some(m => m.recipientId === user?.id && m.status !== MessageStatus.Read), 
+      goBack, deleteResource: async (id) => { await deleteDoc(doc(db!, "resources", id)); }, hasUnreadMessages: directMessages.some(m => m.recipientId === user?.id && m.status !== MessageStatus.Read), 
       hasUnreadDiscussions: false, isLoading, areResourcesLoading, scrollTargetId, setScrollTargetId, showToast
     }}>
       <div className="min-h-screen bg-slate-50 dark:bg-dark-bg transition-colors duration-300">
@@ -603,25 +479,10 @@ const App: React.FC = () => {
           {view === 'requests' && <ResourceRequestsPage />}
         </main>
         {isUploadModalOpen && <UploadModal onClose={() => setIsUploadModalOpen(false)} onUpload={handleUpload} isLoading={isUploading} fulfillingRequest={fulfillingRequest} />}
-        {runTour && <TooltipGuide 
-          targetSelector={tourSteps[tourStep-1]?.selector || 'body'} 
-          content={tourSteps[tourStep-1]?.content || ''} 
-          currentStep={tourStep} 
-          totalSteps={tourSteps.length} 
-          onNext={() => {
-            if (tourStep < tourSteps.length) {
-              setTourStep(tourStep + 1);
-            } else {
-              handleFinishTour();
-            }
-          }} 
-          onPrev={() => setTourStep(Math.max(1, tourStep-1))} 
-          onSkip={handleFinishTour} 
-        />}
+        {runTour && <TooltipGuide targetSelector={tourSteps[tourStep-1]?.selector || 'body'} content={tourSteps[tourStep-1]?.content || ''} currentStep={tourStep} totalSteps={tourSteps.length} onNext={() => tourStep < tourSteps.length ? setTourStep(tourStep + 1) : handleFinishTour()} onPrev={() => setTourStep(Math.max(1, tourStep-1))} onSkip={handleFinishTour} />}
         {toast && <ToastNotification message={toast.message} points={toast.points} type={toast.type} onClose={() => setToast(null)} />}
       </div>
     </AppContext.Provider>
   );
 };
-
 export default App;

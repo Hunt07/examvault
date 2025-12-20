@@ -130,6 +130,17 @@ const App: React.FC = () => {
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info', points?: number) => setToast({ message, type, points });
 
+  // Sync dark mode class to HTML element for global theme support
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('examvault_theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('examvault_theme', 'light');
+    }
+  }, [isDarkMode]);
+
   const activeUserIds = useMemo(() => {
     return new Set(users.filter(u => !u.status || u.status === 'active').map(u => u.id));
   }, [users]);
@@ -152,9 +163,6 @@ const App: React.FC = () => {
           if (userSnap.exists()) {
             const userData = userSnap.data() as User;
             
-            // REACTIVATION LOGIC:
-            // Only reactivate if there is a 'login_intent' flag in session storage.
-            // This prevents auto-reactivation on page refresh (restored session).
             if (userData.status === 'deactivated') {
                 const hasLoginIntent = sessionStorage.getItem('examvault_login_intent') === 'true';
                 if (hasLoginIntent) {
@@ -164,7 +172,7 @@ const App: React.FC = () => {
                     showToast("Welcome back! Your account has been reactivated.", "success");
                     setUser(userData);
                 } else {
-                    // Force sign out because they are deactivated and didn't just log in
+                    // Persistent session detected for deactivated user - force clean logout
                     await signOut(auth);
                     setUser(null);
                 }
@@ -241,6 +249,7 @@ const App: React.FC = () => {
     if (!auth) return;
     isExiting.current = true;
     try {
+        // Clear local state IMMEDIATELY to trigger redirection to AuthPage
         setUser(null);
         setViewState('dashboard');
         setViewHistory([]);
@@ -257,8 +266,10 @@ const App: React.FC = () => {
     const userId = user.id;
     try {
         isExiting.current = true;
+        // Clear locally first
         setUser(null);
         setViewState('dashboard');
+        // Update database in background
         await updateDoc(doc(db, "users", userId), { status: 'deactivated' });
         await signOut(auth);
         showToast("Account deactivated. Log back in to restore.", "info");
@@ -300,10 +311,6 @@ const App: React.FC = () => {
     }
   };
 
-  const handleLoginIntent = () => {
-    sessionStorage.setItem('examvault_login_intent', 'true');
-  };
-
   if (isLoading) {
     return (
         <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg">
@@ -314,8 +321,8 @@ const App: React.FC = () => {
 
   if (!user) {
     return (
-      <div className={`${isDarkMode ? 'dark' : ''} min-h-screen bg-slate-50 dark:bg-dark-bg transition-colors duration-300`}>
-        <AuthPage onLogin={handleLoginIntent} />
+      <div className="min-h-screen bg-slate-50 dark:bg-dark-bg transition-colors duration-300">
+        <AuthPage onLogin={() => {}} />
       </div>
     );
   }
@@ -341,7 +348,7 @@ const App: React.FC = () => {
       hasUnreadMessages: false, hasUnreadDiscussions: false, isLoading, areResourcesLoading,
       scrollTargetId, setScrollTargetId, showToast
     }}>
-      <div className={`${isDarkMode ? 'dark' : ''} min-h-screen bg-slate-50 dark:bg-dark-bg transition-colors duration-300 flex flex-col`}>
+      <div className="min-h-screen bg-slate-50 dark:bg-dark-bg transition-colors duration-300 flex flex-col">
         <Header onUploadClick={() => setIsUploadModalOpen(true)} />
         <div className="flex flex-1 relative">
           <SideNav />

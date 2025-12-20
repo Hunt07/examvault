@@ -39,12 +39,17 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
     setIsLoggingIn(true);
     setEmailError('');
 
+    // CRITICAL: Set login intent BEFORE triggering the popup.
+    // This ensures onAuthStateChanged sees the flag immediately when the user returns authenticated.
+    sessionStorage.setItem('examvault_login_intent', 'true');
+
     try {
       const result = await signInWithPopup(auth, microsoftProvider);
       const loggedEmail = result.user?.email || "";
       
       const isValid = validateEmail(loggedEmail);
       if (!isValid) {
+        sessionStorage.removeItem('examvault_login_intent');
         await signOut(auth);
         return; 
       }
@@ -52,6 +57,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
       onLogin(loggedEmail);
     } catch (error: any) {
       console.error("Microsoft Login failed:", error);
+      sessionStorage.removeItem('examvault_login_intent');
       if (error.code === 'auth/popup-closed-by-user') {
         setEmailError(''); 
       } else if (error.code === 'auth/popup-blocked') {

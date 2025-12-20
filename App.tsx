@@ -110,7 +110,6 @@ const App: React.FC = () => {
   const [viewHistory, setViewHistory] = useState<{ view: View; id?: string }[]>([]);
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
   const [scrollTargetId, setScrollTargetId] = useState<string | null>(null);
-  const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('examvault_theme') === 'dark');
   
   const isExiting = useRef(false);
 
@@ -126,8 +125,24 @@ const App: React.FC = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [fulfillingRequest, setFulfillingRequest] = useState<ResourceRequest | undefined>(undefined);
   const [toast, setToast] = useState<{ message: string; points?: number; type?: 'success' | 'error' | 'info' } | null>(null);
+  const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('examvault_theme') === 'dark');
   const [runTour, setRunTour] = useState(false);
   const [tourStep, setTourStep] = useState(0);
+
+  // FIX: Defined tourSteps to fix the "Cannot find name 'tourSteps'" error on line 498
+  const tourSteps = [
+    { selector: 'body', content: "Welcome to ExamVault! Let's take a quick tour of your new study hub." },
+    { selector: '#tour-sidenav', content: "Use the sidebar to navigate between the Dashboard, Discussions, Requests, Messages, and Leaderboard." },
+    { selector: '#tour-search-bar', content: "Quickly find resources, users, or courses using the global search." },
+    { selector: '#tour-filter-button', content: "Use filters to narrow down resources by year, semester, lecturer, or type." },
+    { selector: '#tour-requests', content: "Can't find what you need? Check the Requests page to ask the community or help others." },
+    { selector: '#tour-upload-button', content: "Contribute to the community by uploading your own past papers and notes." },
+    { selector: '#tour-saved-items', content: "Access your bookmarked resources quickly from here." },
+    { selector: '#tour-notifications', content: "Stay updated with new uploads, replies, and messages." },
+    { selector: '#tour-dark-mode', content: "Toggle between Light and Dark mode for comfortable reading." },
+    { selector: '#tour-profile-menu', content: "Manage your profile and settings here." },
+    { selector: 'body', content: "You're all set! Happy Studying!" },
+  ];
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info', points?: number) => setToast({ message, type, points });
 
@@ -141,7 +156,7 @@ const App: React.FC = () => {
     }
   }, [isDarkMode]);
 
-  // Auth and Current User Listener (Real-time reactivity)
+  // Auth and Current User Listener
   useEffect(() => {
     if (!auth || !db) { setIsLoading(false); return; }
     let unsubUserDoc: (() => void) | null = null;
@@ -209,6 +224,17 @@ const App: React.FC = () => {
     return () => { unsubUsers(); unsubResources(); unsubPosts(); unsubRequests(); unsubConvos(); unsubMessages(); unsubNotifs(); };
   }, [user?.id]);
 
+  // FIX: Added tour initialization logic
+  useEffect(() => {
+    if (user && !isLoading) {
+      const hasSeenTour = localStorage.getItem(`examvault_tour_${user.id}`);
+      if (!hasSeenTour) {
+        setRunTour(true);
+        setTourStep(1);
+      }
+    }
+  }, [user, isLoading]);
+
   const apiEarnPoints = async (amount: number, message: string) => {
     if (!user || !db) return;
     await updateDoc(doc(db, "users", user.id), { points: increment(amount), weeklyPoints: increment(amount) });
@@ -218,6 +244,66 @@ const App: React.FC = () => {
   const apiSendNotification = async (recipientId: string, senderId: string, type: NotificationType, message: string, linkIds?: any) => {
     if (recipientId === user?.id || !db) return;
     await addDoc(collection(db, "notifications"), { recipientId, senderId, type, message, timestamp: new Date().toISOString(), isRead: false, ...linkIds });
+  };
+
+  const apiDeactivateAccount = async () => {
+    if (!user || !db) return;
+    const userId = user.id;
+    try {
+        isExiting.current = true;
+        await updateDoc(doc(db, "users", userId), { status: 'deactivated' });
+        await signOut(auth!);
+        setUser(null);
+        setViewState('dashboard');
+        showToast("Account deactivated. Log back in any time to restore your profile.", "info");
+    } catch (e) {
+        console.error("Deactivate failed:", e);
+        isExiting.current = false;
+        showToast("Failed to deactivate account.", "error");
+    }
+  };
+
+  const apiDeleteAccount = async () => {
+    if (!user || !db || !auth.currentUser) return;
+    const userId = user.id;
+    try {
+        isExiting.current = true;
+        const currentUser = auth.currentUser;
+        const batch = writeBatch(db);
+
+        // 1. Delete user resources
+        const resSnap = await getDocs(query(collection(db, "resources"), where("author.id", "==", userId)));
+        resSnap.forEach(d => batch.delete(d.ref));
+
+        // 2. Delete forum posts
+        const postSnap = await getDocs(query(collection(db, "forumPosts"), where("author.id", "==", userId)));
+        postSnap.forEach(d => batch.delete(d.ref));
+
+        // 3. Delete requests
+        const reqSnap = await getDocs(query(collection(db, "resourceRequests"), where("requester.id", "==", userId)));
+        reqSnap.forEach(d => batch.delete(d.ref));
+
+        // 4. Delete user document
+        batch.delete(doc(db, "users", userId));
+        
+        await batch.commit();
+
+        // 5. Delete Auth record
+        await deleteUser(currentUser);
+
+        setUser(null);
+        setViewState('dashboard');
+        showToast("Account and all data permanently deleted.", "info");
+    } catch (error: any) {
+        console.error("Delete account failed:", error);
+        isExiting.current = false;
+        if (error.code === 'auth/requires-recent-login') {
+            showToast("Please log in again before performing this sensitive action.", "error");
+            await signOut(auth!);
+        } else {
+            showToast("Failed to delete account.", "error");
+        }
+    }
   };
 
   const userRanks = useMemo(() => {
@@ -268,7 +354,7 @@ const App: React.FC = () => {
 
   const apiDeleteForumPost = async (postId: string) => {
     if (!db) return;
-    setSelectedId(undefined); // Clear ID first to avoid component crash
+    setSelectedId(undefined);
     setViewState('discussions');
     try {
       await deleteDoc(doc(db, "forumPosts", postId));
@@ -291,29 +377,13 @@ const App: React.FC = () => {
     } catch (e) { console.error(e); }
   };
 
-  const tourSteps = [
-    { selector: 'body', content: "Welcome to ExamVault! Let's take a quick tour." },
-    { selector: '#tour-sidenav', content: "Navigate between Dashboard, Discussions, and more." },
-    { selector: '#tour-search-bar', content: "Find specific resources or students." },
-    { selector: '#tour-upload-button', content: "Share your own study materials." },
-    { selector: '#tour-saved-items', content: "Quick access to bookmarked items." },
-    { selector: 'body', content: "You're all set! Happy Studying!" },
-  ];
-
-  useEffect(() => {
-    if (user && !isLoading) {
-      const hasSeenTour = localStorage.getItem(`examvault_tour_${user.id}`);
-      if (!hasSeenTour) { setRunTour(true); setTourStep(1); }
-    }
-  }, [user, isLoading]);
-
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg"><Loader2 size={48} className="animate-spin text-primary-600" /></div>;
   if (!user) return <AuthPage onLogin={() => {}} />;
 
   return (
     <AppContext.Provider value={{
       user, users, resources, forumPosts, notifications, conversations, directMessages, resourceRequests,
-      view, setView, logout: async () => { isExiting.current = true; await signOut(auth!); setUser(null); setViewState('dashboard'); },
+      view, setView, logout: async () => { isExiting.current = true; if (auth) await signOut(auth); setUser(null); setViewState('dashboard'); },
       isDarkMode, toggleDarkMode: () => setIsDarkMode(!isDarkMode),
       userRanks, savedResourceIds: user.savedResourceIds || [],
       toggleSaveResource: async (id) => {
@@ -425,7 +495,7 @@ const App: React.FC = () => {
         showToast(isF ? "Unfollowed" : "Following!", "info");
       },
       updateUserProfile: async (d) => { await updateDoc(doc(db!, "users", user.id), d); },
-      deleteAccount: async () => { /* implementation */ }, deactivateAccount: async () => { /* implementation */ },
+      deleteAccount: apiDeleteAccount, deactivateAccount: apiDeactivateAccount,
       sendMessage: apiSendMessage, editMessage: async (id, text) => { await updateDoc(doc(db!, "directMessages", id), { text, editedAt: new Date().toISOString() }); },
       deleteMessage: async (id) => { await updateDoc(doc(db!, "directMessages", id), { isDeleted: true, text: "" }); },
       startConversation: apiStartConversation, sendDirectMessageToUser: (id, text) => apiStartConversation(id, text),
@@ -451,7 +521,7 @@ const App: React.FC = () => {
           {view === 'requests' && <ResourceRequestsPage />}
         </main>
         {isUploadModalOpen && <UploadModal onClose={() => setIsUploadModalOpen(false)} onUpload={() => {}} isLoading={isUploading} />}
-        {runTour && <TooltipGuide targetSelector={tourSteps[tourStep-1].selector} content={tourSteps[tourStep-1].content} currentStep={tourStep} totalSteps={tourSteps.length} onNext={() => tourStep < tourSteps.length ? setTourStep(tourStep+1) : setRunTour(false)} onPrev={() => setTourStep(Math.max(1, tourStep-1))} onSkip={() => setRunTour(false)} />}
+        {runTour && <TooltipGuide targetSelector={tourSteps[tourStep-1]?.selector || 'body'} content={tourSteps[tourStep-1]?.content || ''} currentStep={tourStep} totalSteps={tourSteps.length} onNext={() => tourStep < tourSteps.length ? setTourStep(tourStep+1) : setRunTour(false)} onPrev={() => setTourStep(Math.max(1, tourStep-1))} onSkip={() => setRunTour(false)} />}
         {toast && <ToastNotification message={toast.message} points={toast.points} type={toast.type} onClose={() => setToast(null)} />}
       </div>
     </AppContext.Provider>

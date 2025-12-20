@@ -223,15 +223,23 @@ const App: React.FC = () => {
     return () => { unsubUsers(); unsubResources(); unsubPosts(); unsubRequests(); unsubConvos(); unsubMessages(); unsubNotifs(); };
   }, [user?.id]);
 
+  // Handle tour logic properly
   useEffect(() => {
-    if (user && !isLoading) {
+    if (user && !isLoading && !runTour) {
       const hasSeenTour = localStorage.getItem(`examvault_tour_${user.id}`);
       if (!hasSeenTour) {
         setRunTour(true);
         setTourStep(1);
       }
     }
-  }, [user, isLoading]);
+  }, [user?.id, isLoading, runTour]);
+
+  const handleFinishTour = () => {
+    setRunTour(false);
+    if (user) {
+      localStorage.setItem(`examvault_tour_${user.id}`, 'true');
+    }
+  };
 
   const apiEarnPoints = async (amount: number, message: string) => {
     if (!user || !db) return;
@@ -580,7 +588,21 @@ const App: React.FC = () => {
           {view === 'requests' && <ResourceRequestsPage />}
         </main>
         {isUploadModalOpen && <UploadModal onClose={() => setIsUploadModalOpen(false)} onUpload={handleUpload} isLoading={isUploading} fulfillingRequest={fulfillingRequest} />}
-        {runTour && <TooltipGuide targetSelector={tourSteps[tourStep-1]?.selector || 'body'} content={tourSteps[tourStep-1]?.content || ''} currentStep={tourStep} totalSteps={tourSteps.length} onNext={() => tourStep < tourSteps.length ? setTourStep(tourStep+1) : setRunTour(false)} onPrev={() => setTourStep(Math.max(1, tourStep-1))} onSkip={() => setRunTour(false)} />}
+        {runTour && <TooltipGuide 
+          targetSelector={tourSteps[tourStep-1]?.selector || 'body'} 
+          content={tourSteps[tourStep-1]?.content || ''} 
+          currentStep={tourStep} 
+          totalSteps={tourSteps.length} 
+          onNext={() => {
+            if (tourStep < tourSteps.length) {
+              setTourStep(tourStep + 1);
+            } else {
+              handleFinishTour();
+            }
+          }} 
+          onPrev={() => setTourStep(Math.max(1, tourStep-1))} 
+          onSkip={handleFinishTour} 
+        />}
         {toast && <ToastNotification message={toast.message} points={toast.points} type={toast.type} onClose={() => setToast(null)} />}
       </div>
     </AppContext.Provider>

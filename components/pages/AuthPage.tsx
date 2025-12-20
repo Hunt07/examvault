@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { BookOpen, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+// Fix: Import individual Auth functions from firebase/auth for compatibility with modular SDK
 import { signInWithPopup, signOut, setPersistence, browserLocalPersistence } from "firebase/auth";
 import { auth, microsoftProvider } from "../../services/firebase";
 

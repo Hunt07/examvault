@@ -131,6 +131,7 @@ const App: React.FC = () => {
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info', points?: number) => setToast({ message, type, points });
 
+  // Sync dark mode class to root HTML element for reliable dashboard backgrounds
   useEffect(() => {
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
@@ -141,38 +142,42 @@ const App: React.FC = () => {
     }
   }, [isDarkMode]);
 
+  // Auth and Current User Listener
   useEffect(() => {
     if (!auth || !db) { setIsLoading(false); return; }
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (isExiting.current) return;
-      if (firebaseUser) {
-        try {
-          const userRef = doc(db!, "users", firebaseUser.uid);
-          const userSnap = await getDoc(userRef);
-          const isMaster = MASTER_ADMIN_EMAILS.includes(firebaseUser.email || '');
+    
+    let unsubUserDoc: (() => void) | null = null;
 
-          if (userSnap.exists()) {
-            const userData = userSnap.data() as User;
+    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (isExiting.current) return;
+
+      if (firebaseUser) {
+        // Dedicated listener for the current user document
+        unsubUserDoc = onSnapshot(doc(db!, "users", firebaseUser.uid), async (docSnap) => {
+          if (docSnap.exists()) {
+            const userData = docSnap.data() as User;
+            
             if (userData.status === 'deactivated') {
-                const hasLoginIntent = sessionStorage.getItem('examvault_login_intent') === 'true';
-                if (hasLoginIntent) {
-                    await updateDoc(userRef, { status: 'active' });
-                    userData.status = 'active';
-                    sessionStorage.removeItem('examvault_login_intent');
-                    showToast("Welcome back! Your account has been reactivated.", "success");
-                    setUser(userData);
-                } else {
-                    await signOut(auth);
-                    setUser(null);
-                }
-            } else {
-                if (isMaster && !userData.isAdmin) {
-                    await updateDoc(userRef, { isAdmin: true });
-                    userData.isAdmin = true;
-                }
-                setUser(userData);
+              const hasLoginIntent = sessionStorage.getItem('examvault_login_intent') === 'true';
+              if (hasLoginIntent) {
+                await updateDoc(doc(db!, "users", firebaseUser.uid), { status: 'active' });
+                sessionStorage.removeItem('examvault_login_intent');
+                showToast("Welcome back! Your account has been reactivated.", "success");
+              } else {
+                await signOut(auth);
+                setUser(null);
+                return;
+              }
             }
+            
+            const isMaster = MASTER_ADMIN_EMAILS.includes(firebaseUser.email || '');
+            if (isMaster && !userData.isAdmin) {
+              await updateDoc(doc(db!, "users", firebaseUser.uid), { isAdmin: true });
+            }
+
+            setUser(userData);
           } else {
+            // New User initialization
             const displayName = firebaseUser.displayName || "Student";
             const newUser: User = {
               id: firebaseUser.uid, name: displayName, email: firebaseUser.email || "",
@@ -180,24 +185,26 @@ const App: React.FC = () => {
               bio: "Academic explorer on ExamVault.", points: 0, weeklyPoints: 0, uploadCount: 0,
               course: "General", currentYear: 1, currentSemester: 1,
               subscriptions: { users: [], lecturers: [], courseCodes: [] }, savedResourceIds: [],
-              status: 'active', isAdmin: isMaster
+              status: 'active', isAdmin: MASTER_ADMIN_EMAILS.includes(firebaseUser.email || '')
             };
-            await setDoc(userRef, newUser);
-            setUser(newUser);
+            await setDoc(doc(db!, "users", firebaseUser.uid), newUser);
           }
-        } catch (error) { 
-            console.error("Auth fetch error:", error); 
-            setUser(null);
-        }
+          setIsLoading(false);
+        });
       } else { 
-          setUser(null); 
-          setViewState('dashboard'); 
+        setUser(null); 
+        setViewState('dashboard'); 
+        setIsLoading(false);
       }
-      setIsLoading(false);
     });
-    return () => unsubscribe();
+
+    return () => {
+      unsubscribeAuth();
+      if (unsubUserDoc) unsubUserDoc();
+    };
   }, []);
 
+  // Collection Listeners
   useEffect(() => {
     if (!user || !db) return;
     setAreResourcesLoading(true);
@@ -216,8 +223,7 @@ const App: React.FC = () => {
 
   const apiEarnPoints = async (amount: number, message: string) => {
     if (!user || !db) return;
-    const userRef = doc(db, "users", user.id);
-    await updateDoc(userRef, { points: increment(amount), weeklyPoints: increment(amount) });
+    await updateDoc(doc(db, "users", user.id), { points: increment(amount), weeklyPoints: increment(amount) });
     showToast(message, 'success', amount);
   };
 
@@ -375,7 +381,7 @@ const App: React.FC = () => {
   const apiAddForumPost = async (p: any) => {
       if (!user || !db) return;
       const newPost = { ...p, author: sanitizeForFirestore(user), timestamp: new Date().toISOString(), upvotes: 0, downvotes: 0, upvotedBy: [], downvotedBy: [], replies: [] };
-      const docRef = await addDoc(collection(db, "forumPosts"), sanitizeForFirestore(newPost));
+      await addDoc(collection(db, "forumPosts"), sanitizeForFirestore(newPost));
       apiEarnPoints(10, "Discussion posted!");
   };
 
@@ -409,7 +415,6 @@ const App: React.FC = () => {
     } else {
         const docRef = await addDoc(collection(db, "conversations"), { participants: [user.id, userId], lastMessageTimestamp: new Date().toISOString() });
         if (initialMessage) {
-            // Need to send manually because convo won't be in state yet
             await addDoc(collection(db, "directMessages"), { conversationId: docRef.id, senderId: user.id, recipientId: userId, text: initialMessage, timestamp: new Date().toISOString(), status: MessageStatus.Sent });
             apiSendNotification(userId, user.id, NotificationType.NewMessage, `New message from ${user.name}`, { conversationId: docRef.id });
         }

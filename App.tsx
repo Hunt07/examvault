@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import type { User, Resource, ForumPost, Comment, ForumReply, Notification, Conversation, DirectMessage, ResourceRequest, Attachment } from './types';
 import { NotificationType, MessageStatus, ResourceRequestStatus } from './types';
 import AuthPage from './components/pages/AuthPage';
@@ -112,6 +112,9 @@ const App: React.FC = () => {
   const [scrollTargetId, setScrollTargetId] = useState<string | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('examvault_theme') === 'dark');
   
+  // Guard to prevent re-authentication loops during logout/deactivation
+  const isExiting = useRef(false);
+
   const [users, setUsers] = useState<User[]>([]);
   const [rawResources, setRawResources] = useState<Resource[]>([]);
   const [rawForumPosts, setRawForumPosts] = useState<ForumPost[]>([]);
@@ -128,14 +131,6 @@ const App: React.FC = () => {
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info', points?: number) => setToast({ message, type, points });
 
-  const tourSteps = [
-    { selector: 'body', content: "Welcome to ExamVault! Let's take a quick tour." },
-    { selector: '#tour-sidenav', content: "Use the sidebar to navigate." },
-    { selector: '#tour-upload-button', content: "Contribute papers here." },
-    { selector: 'body', content: "Happy Studying!" },
-  ];
-
-  // Global Content Filter: Only show content from active users
   const activeUserIds = useMemo(() => {
     return new Set(users.filter(u => !u.status || u.status === 'active').map(u => u.id));
   }, [users]);
@@ -147,6 +142,9 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!auth || !db) { setIsLoading(false); return; }
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      // If we are currently exiting, ignore auth state changes to avoid race conditions
+      if (isExiting.current) return;
+
       if (firebaseUser) {
         try {
           const userRef = doc(db!, "users", firebaseUser.uid);
@@ -155,15 +153,11 @@ const App: React.FC = () => {
 
           if (userSnap.exists()) {
             const userData = userSnap.data() as User;
-            // REACTIVATION: Only restore if status is deactivated
+            // AUTO-REACTIVATION
             if (userData.status === 'deactivated') {
-                try {
-                    await updateDoc(userRef, { status: 'active' });
-                    userData.status = 'active';
-                    showToast("Welcome back! Your account has been reactivated.", "success");
-                } catch (e) {
-                    console.error("Reactivation failed:", e);
-                }
+                await updateDoc(userRef, { status: 'active' });
+                userData.status = 'active';
+                showToast("Welcome back! Your account has been reactivated.", "success");
             }
             if (isMaster && !userData.isAdmin) {
                 await updateDoc(userRef, { isAdmin: true });
@@ -234,38 +228,47 @@ const App: React.FC = () => {
 
   const logout = async () => {
     if (!auth) return;
+    isExiting.current = true;
     try {
+        // Clear state IMMEDIATELY to force redirect to AuthPage
+        setUser(null);
+        setViewState('dashboard');
+        setViewHistory([]);
         await signOut(auth);
     } catch (e) {
         console.error("Sign out failed:", e);
     } finally {
-        // Force local state reset even if Firebase call hangs
-        setUser(null);
-        setViewState('dashboard');
-        setViewHistory([]);
+        isExiting.current = false;
     }
   };
 
   const deactivateAccount = async () => {
     if (!user || !db) return;
+    const userId = user.id;
     try {
-        const userId = user.id;
-        // Perform the Firestore update FIRST
+        // 1. Synchronously trigger exit mode
+        isExiting.current = true;
+        // 2. Clear state locally to force immediate UI switch to AuthPage
+        setUser(null);
+        setViewState('dashboard');
+        // 3. Perform background updates
         await updateDoc(doc(db, "users", userId), { status: 'deactivated' });
-        showToast("Account deactivated. Logging out...", "info");
-        // THEN call the robust logout
-        await logout();
+        await signOut(auth);
+        showToast("Account deactivated. All your content is now hidden.", "info");
     } catch (e) {
         console.error("Deactivation error:", e);
+        isExiting.current = false;
         showToast("Deactivation failed. Please try again.", "error");
     }
   };
 
   const deleteAccount = async () => {
     if (!user || !db || !auth.currentUser) return;
+    const userId = user.id;
     try {
+        isExiting.current = true;
+        const userToKill = auth.currentUser;
         const batch = writeBatch(db);
-        const userId = user.id;
 
         // PERMANENT PURGE
         const resSnap = await getDocs(query(collection(db, "resources"), where("author.id", "==", userId)));
@@ -277,11 +280,16 @@ const App: React.FC = () => {
         batch.delete(doc(db, "users", userId));
         
         await batch.commit();
-        await deleteUser(auth.currentUser);
-        setUser(null); setViewState('dashboard');
+        
+        // Force local UI change
+        setUser(null); 
+        setViewState('dashboard');
+
+        await deleteUser(userToKill);
         showToast("Account purged permanently.", "info");
     } catch (error: any) {
         console.error("Purge failed:", error);
+        isExiting.current = false;
         if (error.code === 'auth/requires-recent-login') {
             showToast("Please log in again before deleting your account.", "error");
             await logout();
@@ -313,6 +321,18 @@ const App: React.FC = () => {
         setIsUploadModalOpen(false); showToast("Resource shared!", "success", 25);
     } catch (error) { showToast("Upload failed.", "error"); } finally { setIsUploading(false); }
   };
+
+  if (isLoading) {
+    return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg">
+            <Loader2 size={48} className="animate-spin text-primary-600" />
+        </div>
+    );
+  }
+
+  if (!user) {
+    return <AuthPage onLogin={() => {}} />;
+  }
 
   return (
     <AppContext.Provider value={{
@@ -355,7 +375,6 @@ const App: React.FC = () => {
         </div>
         {isUploadModalOpen && <UploadModal onClose={() => setIsUploadModalOpen(false)} onUpload={handleUpload} isLoading={isUploading} />}
         {toast && <ToastNotification message={toast.message} points={toast.points} type={toast.type} onClose={() => setToast(null)} />}
-        {runTour && <TooltipGuide targetSelector={tourSteps[tourStep]?.selector || 'body'} content={tourSteps[tourStep]?.content || ''} currentStep={tourStep + 1} totalSteps={tourSteps.length} onNext={() => tourStep < tourSteps.length - 1 ? setTourStep(tourStep + 1) : setRunTour(false)} onPrev={() => setTourStep(Math.max(0, tourStep - 1))} onSkip={() => setRunTour(false)} />}
       </div>
     </AppContext.Provider>
   );

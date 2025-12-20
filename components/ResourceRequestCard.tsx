@@ -17,6 +17,7 @@ const ResourceRequestCard: React.FC<ResourceRequestCardProps> = ({ request }) =>
 
     const requesterRank = userRanks.get(request.requester.id);
     const isOwnRequest = user?.id === request.requester.id;
+    const canDelete = isOwnRequest || user?.isAdmin;
 
     const handleUserClick = (userId: string) => {
         if (userId === user?.id) {
@@ -68,6 +69,9 @@ const ResourceRequestCard: React.FC<ResourceRequestCardProps> = ({ request }) =>
                 <div className="flex-grow min-w-0 w-full pr-12">
                     <div className="flex items-center gap-2 mb-2">
                          <span className="text-sm font-bold text-slate-800 dark:text-white px-3 py-1 bg-slate-100 dark:bg-zinc-800 rounded-full">{request.courseCode}</span>
+                         {user?.isAdmin && !isOwnRequest && (
+                             <span className="px-1.5 py-0.5 bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 text-[8px] font-black uppercase rounded">Moderator Access</span>
+                         )}
                     </div>
                     <h3 title={request.title} className="text-xl font-bold text-slate-800 dark:text-white truncate">{request.title}</h3>
                 </div>
@@ -76,7 +80,7 @@ const ResourceRequestCard: React.FC<ResourceRequestCardProps> = ({ request }) =>
                         e.stopPropagation();
                         handleUserClick(request.requester.id);
                     }}
-                    className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400 shrink-0 self-end sm:self-auto rounded-md p-2 -mr-2 hover:bg-slate-100 dark:hover:bg-zinc-700"
+                    className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400 shrink-0 self-end sm:self-auto rounded-md p-2 -mr-2 hover:bg-slate-100 dark:hover:bg-zinc-700 transition-colors"
                     aria-label={`View profile for ${request.requester.name}`}
                 >
                     <img src={request.requester.avatarUrl} alt={request.requester.name} className="w-10 h-10 rounded-full" />
@@ -85,19 +89,19 @@ const ResourceRequestCard: React.FC<ResourceRequestCardProps> = ({ request }) =>
                             <p className="font-semibold text-slate-700 dark:text-white">{request.requester.name}</p>
                             <UserRankBadge rank={requesterRank} size={16} />
                         </div>
-                        <p className="text-xs text-slate-500 dark:text-slate-300">
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
                             {new Date(request.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </p>
                     </div>
                 </button>
             </div>
             
-            {isOwnRequest && (
+            {canDelete && (
                 <div className="absolute top-4 right-4 sm:static sm:mt-0 sm:ml-auto">
                      <button 
                         onClick={() => setIsDeleteConfirmOpen(true)}
                         className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition"
-                        title="Delete Request"
+                        title={user?.isAdmin && !isOwnRequest ? "Delete (Admin Override)" : "Delete Request"}
                     >
                         <Trash2 size={18} />
                     </button>
@@ -129,11 +133,13 @@ const ResourceRequestCard: React.FC<ResourceRequestCardProps> = ({ request }) =>
             )}
             
             {isDeleteConfirmOpen && (
-                <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-100 dark:border-red-900 flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <p className="text-sm font-semibold text-red-700 dark:text-red-300">Are you sure you want to delete this request?</p>
+                <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-100 dark:border-red-900 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in slide-in-from-top-2">
+                    <p className="text-sm font-semibold text-red-700 dark:text-red-300">
+                        {user?.isAdmin && !isOwnRequest ? "Delete this request as a moderator?" : "Are you sure you want to delete this request?"}
+                    </p>
                     <div className="flex gap-2">
                         <button onClick={() => setIsDeleteConfirmOpen(false)} className="px-3 py-1.5 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-zinc-700 rounded-lg transition">Cancel</button>
-                        <button onClick={handleDelete} className="px-3 py-1.5 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition">Delete</button>
+                        <button onClick={handleDelete} className="px-3 py-1.5 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition shadow-sm">Delete</button>
                     </div>
                 </div>
             )}
@@ -148,7 +154,7 @@ const ResourceRequestCard: React.FC<ResourceRequestCardProps> = ({ request }) =>
                         {!isOwnRequest && (
                              <button
                                 onClick={() => openUploadForRequest(request.id)}
-                                className="w-full sm:w-auto bg-primary-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-primary-700 transition"
+                                className="w-full sm:w-auto bg-primary-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-primary-700 transition shadow-md"
                             >
                                 Fulfill Request
                             </button>

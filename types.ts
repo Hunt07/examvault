@@ -66,7 +66,7 @@ export interface Resource {
   description: string;
   fileUrl: string; // URL to PDF/image
   fileName: string; // Original name of the uploaded file
-  fileBase64?: string; // Base64 data for AI analysis (small files only)
+  fileBase64?: string; // base64 data for AI analysis (small files only)
   extractedText?: string; // Text content extracted during upload (for DOCX/PPTX)
   mimeType?: string; // Mime type for AI analysis
   previewImageUrl: string; // URL for a thumbnail
@@ -100,7 +100,7 @@ export interface ForumReply {
 }
 
 export interface ForumPost {
-  id:string;
+  id: string;
   title: string;
   author: User;
   timestamp: string;
@@ -165,22 +165,6 @@ export interface Conversation {
   lastMessageTimestamp: string;
 }
 
-export interface Flashcard {
-  term: string;
-  definition: string;
-}
-
-export interface QuizQuestion {
-  question: string;
-  options: string[];
-  correctAnswer: string;
-}
-
-export enum ResourceRequestStatus {
-  Open = 'Open',
-  Fulfilled = 'Fulfilled',
-}
-
 export interface ResourceRequest {
   id: string;
   requester: User;
@@ -195,4 +179,33 @@ export interface ResourceRequest {
     resourceId: string;
     timestamp: string;
   };
+}
+
+export enum ResourceRequestStatus {
+  Open = 'Open',
+  Fulfilled = 'Fulfilled',
+}
+
+export interface Report {
+  id: string;
+  reporterId: string;
+  reporterName: string;
+  targetId: string;
+  targetType: 'resource' | 'post' | 'comment' | 'reply';
+  targetTitle: string;
+  reason: string;
+  timestamp: string;
+  status: 'pending' | 'resolved' | 'dismissed';
+}
+
+// Fix: Defined Flashcard and QuizQuestion interfaces to resolve missing export errors
+export interface Flashcard {
+  term: string;
+  definition: string;
+}
+
+export interface QuizQuestion {
+  question: string;
+  options: string[];
+  correctAnswer: string;
 }

@@ -1,7 +1,7 @@
 
 // App.tsx
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import type { User, Resource, ForumPost, Comment, ForumReply, Notification, Conversation, DirectMessage, ResourceRequest, Attachment } from './types';
+import type { User, Resource, ForumPost, Comment, ForumReply, Notification, Conversation, DirectMessage, ResourceRequest, Attachment, Report } from './types';
 import { NotificationType, MessageStatus, ResourceRequestStatus } from './types';
 import AuthPage from './components/pages/AuthPage';
 import DashboardPage from './components/pages/DashboardPage';
@@ -12,6 +12,7 @@ import ProfilePage from './components/pages/ProfilePage';
 import MessagesPage from './components/pages/MessagesPage';
 import LeaderboardPage from './components/pages/LeaderboardPage';
 import ResourceRequestsPage from './components/pages/ResourceRequestsPage';
+import AdminPage from './components/pages/AdminPage';
 import SideNav from './components/SideNav';
 import Header from './components/Header';
 import UploadModal, { generateFilePreview } from './components/UploadModal';
@@ -28,7 +29,7 @@ import {
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { Loader2, AlertCircle } from 'lucide-react';
 
-export type View = 'dashboard' | 'resourceDetail' | 'discussions' | 'forumDetail' | 'profile' | 'publicProfile' | 'messages' | 'leaderboard' | 'requests';
+export type View = 'dashboard' | 'resourceDetail' | 'discussions' | 'forumDetail' | 'profile' | 'publicProfile' | 'messages' | 'leaderboard' | 'requests' | 'admin';
 
 interface AppContextType {
   user: User | null;
@@ -39,6 +40,7 @@ interface AppContextType {
   conversations: Conversation[];
   directMessages: DirectMessage[];
   resourceRequests: ResourceRequest[];
+  reports: Report[];
   view: View;
   setView: (view: View, id?: string, options?: { replace?: boolean }) => void;
   logout: () => void;
@@ -85,6 +87,9 @@ interface AppContextType {
   scrollTargetId: string | null;
   setScrollTargetId: (id: string | null) => void;
   showToast: (message: string, type?: 'success' | 'error' | 'info', points?: number) => void;
+  banUser: (userId: string) => Promise<void>;
+  unbanUser: (userId: string) => Promise<void>;
+  updateReportStatus: (reportId: string, status: 'resolved' | 'dismissed') => Promise<void>;
 }
 
 export const AppContext = React.createContext<AppContextType>({} as AppContextType);
@@ -121,6 +126,7 @@ const App: React.FC = () => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [directMessages, setDirectMessages] = useState<DirectMessage[]>([]);
   const [resourceRequests, setResourceRequests] = useState<ResourceRequest[]>([]);
+  const [reports, setReports] = useState<Report[]>([]);
   
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -166,6 +172,13 @@ const App: React.FC = () => {
         unsubUserDoc = onSnapshot(doc(db!, "users", firebaseUser.uid), async (docSnap) => {
           if (docSnap.exists()) {
             const userData = docSnap.data() as User;
+            if (userData.status === 'banned') {
+               showToast("This account has been banned due to community guidelines violation.", "error");
+               await signOut(auth);
+               setUser(null);
+               setIsLoading(false);
+               return;
+            }
             if (userData.status === 'deactivated') {
               const hasLoginIntent = sessionStorage.getItem('examvault_login_intent') === 'true';
               if (hasLoginIntent) {
@@ -218,9 +231,9 @@ const App: React.FC = () => {
         s.docs.forEach((docSnap) => {
             const data = docSnap.data() as User;
             const u = { ...data, id: docSnap.id };
-            // DO NOT filter deactivated here, otherwise we can't show the deactivated profile screen
-            if (u.status === 'banned' || !u.email) return;
-            const normalizedEmail = u.email.toLowerCase().trim();
+            // DO NOT filter deactivated/banned here, admin needs to see them
+            const normalizedEmail = (u.email || "").toLowerCase().trim();
+            if (!normalizedEmail) return;
             const existing = emailMap.get(normalizedEmail);
             if (existing) {
                 if ((u.points || 0) > (existing.points || 0)) emailMap.set(normalizedEmail, u);
@@ -238,8 +251,19 @@ const App: React.FC = () => {
     const unsubConvos = onSnapshot(query(collection(db, "conversations"), where("participants", "array-contains", user.id)), (s) => setConversations(s.docs.map(d => ({ id: d.id, ...d.data() } as Conversation))));
     const unsubMessages = onSnapshot(query(collection(db, "directMessages"), orderBy("timestamp", "asc")), (s) => setDirectMessages(s.docs.map(d => ({ id: d.id, ...d.data() } as DirectMessage))));
     const unsubNotifs = onSnapshot(query(collection(db, "notifications"), where("recipientId", "==", user.id)), (s) => setNotifications(s.docs.map(d => ({ id: d.id, ...d.data() } as Notification))));
-    return () => { unsubUsers(); unsubResources(); unsubPosts(); unsubRequests(); unsubConvos(); unsubMessages(); unsubNotifs(); };
-  }, [user?.id]);
+    
+    let unsubReports = () => {};
+    if (user.isAdmin) {
+        unsubReports = onSnapshot(query(collection(db, "reports"), orderBy("timestamp", "desc")), (s) => {
+            setReports(s.docs.map(d => ({ id: d.id, ...d.data() } as Report)));
+        });
+    }
+
+    return () => { 
+        unsubUsers(); unsubResources(); unsubPosts(); unsubRequests(); unsubConvos(); unsubMessages(); unsubNotifs(); 
+        unsubReports();
+    };
+  }, [user?.id, user?.isAdmin]);
 
   useEffect(() => {
     if (user && !isLoading && !runTour) {
@@ -251,12 +275,6 @@ const App: React.FC = () => {
   const handleFinishTour = () => {
     setRunTour(false);
     if (user) localStorage.setItem(`examvault_tour_${user.id}`, 'true');
-  };
-
-  const apiEarnPoints = async (amount: number, message: string) => {
-    if (!user || !db) return;
-    await updateDoc(doc(db, "users", user.id), { points: increment(amount), weeklyPoints: increment(amount) });
-    showToast(message, 'success', amount);
   };
 
   const sendNotification = async (recipientId: string, senderId: string, type: NotificationType, message: string, linkIds?: any) => {
@@ -305,7 +323,7 @@ const App: React.FC = () => {
   };
 
   const userRanks = useMemo(() => {
-    const activeUsers = users.filter(u => u.status !== 'deactivated');
+    const activeUsers = users.filter(u => u.status !== 'deactivated' && u.status !== 'banned');
     const sorted = [...activeUsers].sort((a, b) => (b.points || 0) - (a.points || 0));
     const ranks = new Map<string, number>();
     sorted.forEach((u, index) => ranks.set(u.id, index));
@@ -406,7 +424,7 @@ const App: React.FC = () => {
   };
 
   const appContextValue: AppContextType = {
-    user, users, resources, forumPosts, notifications, conversations, directMessages, resourceRequests, view, setView, 
+    user, users, resources, forumPosts, notifications, conversations, directMessages, resourceRequests, reports, view, setView, 
     logout: async () => { isExiting.current = true; if (auth) await signOut(auth); setUser(null); setViewState('dashboard'); },
     isDarkMode, toggleDarkMode: () => setIsDarkMode(!isDarkMode), userRanks, savedResourceIds: user?.savedResourceIds || [],
     toggleSaveResource: async (id) => {
@@ -475,13 +493,16 @@ const App: React.FC = () => {
     clearAllNotifications: async () => { if (!user) return; const sn = await getDocs(query(collection(db!, "notifications"), where("recipientId", "==", user.id))); const b = writeBatch(db!); sn.forEach(d => b.delete(d.ref)); await b.commit(); },
     markMessagesAsRead: async (id) => { if (!user) return; const unread = directMessages.filter(m => m.conversationId === id && m.recipientId === user.id && m.status !== MessageStatus.Read); if (unread.length) { const b = writeBatch(db!); unread.forEach(m => b.update(doc(db!, "directMessages", m.id), { status: MessageStatus.Read })); await b.commit(); } },
     goBack, deleteResource, hasUnreadMessages: directMessages.some(m => m.recipientId === user?.id && m.status !== MessageStatus.Read), 
-    hasUnreadDiscussions: false, isLoading, areResourcesLoading, scrollTargetId, setScrollTargetId, showToast
+    hasUnreadDiscussions: false, isLoading, areResourcesLoading, scrollTargetId, setScrollTargetId, showToast,
+    banUser: async (uId) => { if (user?.isAdmin && db) await updateDoc(doc(db, "users", uId), { status: 'banned' }); },
+    unbanUser: async (uId) => { if (user?.isAdmin && db) await updateDoc(doc(db, "users", uId), { status: 'active' }); },
+    updateReportStatus: async (rId, status) => { if (user?.isAdmin && db) await updateDoc(doc(db, "reports", rId), { status }); }
   };
 
   // Determine main UI content based on state
   let content;
   if (isLoading) {
-    content = <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg"><Loader2 size={48} className="animate-spin text-primary-600" /></div>;
+    content = <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg transition-colors duration-300"><Loader2 size={48} className="animate-spin text-primary-600" /></div>;
   } else if (!user) {
     content = <AuthPage onLogin={() => {}} />;
   } else {
@@ -499,6 +520,7 @@ const App: React.FC = () => {
           {view === 'messages' && <MessagesPage activeConversationId={selectedId || null} />}
           {view === 'leaderboard' && <LeaderboardPage />}
           {view === 'requests' && <ResourceRequestsPage />}
+          {view === 'admin' && user.isAdmin && <AdminPage />}
         </main>
         {isUploadModalOpen && <UploadModal onClose={() => setIsUploadModalOpen(false)} onUpload={handleUpload} isLoading={isUploading} fulfillingRequest={fulfillingRequest} />}
         {runTour && <TooltipGuide targetSelector={tourSteps[tourStep-1]?.selector || 'body'} content={tourSteps[tourStep-1]?.content || ''} currentStep={tourStep} totalSteps={tourSteps.length} onNext={() => tourStep < tourSteps.length ? setTourStep(tourStep + 1) : handleFinishTour()} onPrev={() => setTourStep(Math.max(1, tourStep-1))} onSkip={handleFinishTour} />}

@@ -214,7 +214,7 @@ const App: React.FC = () => {
     if (!user || !db) return;
     setAreResourcesLoading(true);
     
-    // Strict uniqueness filtering by email AND id to prevent ghosting
+    // Strict uniqueness filtering by case-insensitive email AND id to prevent ghosting
     const unsubUsers = onSnapshot(collection(db, "users"), (s) => {
         const emailMap = new Map<string, User>();
         s.docs.forEach((docSnap) => {
@@ -223,14 +223,16 @@ const App: React.FC = () => {
             
             if (u.status === 'deactivated' || u.status === 'banned' || !u.email) return;
 
-            const existing = emailMap.get(u.email);
+            const normalizedEmail = u.email.toLowerCase().trim();
+            const existing = emailMap.get(normalizedEmail);
+            
             // If duplicate found, keep the one with more points (likely the active one)
             if (existing) {
                 if ((u.points || 0) > (existing.points || 0)) {
-                    emailMap.set(u.email, u);
+                    emailMap.set(normalizedEmail, u);
                 }
             } else {
-                emailMap.set(u.email, u);
+                emailMap.set(normalizedEmail, u);
             }
         });
         setUsers(Array.from(emailMap.values()));
@@ -321,6 +323,9 @@ const App: React.FC = () => {
     sorted.forEach((u, index) => ranks.set(u.id, index));
     return ranks;
   }, [users]);
+
+  const currentResource = useMemo(() => resources.find(r => r.id === selectedId), [resources, selectedId]);
+  const currentForumPost = useMemo(() => forumPosts.find(p => p.id === selectedId), [forumPosts, selectedId]);
 
   const setView = (newView: View, id?: string, options?: { replace?: boolean }) => {
     if (!options?.replace) setViewHistory(prev => [...prev, { view: newView, id }]);
@@ -418,7 +423,11 @@ const App: React.FC = () => {
         const isUp = p.upvotedBy?.includes(user.id);
         await updateDoc(doc(db!, "forumPosts", id), { upvotes: isUp ? increment(-1) : increment(1), upvotedBy: isUp ? arrayRemove(user.id) : arrayUnion(user.id) });
       },
-      deleteForumPost: async (id) => { await deleteDoc(doc(db!, "forumPosts", id)); },
+      deleteForumPost: async (id) => { 
+          setViewState('discussions'); 
+          setSelectedId(undefined);
+          if (db) await deleteDoc(doc(db!, "forumPosts", id)); 
+      },
       addReplyToPost: async (id, text, pId) => {
         await updateDoc(doc(db!, "forumPosts", id), { replies: arrayUnion({ id: `r-${Date.now()}`, author: sanitizeForFirestore(user), text, timestamp: new Date().toISOString(), upvotes: 0, upvotedBy: [], isVerified: false, parentId: pId }) });
       },
@@ -461,7 +470,13 @@ const App: React.FC = () => {
       markAllNotificationsAsRead: async () => { notifications.forEach(n => updateDoc(doc(db!, "notifications", n.id), { isRead: true })); },
       clearAllNotifications: async () => { const sn = await getDocs(query(collection(db!, "notifications"), where("recipientId", "==", user.id))); const b = writeBatch(db!); sn.forEach(d => b.delete(d.ref)); await b.commit(); },
       markMessagesAsRead: async (id) => { const unread = directMessages.filter(m => m.conversationId === id && m.recipientId === user.id && m.status !== MessageStatus.Read); if (unread.length) { const b = writeBatch(db!); unread.forEach(m => b.update(doc(db!, "directMessages", m.id), { status: MessageStatus.Read })); await b.commit(); } },
-      goBack, deleteResource: async (id) => { await deleteDoc(doc(db!, "resources", id)); }, hasUnreadMessages: directMessages.some(m => m.recipientId === user?.id && m.status !== MessageStatus.Read), 
+      goBack, 
+      deleteResource: async (id) => { 
+          setViewState('dashboard'); 
+          setSelectedId(undefined);
+          if (db) await deleteDoc(doc(db!, "resources", id)); 
+      }, 
+      hasUnreadMessages: directMessages.some(m => m.recipientId === user?.id && m.status !== MessageStatus.Read), 
       hasUnreadDiscussions: false, isLoading, areResourcesLoading, scrollTargetId, setScrollTargetId, showToast
     }}>
       <div className="min-h-screen bg-slate-50 dark:bg-dark-bg transition-colors duration-300">
@@ -469,9 +484,9 @@ const App: React.FC = () => {
         <SideNav />
         <main className="ml-20 transition-all duration-300 pt-4 px-4 md:px-8 pb-8 min-h-screen">
           {view === 'dashboard' && <DashboardPage />}
-          {view === 'resourceDetail' && selectedId && <ResourceDetailPage resource={resources.find(r => r.id === selectedId)!} />}
+          {view === 'resourceDetail' && selectedId && currentResource && <ResourceDetailPage resource={currentResource} />}
           {view === 'discussions' && <DiscussionsPage />}
-          {view === 'forumDetail' && selectedId && <ForumPostDetailPage post={forumPosts.find(p => p.id === selectedId)!} />}
+          {view === 'forumDetail' && selectedId && currentForumPost && <ForumPostDetailPage post={currentForumPost} />}
           {view === 'profile' && user && <ProfilePage user={user} allResources={resources} isCurrentUser={true} />}
           {view === 'publicProfile' && selectedId && <ProfilePage user={users.find(u => u.id === selectedId) || user} allResources={resources} isCurrentUser={selectedId === user.id} />}
           {view === 'messages' && <MessagesPage activeConversationId={selectedId || null} />}

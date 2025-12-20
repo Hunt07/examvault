@@ -218,7 +218,8 @@ const App: React.FC = () => {
         s.docs.forEach((docSnap) => {
             const data = docSnap.data() as User;
             const u = { ...data, id: docSnap.id };
-            if (u.status === 'deactivated' || u.status === 'banned' || !u.email) return;
+            // DO NOT filter deactivated here, otherwise we can't show the deactivated profile screen
+            if (u.status === 'banned' || !u.email) return;
             const normalizedEmail = u.email.toLowerCase().trim();
             const existing = emailMap.get(normalizedEmail);
             if (existing) {
@@ -304,7 +305,8 @@ const App: React.FC = () => {
   };
 
   const userRanks = useMemo(() => {
-    const sorted = [...users].sort((a, b) => (b.points || 0) - (a.points || 0));
+    const activeUsers = users.filter(u => u.status !== 'deactivated');
+    const sorted = [...activeUsers].sort((a, b) => (b.points || 0) - (a.points || 0));
     const ranks = new Map<string, number>();
     sorted.forEach((u, index) => ranks.set(u.id, index));
     return ranks;
@@ -458,7 +460,6 @@ const App: React.FC = () => {
             await updateDoc(userRef, { "subscriptions.users": arrayRemove(id) });
         } else {
             await updateDoc(userRef, { "subscriptions.users": arrayUnion(id) });
-            // Send notification to the user being followed
             sendNotification(id, user.id, NotificationType.Subscription, `${user.name} started following you!`, { senderId: user.id });
         }
     },

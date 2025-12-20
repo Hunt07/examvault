@@ -175,13 +175,12 @@ const App: React.FC = () => {
               } else {
                 await signOut(auth);
                 setUser(null);
+                setIsLoading(false);
                 return;
               }
             }
             const isMaster = MASTER_ADMIN_EMAILS.includes(firebaseUser.email || '');
             if (isMaster && !userData.isAdmin) await updateDoc(doc(db!, "users", firebaseUser.uid), { isAdmin: true });
-            
-            // Sync user state ensuring Document ID matches internal ID
             setUser({ ...userData, id: docSnap.id });
           } else {
             const displayName = firebaseUser.displayName || "Student";
@@ -214,26 +213,17 @@ const App: React.FC = () => {
     if (!user || !db) return;
     setAreResourcesLoading(true);
     
-    // Strict uniqueness filtering by case-insensitive email AND id to prevent ghosting
     const unsubUsers = onSnapshot(collection(db, "users"), (s) => {
         const emailMap = new Map<string, User>();
         s.docs.forEach((docSnap) => {
             const data = docSnap.data() as User;
             const u = { ...data, id: docSnap.id };
-            
             if (u.status === 'deactivated' || u.status === 'banned' || !u.email) return;
-
             const normalizedEmail = u.email.toLowerCase().trim();
             const existing = emailMap.get(normalizedEmail);
-            
-            // If duplicate found, keep the one with more points (likely the active one)
             if (existing) {
-                if ((u.points || 0) > (existing.points || 0)) {
-                    emailMap.set(normalizedEmail, u);
-                }
-            } else {
-                emailMap.set(normalizedEmail, u);
-            }
+                if ((u.points || 0) > (existing.points || 0)) emailMap.set(normalizedEmail, u);
+            } else emailMap.set(normalizedEmail, u);
         });
         setUsers(Array.from(emailMap.values()));
     });
@@ -250,14 +240,10 @@ const App: React.FC = () => {
     return () => { unsubUsers(); unsubResources(); unsubPosts(); unsubRequests(); unsubConvos(); unsubMessages(); unsubNotifs(); };
   }, [user?.id]);
 
-  // Handle tour logic
   useEffect(() => {
     if (user && !isLoading && !runTour) {
       const hasSeenTour = localStorage.getItem(`examvault_tour_${user.id}`);
-      if (!hasSeenTour) {
-        setRunTour(true);
-        setTourStep(1);
-      }
+      if (!hasSeenTour) { setRunTour(true); setTourStep(1); }
     }
   }, [user?.id, isLoading, runTour]);
 
@@ -285,7 +271,7 @@ const App: React.FC = () => {
         await signOut(auth!);
         setUser(null);
         setViewState('dashboard');
-        showToast("Account deactivated.", "info");
+        showToast("Account deactivated. Log back in to restore your profile.", "info");
     } catch (e) {
         isExiting.current = false;
         showToast("Failed to deactivate account.", "error");
@@ -313,7 +299,7 @@ const App: React.FC = () => {
         showToast("Account permanently deleted.", "info");
     } catch (error: any) {
         isExiting.current = false;
-        showToast("Deletion failed. Re-authenticate and try again.", "error");
+        showToast("Deletion failed.", "error");
     }
   };
 
@@ -358,9 +344,7 @@ const App: React.FC = () => {
       setView('messages', existing.id);
     } else {
       const docRef = await addDoc(collection(db, "conversations"), { participants: [user.id, userId], lastMessageTimestamp: new Date().toISOString() });
-      if (initialMessage) {
-        await addDoc(collection(db, "directMessages"), { conversationId: docRef.id, senderId: user.id, recipientId: userId, text: initialMessage, timestamp: new Date().toISOString(), status: MessageStatus.Sent });
-      }
+      if (initialMessage) await apiSendMessage(docRef.id, initialMessage);
       setView('messages', docRef.id);
     }
   };
@@ -387,116 +371,109 @@ const App: React.FC = () => {
     } catch (e) { showToast("Upload failed.", "error"); } finally { setIsUploading(false); }
   };
 
-  if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg"><Loader2 size={48} className="animate-spin text-primary-600" /></div>;
-  if (!user) return <AuthPage onLogin={() => {}} />;
+  const deleteResource = async (id: string) => { setViewState('dashboard'); setSelectedId(undefined); if (db) await deleteDoc(doc(db!, "resources", id)); };
 
-  return (
-    <AppContext.Provider value={{
-      user, users, resources, forumPosts, notifications, conversations, directMessages, resourceRequests, view, setView, 
-      logout: async () => { isExiting.current = true; if (auth) await signOut(auth); setUser(null); setViewState('dashboard'); },
-      isDarkMode, toggleDarkMode: () => setIsDarkMode(!isDarkMode), userRanks, savedResourceIds: user.savedResourceIds || [],
-      toggleSaveResource: async (id) => {
-        const isS = user.savedResourceIds?.includes(id);
-        await updateDoc(doc(db!, "users", user.id), { savedResourceIds: isS ? arrayRemove(id) : arrayUnion(id) });
-      },
-      handleVote: async (id, act) => {
-        const r = resources.find(x => x.id === id); if (!r || !user) return;
-        const upvoted = r.upvotedBy?.includes(user.id);
-        const downvoted = r.downvotedBy?.includes(user.id);
-        const updates: any = {};
-        if (act === 'up') {
-          if (upvoted) { updates.upvotes = increment(-1); updates.upvotedBy = arrayRemove(user.id); }
-          else { updates.upvotes = increment(1); updates.upvotedBy = arrayUnion(user.id); if (downvoted) { updates.downvotes = increment(-1); updates.downvotedBy = arrayRemove(user.id); } }
-        } else {
-          if (downvoted) { updates.downvotes = increment(-1); updates.downvotedBy = arrayRemove(user.id); }
-          else { updates.downvotes = increment(1); updates.downvotedBy = arrayUnion(user.id); if (upvoted) { updates.upvotes = increment(-1); updates.upvotedBy = arrayRemove(user.id); } }
-        }
-        await updateDoc(doc(db!, "resources", id), updates);
-      },
-      addCommentToResource: async (resId, text, pId) => {
-        await updateDoc(doc(db!, "resources", resId), { comments: arrayUnion({ id: `c-${Date.now()}`, author: sanitizeForFirestore(user), text, timestamp: new Date().toISOString(), parentId: pId, upvotes: 0, upvotedBy: [] }) });
-      },
-      handleCommentVote: async (resId, cId) => {
-        const snap = await getDoc(doc(db!, "resources", resId));
-        if (snap.exists()) {
-          const upds = snap.data().comments.map((c: any) => c.id === cId ? { ...c, upvotes: c.upvotedBy.includes(user.id) ? c.upvotes - 1 : c.upvotes + 1, upvotedBy: c.upvotedBy.includes(user.id) ? arrayRemove(user.id) : arrayUnion(user.id) } : c);
-          await updateDoc(doc(db!, "resources", resId), { comments: upds });
-        }
-      },
-      deleteCommentFromResource: async (resId, comment) => { await updateDoc(doc(db!, "resources", resId), { comments: arrayRemove(comment) }); },
-      addForumPost: async (post) => {
-        await addDoc(collection(db!, "forumPosts"), { ...post, author: sanitizeForFirestore(user), timestamp: new Date().toISOString(), upvotes: 0, downvotes: 0, upvotedBy: [], downvotedBy: [], replies: [] });
-      },
-      handlePostVote: async (id, act) => {
-        const p = forumPosts.find(x => x.id === id); if (!p || !user) return;
-        const upvoted = p.upvotedBy?.includes(user.id);
-        const downvoted = p.downvotedBy?.includes(user.id);
-        const updates: any = {};
-        if (act === 'up') {
-          if (upvoted) { updates.upvotes = increment(-1); updates.upvotedBy = arrayRemove(user.id); }
-          else { updates.upvotes = increment(1); updates.upvotedBy = arrayUnion(user.id); if (downvoted) { updates.downvotes = increment(-1); updates.downvotedBy = arrayRemove(user.id); } }
-        } else {
-          if (downvoted) { updates.downvotes = increment(-1); updates.downvotedBy = arrayRemove(user.id); }
-          else { updates.downvotes = increment(1); updates.downvotedBy = arrayUnion(user.id); if (upvoted) { updates.upvotes = increment(-1); updates.upvotedBy = arrayRemove(user.id); } }
-        }
-        await updateDoc(doc(db!, "forumPosts", id), updates);
-      },
-      deleteForumPost: async (id) => { 
-          setViewState('discussions'); 
-          setSelectedId(undefined);
-          if (db) await deleteDoc(doc(db!, "forumPosts", id)); 
-      },
-      addReplyToPost: async (id, text, pId) => {
-        await updateDoc(doc(db!, "forumPosts", id), { replies: arrayUnion({ id: `r-${Date.now()}`, author: sanitizeForFirestore(user), text, timestamp: new Date().toISOString(), upvotes: 0, upvotedBy: [], isVerified: false, parentId: pId }) });
-      },
-      handleReplyVote: async (pId, rId) => {
-        const snap = await getDoc(doc(db!, "forumPosts", pId));
-        if (snap.exists()) {
-          const upds = snap.data().replies.map((r: any) => r.id === rId ? { ...r, upvotes: r.upvotedBy.includes(user.id) ? r.upvotes - 1 : r.upvotes + 1, upvotedBy: r.upvotedBy.includes(user.id) ? arrayRemove(user.id) : arrayUnion(user.id) } : r);
-          await updateDoc(doc(db!, "forumPosts", pId), { replies: upds });
-        }
-      },
-      deleteReplyFromPost: async (pId, r) => { await updateDoc(doc(db!, "forumPosts", pId), { replies: arrayRemove(r) }); },
-      toggleVerifiedAnswer: async (pId, rId) => {
-        const snap = await getDoc(doc(db!, "forumPosts", pId));
-        if (snap.exists()) {
-          const upds = snap.data().replies.map((r: any) => r.id === rId ? { ...r, isVerified: !r.isVerified } : r);
-          await updateDoc(doc(db!, "forumPosts", pId), { replies: upds });
-        }
-      },
-      addResourceRequest: async (req) => { await addDoc(collection(db!, "resourceRequests"), { ...req, requester: sanitizeForFirestore(user), status: ResourceRequestStatus.Open, timestamp: new Date().toISOString() }); },
-      deleteResourceRequest: async (id) => { await deleteDoc(doc(db!, "resourceRequests", id)); },
-      openUploadForRequest: (id) => { const r = resourceRequests.find(x => x.id === id); if (r) { setFulfillingRequest(r); setIsUploadModalOpen(true); } },
-      toggleUserSubscription: async (id) => {
-        const isF = user.subscriptions?.users?.includes(id);
-        await updateDoc(doc(db!, "users", user.id), { "subscriptions.users": isF ? arrayRemove(id) : arrayUnion(id) });
-      },
-      toggleLecturerSubscription: async (n) => {
-        const isF = user.subscriptions?.lecturers?.includes(n);
-        await updateDoc(doc(db!, "users", user.id), { "subscriptions.lecturers": isF ? arrayRemove(n) : arrayUnion(n) });
-      },
-      toggleCourseCodeSubscription: async (c) => {
-        const isF = user.subscriptions?.courseCodes?.includes(c);
-        await updateDoc(doc(db!, "users", user.id), { "subscriptions.courseCodes": isF ? arrayRemove(c) : arrayUnion(c) });
-      },
-      updateUserProfile: async (d) => { await updateDoc(doc(db!, "users", user.id), d); },
-      deleteAccount: apiDeleteAccount, deactivateAccount: apiDeactivateAccount,
-      sendMessage: apiSendMessage, editMessage: async (id, text) => { await updateDoc(doc(db!, "directMessages", id), { text }); },
-      deleteMessage: async (id) => { await updateDoc(doc(db!, "directMessages", id), { isDeleted: true }); },
-      startConversation: apiStartConversation, sendDirectMessageToUser: (id, text) => apiStartConversation(id, text),
-      markNotificationAsRead: async (id) => { await updateDoc(doc(db!, "notifications", id), { isRead: true }); },
-      markAllNotificationsAsRead: async () => { notifications.forEach(n => updateDoc(doc(db!, "notifications", n.id), { isRead: true })); },
-      clearAllNotifications: async () => { const sn = await getDocs(query(collection(db!, "notifications"), where("recipientId", "==", user.id))); const b = writeBatch(db!); sn.forEach(d => b.delete(d.ref)); await b.commit(); },
-      markMessagesAsRead: async (id) => { const unread = directMessages.filter(m => m.conversationId === id && m.recipientId === user.id && m.status !== MessageStatus.Read); if (unread.length) { const b = writeBatch(db!); unread.forEach(m => b.update(doc(db!, "directMessages", m.id), { status: MessageStatus.Read })); await b.commit(); } },
-      goBack, 
-      deleteResource: async (id) => { 
-          setViewState('dashboard'); 
-          setSelectedId(undefined);
-          if (db) await deleteDoc(doc(db!, "resources", id)); 
-      }, 
-      hasUnreadMessages: directMessages.some(m => m.recipientId === user?.id && m.status !== MessageStatus.Read), 
-      hasUnreadDiscussions: false, isLoading, areResourcesLoading, scrollTargetId, setScrollTargetId, showToast
-    }}>
+  const handleVote = async (id: string, act: 'up' | 'down') => {
+    const r = resources.find(x => x.id === id); if (!r || !user) return;
+    const upvoted = r.upvotedBy?.includes(user.id);
+    const downvoted = r.downvotedBy?.includes(user.id);
+    const updates: any = {};
+    if (act === 'up') {
+      if (upvoted) { updates.upvotes = increment(-1); updates.upvotedBy = arrayRemove(user.id); }
+      else { updates.upvotes = increment(1); updates.upvotedBy = arrayUnion(user.id); if (downvoted) { updates.downvotes = increment(-1); updates.downvotedBy = arrayRemove(user.id); } }
+    } else {
+      if (downvoted) { updates.downvotes = increment(-1); updates.downvotedBy = arrayRemove(user.id); }
+      else { updates.downvotes = increment(1); updates.downvotedBy = arrayUnion(user.id); if (upvoted) { updates.upvotes = increment(-1); updates.upvotedBy = arrayRemove(user.id); } }
+    }
+    await updateDoc(doc(db!, "resources", id), updates);
+  };
+
+  const handlePostVote = async (id: string, act: 'up' | 'down') => {
+    const p = forumPosts.find(x => x.id === id); if (!p || !user) return;
+    const upvoted = p.upvotedBy?.includes(user.id);
+    const downvoted = p.downvotedBy?.includes(user.id);
+    const updates: any = {};
+    if (act === 'up') {
+      if (upvoted) { updates.upvotes = increment(-1); updates.upvotedBy = arrayRemove(user.id); }
+      else { updates.upvotes = increment(1); updates.upvotedBy = arrayUnion(user.id); if (downvoted) { updates.downvotes = increment(-1); updates.downvotedBy = arrayRemove(user.id); } }
+    } else {
+      if (downvoted) { updates.downvotes = increment(-1); updates.downvotedBy = arrayRemove(user.id); }
+      else { updates.downvotes = increment(1); updates.downvotedBy = arrayUnion(user.id); if (upvoted) { updates.upvotes = increment(-1); updates.upvotedBy = arrayRemove(user.id); } }
+    }
+    await updateDoc(doc(db!, "forumPosts", id), updates);
+  };
+
+  const appContextValue: AppContextType = {
+    user, users, resources, forumPosts, notifications, conversations, directMessages, resourceRequests, view, setView, 
+    logout: async () => { isExiting.current = true; if (auth) await signOut(auth); setUser(null); setViewState('dashboard'); },
+    isDarkMode, toggleDarkMode: () => setIsDarkMode(!isDarkMode), userRanks, savedResourceIds: user?.savedResourceIds || [],
+    toggleSaveResource: async (id) => {
+      if (!user) return;
+      const isS = user.savedResourceIds?.includes(id);
+      await updateDoc(doc(db!, "users", user.id), { savedResourceIds: isS ? arrayRemove(id) : arrayUnion(id) });
+    },
+    handleVote,
+    addCommentToResource: async (resId, text, pId) => {
+      await updateDoc(doc(db!, "resources", resId), { comments: arrayUnion({ id: `c-${Date.now()}`, author: sanitizeForFirestore(user), text, timestamp: new Date().toISOString(), parentId: pId, upvotes: 0, upvotedBy: [] }) });
+    },
+    handleCommentVote: async (resId, cId) => {
+      const snap = await getDoc(doc(db!, "resources", resId));
+      if (snap.exists()) {
+        const upds = snap.data().comments.map((c: any) => c.id === cId ? { ...c, upvotes: c.upvotedBy.includes(user!.id) ? c.upvotes - 1 : c.upvotes + 1, upvotedBy: c.upvotedBy.includes(user!.id) ? arrayRemove(user!.id) : arrayUnion(user!.id) } : c);
+        await updateDoc(doc(db!, "resources", resId), { comments: upds });
+      }
+    },
+    deleteCommentFromResource: async (resId, comment) => { await updateDoc(doc(db!, "resources", resId), { comments: arrayRemove(comment) }); },
+    addForumPost: async (post) => {
+      await addDoc(collection(db!, "forumPosts"), { ...post, author: sanitizeForFirestore(user), timestamp: new Date().toISOString(), upvotes: 0, downvotes: 0, upvotedBy: [], downvotedBy: [], replies: [] });
+    },
+    handlePostVote,
+    deleteForumPost: async (id) => { setViewState('discussions'); setSelectedId(undefined); if (db) await deleteDoc(doc(db!, "forumPosts", id)); },
+    addReplyToPost: async (id, text, pId) => {
+      await updateDoc(doc(db!, "forumPosts", id), { replies: arrayUnion({ id: `r-${Date.now()}`, author: sanitizeForFirestore(user), text, timestamp: new Date().toISOString(), upvotes: 0, upvotedBy: [], isVerified: false, parentId: pId }) });
+    },
+    handleReplyVote: async (pId, rId) => {
+      const snap = await getDoc(doc(db!, "forumPosts", pId));
+      if (snap.exists()) {
+        const upds = snap.data().replies.map((r: any) => r.id === rId ? { ...r, upvotes: r.upvotedBy.includes(user!.id) ? r.upvotes - 1 : r.upvotes + 1, upvotedBy: r.upvotedBy.includes(user!.id) ? arrayRemove(user!.id) : arrayUnion(user!.id) } : r);
+        await updateDoc(doc(db!, "forumPosts", pId), { replies: upds });
+      }
+    },
+    deleteReplyFromPost: async (pId, r) => { await updateDoc(doc(db!, "forumPosts", pId), { replies: arrayRemove(r) }); },
+    toggleVerifiedAnswer: async (pId, rId) => {
+      const snap = await getDoc(doc(db!, "forumPosts", pId));
+      if (snap.exists()) {
+        const upds = snap.data().replies.map((r: any) => r.id === rId ? { ...r, isVerified: !r.isVerified } : r);
+        await updateDoc(doc(db!, "forumPosts", pId), { replies: upds });
+      }
+    },
+    addResourceRequest: async (req) => { await addDoc(collection(db!, "resourceRequests"), { ...req, requester: sanitizeForFirestore(user), status: ResourceRequestStatus.Open, timestamp: new Date().toISOString() }); },
+    deleteResourceRequest: async (id) => { await deleteDoc(doc(db!, "resourceRequests", id)); },
+    openUploadForRequest: (id) => { const r = resourceRequests.find(x => x.id === id); if (r) { setFulfillingRequest(r); setIsUploadModalOpen(true); } },
+    toggleUserSubscription: async (id) => { if (user) await updateDoc(doc(db!, "users", user.id), { "subscriptions.users": user.subscriptions?.users?.includes(id) ? arrayRemove(id) : arrayUnion(id) }); },
+    toggleLecturerSubscription: async (n) => { if (user) await updateDoc(doc(db!, "users", user.id), { "subscriptions.lecturers": user.subscriptions?.lecturers?.includes(n) ? arrayRemove(n) : arrayUnion(n) }); },
+    toggleCourseCodeSubscription: async (c) => { if (user) await updateDoc(doc(db!, "users", user.id), { "subscriptions.courseCodes": user.subscriptions?.courseCodes?.includes(c) ? arrayRemove(c) : arrayUnion(c) }); },
+    updateUserProfile: async (d) => { if (user) await updateDoc(doc(db!, "users", user.id), d); },
+    deleteAccount: apiDeleteAccount, deactivateAccount: apiDeactivateAccount,
+    sendMessage: apiSendMessage, editMessage: async (id, text) => { await updateDoc(doc(db!, "directMessages", id), { text }); },
+    deleteMessage: async (id) => { await updateDoc(doc(db!, "directMessages", id), { isDeleted: true }); },
+    startConversation: apiStartConversation, sendDirectMessageToUser: (id, text) => apiStartConversation(id, text),
+    markNotificationAsRead: async (id) => { await updateDoc(doc(db!, "notifications", id), { isRead: true }); },
+    markAllNotificationsAsRead: async () => { notifications.forEach(n => updateDoc(doc(db!, "notifications", n.id), { isRead: true })); },
+    clearAllNotifications: async () => { if (!user) return; const sn = await getDocs(query(collection(db!, "notifications"), where("recipientId", "==", user.id))); const b = writeBatch(db!); sn.forEach(d => b.delete(d.ref)); await b.commit(); },
+    markMessagesAsRead: async (id) => { if (!user) return; const unread = directMessages.filter(m => m.conversationId === id && m.recipientId === user.id && m.status !== MessageStatus.Read); if (unread.length) { const b = writeBatch(db!); unread.forEach(m => b.update(doc(db!, "directMessages", m.id), { status: MessageStatus.Read })); await b.commit(); } },
+    goBack, deleteResource, hasUnreadMessages: directMessages.some(m => m.recipientId === user?.id && m.status !== MessageStatus.Read), 
+    hasUnreadDiscussions: false, isLoading, areResourcesLoading, scrollTargetId, setScrollTargetId, showToast
+  };
+
+  // Determine main UI content based on state
+  let content;
+  if (isLoading) {
+    content = <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg"><Loader2 size={48} className="animate-spin text-primary-600" /></div>;
+  } else if (!user) {
+    content = <AuthPage onLogin={() => {}} />;
+  } else {
+    content = (
       <div className="min-h-screen bg-slate-50 dark:bg-dark-bg transition-colors duration-300">
         <Header onUploadClick={() => { setFulfillingRequest(undefined); setIsUploadModalOpen(true); }} />
         <SideNav />
@@ -513,8 +490,14 @@ const App: React.FC = () => {
         </main>
         {isUploadModalOpen && <UploadModal onClose={() => setIsUploadModalOpen(false)} onUpload={handleUpload} isLoading={isUploading} fulfillingRequest={fulfillingRequest} />}
         {runTour && <TooltipGuide targetSelector={tourSteps[tourStep-1]?.selector || 'body'} content={tourSteps[tourStep-1]?.content || ''} currentStep={tourStep} totalSteps={tourSteps.length} onNext={() => tourStep < tourSteps.length ? setTourStep(tourStep + 1) : handleFinishTour()} onPrev={() => setTourStep(Math.max(1, tourStep-1))} onSkip={handleFinishTour} />}
-        {toast && <ToastNotification message={toast.message} points={toast.points} type={toast.type} onClose={() => setToast(null)} />}
       </div>
+    );
+  }
+
+  return (
+    <AppContext.Provider value={appContextValue}>
+      {content}
+      {toast && <ToastNotification message={toast.message} points={toast.points} type={toast.type} onClose={() => setToast(null)} />}
     </AppContext.Provider>
   );
 };

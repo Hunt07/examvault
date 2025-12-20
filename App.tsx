@@ -135,7 +135,7 @@ const App: React.FC = () => {
     { selector: 'body', content: "Happy Studying!" },
   ];
 
-  // Global Content Filter: Hide deactivated user content
+  // Global Content Filter: Only show content from active users
   const activeUserIds = useMemo(() => {
     return new Set(users.filter(u => !u.status || u.status === 'active').map(u => u.id));
   }, [users]);
@@ -157,9 +157,13 @@ const App: React.FC = () => {
             const userData = userSnap.data() as User;
             // REACTIVATION: Only restore if status is deactivated
             if (userData.status === 'deactivated') {
-                await updateDoc(userRef, { status: 'active' });
-                userData.status = 'active';
-                showToast("Welcome back! Your account has been reactivated.", "success");
+                try {
+                    await updateDoc(userRef, { status: 'active' });
+                    userData.status = 'active';
+                    showToast("Welcome back! Your account has been reactivated.", "success");
+                } catch (e) {
+                    console.error("Reactivation failed:", e);
+                }
             }
             if (isMaster && !userData.isAdmin) {
                 await updateDoc(userRef, { isAdmin: true });
@@ -179,7 +183,10 @@ const App: React.FC = () => {
             await setDoc(userRef, newUser);
             setUser(newUser);
           }
-        } catch (error) { console.error("Auth fetch error:", error); }
+        } catch (error) { 
+            console.error("Auth fetch error:", error); 
+            setUser(null);
+        }
       } else { 
           setUser(null); 
           setViewState('dashboard'); 
@@ -229,13 +236,13 @@ const App: React.FC = () => {
     if (!auth) return;
     try {
         await signOut(auth);
-        setUser(null);
-        setViewState('dashboard');
     } catch (e) {
         console.error("Sign out failed:", e);
-        // Force state reset if Firebase hangs
+    } finally {
+        // Force local state reset even if Firebase call hangs
         setUser(null);
         setViewState('dashboard');
+        setViewHistory([]);
     }
   };
 
@@ -243,15 +250,14 @@ const App: React.FC = () => {
     if (!user || !db) return;
     try {
         const userId = user.id;
-        // Step 1: Update status in Firestore
+        // Perform the Firestore update FIRST
         await updateDoc(doc(db, "users", userId), { status: 'deactivated' });
-        // Step 2: Show confirmation
         showToast("Account deactivated. Logging out...", "info");
-        // Step 3: Logout
+        // THEN call the robust logout
         await logout();
     } catch (e) {
         console.error("Deactivation error:", e);
-        showToast("Failed to deactivate. Try again.", "error");
+        showToast("Deactivation failed. Please try again.", "error");
     }
   };
 
@@ -261,36 +267,26 @@ const App: React.FC = () => {
         const batch = writeBatch(db);
         const userId = user.id;
 
-        // Step 1: PERMANENT PURGE - Identify all content
+        // PERMANENT PURGE
         const resSnap = await getDocs(query(collection(db, "resources"), where("author.id", "==", userId)));
         resSnap.forEach(d => batch.delete(d.ref));
-
         const postSnap = await getDocs(query(collection(db, "forumPosts"), where("author.id", "==", userId)));
         postSnap.forEach(d => batch.delete(d.ref));
-
         const reqSnap = await getDocs(query(collection(db, "resourceRequests"), where("requester.id", "==", userId)));
         reqSnap.forEach(d => batch.delete(d.ref));
-
-        // Step 2: Delete the user record
         batch.delete(doc(db, "users", userId));
         
-        // Step 3: Commit Firestore changes
         await batch.commit();
-
-        // Step 4: Delete the Auth user
         await deleteUser(auth.currentUser);
-        
-        // Step 5: Final state reset
-        setUser(null); 
-        setViewState('dashboard');
+        setUser(null); setViewState('dashboard');
         showToast("Account purged permanently.", "info");
     } catch (error: any) {
         console.error("Purge failed:", error);
         if (error.code === 'auth/requires-recent-login') {
-            showToast("Please log in again before deleting your account for security.", "error");
+            showToast("Please log in again before deleting your account.", "error");
             await logout();
         } else {
-            showToast("Failed to delete account. Please try manually.", "error");
+            showToast("Failed to delete account.", "error");
         }
     }
   };

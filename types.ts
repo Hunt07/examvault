@@ -200,7 +200,6 @@ export interface Report {
   status: 'pending' | 'resolved' | 'dismissed';
 }
 
-// Fix: Defined Flashcard and QuizQuestion interfaces to resolve missing export errors
 export interface Flashcard {
   term: string;
   definition: string;

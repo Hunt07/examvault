@@ -14,8 +14,9 @@ export interface User {
   currentSemester: number;
   subscriptions: UserSubscriptions;
   savedResourceIds: string[];
-  status?: 'active' | 'deactivated' | 'banned'; // Added to track account state
+  status?: 'active' | 'deactivated' | 'banned';
   isAdmin?: boolean;
+  lastSeen?: string; // ISO string for presence detection
 }
 
 export interface UserSubscriptions {

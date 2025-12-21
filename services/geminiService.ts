@@ -3,11 +3,11 @@ import { GoogleGenAI, Type } from "@google/genai";
 // @ts-ignore
 import JSZip from "jszip";
 
-// Strictly use process.env.API_KEY as per the latest guidelines
+// Strictly initialize using the environment variable as per guidelines
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
-    const binaryString = window.atob(base64);
+    const binaryString = window.atob(base64.replace(/^data:.+;base64,/, ''));
     const len = binaryString.length;
     const bytes = new Uint8Array(len);
     for (let i = 0; i < len; i++) {
@@ -16,20 +16,24 @@ const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
     return bytes.buffer;
 };
 
+/**
+ * "Nuclear" Regex Extraction: Finds text inside any tag ending in 't' (like <w:t>, <a:t>, <t>)
+ */
 const extractTextFromXmlContent = (xmlContent: string): string => {
     const regex = /<(?:\w+:)?t[^>]*>(.*?)<\/(?:\w+:)?t>/g;
     let match;
     let extracted = "";
     while ((match = regex.exec(xmlContent)) !== null) {
-        if (match[1]) extracted += match[1] + " ";
+        if (match[1]) {
+            extracted += match[1] + " ";
+        }
     }
     return extracted;
 };
 
 const extractTextFromDocx = async (fileBase64: string): Promise<string> => {
     try {
-        const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
-        const arrayBuffer = base64ToArrayBuffer(cleanBase64);
+        const arrayBuffer = base64ToArrayBuffer(fileBase64);
         const zip = await JSZip.loadAsync(arrayBuffer);
         const documentXml = zip.file("word/document.xml");
         if (documentXml) {
@@ -45,22 +49,55 @@ const extractTextFromDocx = async (fileBase64: string): Promise<string> => {
 
 const extractTextFromPptx = async (fileBase64: string): Promise<string> => {
     try {
-        const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
-        const arrayBuffer = base64ToArrayBuffer(cleanBase64);
+        const arrayBuffer = base64ToArrayBuffer(fileBase64);
         const zip = await JSZip.loadAsync(arrayBuffer);
         let extractedText = "";
+
         const slideFolder = zip.folder("ppt/slides");
         if (slideFolder) {
-            const slideFiles: any[] = [];
+            const slideFiles: { path: string, file: any }[] = [];
             slideFolder.forEach((relativePath, file) => {
-                if (relativePath.match(/slide\d+\.xml/)) slideFiles.push({ path: relativePath, file: file });
+                if (relativePath.match(/slide\d+\.xml/)) {
+                    slideFiles.push({ path: relativePath, file: file });
+                }
             });
-            slideFiles.sort((a, b) => parseInt(a.path.match(/\d+/)?.[0] || "0") - parseInt(b.path.match(/\d+/)?.[0] || "0"));
+            
+            slideFiles.sort((a, b) => {
+                const numA = parseInt(a.path.match(/\d+/)?.[0] || "0");
+                const numB = parseInt(b.path.match(/\d+/)?.[0] || "0");
+                return numA - numB;
+            });
+
             for (const slide of slideFiles) {
                 const xmlContent = await slide.file.async("string");
-                extractedText += `[Slide]: ${extractTextFromXmlContent(xmlContent)}\n\n`;
+                const text = extractTextFromXmlContent(xmlContent);
+                if (text.trim().length > 0) {
+                    extractedText += `[Slide ${slide.path.match(/\d+/)?.[0]}]: ${text}\n\n`;
+                }
             }
         }
+
+        const notesFolder = zip.folder("ppt/notesSlides");
+        if (notesFolder) {
+            let notesText = "";
+            const noteFiles: any[] = [];
+            notesFolder.forEach((relativePath, file) => {
+                 if (relativePath.match(/notesSlide\d+\.xml/)) {
+                     noteFiles.push(file);
+                 }
+            });
+            for(const file of noteFiles) {
+                const xmlContent = await file.async("string");
+                const text = extractTextFromXmlContent(xmlContent);
+                if (text.trim().length > 0) {
+                    notesText += `[Note]: ${text}\n`;
+                }
+            }
+            if (notesText) {
+                extractedText += "\n--- Speaker Notes ---\n" + notesText;
+            }
+        }
+        
         return extractedText.trim();
     } catch (e) {
         console.error("PPTX Extraction failed", e);
@@ -74,28 +111,29 @@ export const summarizeContent = async (
   mimeType?: string
 ): Promise<string> => {
   try {
-    const systemInstruction = "You are an expert academic assistant. Create a professional markdown summary with sections: Key Concepts, Main Takeaways, and 3 Potential Exam Questions.";
+    const systemInstruction = "You are an expert academic assistant. Analyze the material and provide a markdown summary with exactly these sections: **Key Concepts**, **Main Takeaways**, and **Potential Exam Questions** (3 questions).";
     const parts: any[] = [];
     
     if (fileBase64 && mimeType) {
         const isWord = mimeType.includes('wordprocessingml') || mimeType.includes('msword') || mimeType.includes('doc');
         const isPowerPoint = mimeType.includes('presentationml') || mimeType.includes('powerpoint') || mimeType.includes('ppt');
-        const isNative = mimeType.includes('pdf') || mimeType.startsWith('image/');
+        const isPDF = mimeType.includes('pdf');
+        const isImage = mimeType.startsWith('image/');
 
         if (isWord) {
             const text = await extractTextFromDocx(fileBase64);
-            parts.push({ text: `Analyze this material:\n${metadata}\n\nContent: ${text || 'No text content found.'}` });
+            parts.push({ text: `Metadata:\n${metadata}\n\nExtracted Word Content:\n${text || "No text could be extracted."}` });
         } else if (isPowerPoint) {
             const text = await extractTextFromPptx(fileBase64);
-            parts.push({ text: `Analyze this presentation:\n${metadata}\n\nContent: ${text || 'No text content found.'}` });
-        } else if (isNative) {
-            parts.push({ text: `Analyze this academic document. Context: ${metadata}` });
+            parts.push({ text: `Metadata:\n${metadata}\n\nExtracted PowerPoint Content:\n${text || "No text could be extracted."}` });
+        } else if (isPDF || isImage) {
+            parts.push({ text: `Analyze this material. Metadata: ${metadata}` });
             parts.push({ inlineData: { data: fileBase64.replace(/^data:.+;base64,/, ''), mimeType } });
         } else {
-            return "⚠️ This file format is not supported for AI processing.";
+            return "⚠️ Format not supported for AI Summarization. Please use PDF, Word, PowerPoint, or Images.";
         }
     } else {
-        parts.push({ text: `Summarize this material: ${metadata}` });
+        parts.push({ text: `Analyze this study material: ${metadata}` });
     }
 
     const response = await ai.models.generateContent({
@@ -104,10 +142,10 @@ export const summarizeContent = async (
         contents: [{ role: 'user', parts }]
     });
 
-    return response.text || "I was unable to generate a summary for this document.";
+    return response.text || "Summary generation returned no text.";
   } catch (error: any) {
-    console.error("Gemini Error:", error);
-    return "AI service is temporarily unavailable. Please ensure your file is valid and try again.";
+    console.error("Gemini Summary Error:", error);
+    return "AI Summarization is currently unavailable. Please check your file and try again.";
   }
 };
 
@@ -119,8 +157,8 @@ export const generateStudySet = async (
 ): Promise<any> => {
   try {
     const promptText = setType === 'flashcards' 
-        ? "Generate 5-8 flashcards with a 'term' and a 'definition' based on the material." 
-        : "Generate 5 multiple-choice questions with 'question', 'options' (array), and 'correctAnswer'.";
+        ? "Generate 5-10 flashcards (term and definition) based on this material." 
+        : "Generate 5 multiple-choice questions (question, options array, and correctAnswer) based on this material.";
     
     const schema = setType === 'flashcards' ? {
         type: Type.ARRAY,
@@ -149,13 +187,13 @@ export const generateStudySet = async (
     if (fileBase64 && mimeType) {
         if (mimeType.includes('word') || mimeType.includes('powerpoint')) {
             const text = mimeType.includes('word') ? await extractTextFromDocx(fileBase64) : await extractTextFromPptx(fileBase64);
-            parts.push({ text: `${promptText}\n\nMaterial: ${text || metadata}` });
+            parts.push({ text: `${promptText}\n\nContent:\n${text || metadata}` });
         } else {
-            parts.push({ text: promptText });
+            parts.push({ text: `${promptText}\n\nMetadata: ${metadata}` });
             parts.push({ inlineData: { data: fileBase64.replace(/^data:.+;base64,/, ''), mimeType } });
         }
     } else {
-        parts.push({ text: `${promptText}\n\nContext: ${metadata}` });
+        parts.push({ text: `${promptText}\n\nContext:\n${metadata}` });
     }
     
     const response = await ai.models.generateContent({
@@ -167,10 +205,27 @@ export const generateStudySet = async (
         contents: [{ role: 'user', parts }]
     });
 
-    const output = response.text;
-    return output ? JSON.parse(output) : [];
+    return response.text ? JSON.parse(response.text) : [];
   } catch (error) {
     console.error(`Error generating ${setType}:`, error);
     return [];
+  }
+};
+
+export const describeImage = async (base64Data: string, mimeType: string): Promise<string> => {
+  try {
+    const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: [{
+            role: 'user',
+            parts: [
+                { inlineData: { mimeType, data: base64Data.replace(/^data:.+;base64,/, '') } },
+                { text: "Analyze this image for academic purposes." }
+            ]
+        }]
+    });
+    return response.text || "No description generated.";
+  } catch (error) {
+    return "Error describing image.";
   }
 };

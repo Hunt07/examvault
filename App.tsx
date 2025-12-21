@@ -133,15 +133,15 @@ const App: React.FC = () => {
   const [toast, setToast] = useState<{ message: string; points?: number; type?: 'success' | 'error' | 'info' } | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('examvault_theme') === 'dark');
 
-  // Deduplicate users by email for UI consistency
+  // Strict email-based deduplication
   const users = useMemo(() => {
     const emailMap = new Map<string, User>();
     rawUsers.forEach(u => {
-        const existing = emailMap.get(u.email);
-        // If there's a duplicate, keep the one that matches the current login ID or has higher points
-        if (!existing || u.id === user?.id || u.points > existing.points) {
-            emailMap.set(u.email, u);
-        }
+      const existing = emailMap.get(u.email.toLowerCase());
+      // Prioritize the currently logged in user ID, then highest points
+      if (!existing || u.id === user?.id || u.points > existing.points) {
+        emailMap.set(u.email.toLowerCase(), u);
+      }
     });
     return Array.from(emailMap.values());
   }, [rawUsers, user?.id]);
@@ -216,7 +216,7 @@ const App: React.FC = () => {
         await updateDoc(doc(db!, "users", user.id), { lastSeen: new Date().toISOString() });
     };
     updatePresence();
-    const interval = setInterval(updatePresence, 3 * 60 * 1000); // every 3 mins
+    const interval = setInterval(updatePresence, 30000); // Heartbeat every 30s
     return () => clearInterval(interval);
   }, [user?.id]);
 
@@ -247,6 +247,12 @@ const App: React.FC = () => {
     setViewState(newView); setSelectedId(id); window.scrollTo(0, 0);
   };
 
+  const earnPoints = async (userId: string, amount: number, msg: string) => {
+    if (!db) return;
+    await updateDoc(doc(db, "users", userId), { points: increment(amount), weeklyPoints: increment(amount) });
+    if (userId === user?.id) showToast(msg, amount > 0 ? 'success' : 'info', amount);
+  };
+
   const appContextValue: AppContextType = {
     user, users, resources, forumPosts, notifications, conversations, directMessages, resourceRequests, reports, view, setView, 
     logout: async () => { isExiting.current = true; if (auth) await signOut(auth); setUser(null); },
@@ -267,15 +273,21 @@ const App: React.FC = () => {
     },
     deleteCommentFromResource: async (resId, comment) => await updateDoc(doc(db!, "resources", resId), { comments: arrayRemove(comment) }),
     addForumPost: async (post) => {
+      if (!user) return;
       await addDoc(collection(db!, "forumPosts"), { ...post, author: sanitizeForFirestore(user), timestamp: new Date().toISOString(), upvotes: 0, downvotes: 0, upvotedBy: [], downvotedBy: [], replies: [] });
-      showToast("Post created!", "success", 10);
+      await earnPoints(user.id, 10, "Post created!");
     },
     handlePostVote: async (id, act) => {
         const p = forumPosts.find(x => x.id === id); if (!p || !user) return;
         const isUp = p.upvotedBy?.includes(user.id);
         await updateDoc(doc(db!, "forumPosts", id), { upvotes: isUp ? increment(-1) : increment(1), upvotedBy: isUp ? arrayRemove(user.id) : arrayUnion(user.id) });
     },
-    deleteForumPost: async (id) => { setViewState('discussions'); if (db) await deleteDoc(doc(db!, "forumPosts", id)); },
+    deleteForumPost: async (id) => {
+      const post = forumPosts.find(p => p.id === id);
+      setViewState('discussions');
+      if (db) await deleteDoc(doc(db!, "forumPosts", id));
+      if (post) await earnPoints(post.author.id, -10, "Post deleted");
+    },
     addReplyToPost: async (id, text, pId) => await updateDoc(doc(db!, "forumPosts", id), { replies: arrayUnion({ id: `r-${Date.now()}`, author: sanitizeForFirestore(user), text, timestamp: new Date().toISOString(), upvotes: 0, upvotedBy: [], isVerified: false, parentId: pId }) }),
     handleReplyVote: async (pId, rId) => {
       const snap = await getDoc(doc(db!, "forumPosts", pId));
@@ -288,12 +300,27 @@ const App: React.FC = () => {
     toggleVerifiedAnswer: async (pId, rId) => {
       const snap = await getDoc(doc(db!, "forumPosts", pId));
       if (snap.exists()) {
-        const upds = (snap.data().replies as ForumReply[]).map(r => r.id === rId ? { ...r, isVerified: !r.isVerified } : r);
+        const upds = (snap.data().replies as ForumReply[]).map(r => {
+            if (r.id === rId) {
+                const nowVerified = !r.isVerified;
+                earnPoints(r.author.id, nowVerified ? 15 : -15, nowVerified ? "Answer verified!" : "Verification removed");
+                return { ...r, isVerified: nowVerified };
+            }
+            return r;
+        });
         await updateDoc(doc(db!, "forumPosts", pId), { replies: upds });
       }
     },
-    addResourceRequest: async (req) => await addDoc(collection(db!, "resourceRequests"), { ...req, requester: sanitizeForFirestore(user), status: ResourceRequestStatus.Open, timestamp: new Date().toISOString() }),
-    deleteResourceRequest: async (id) => await deleteDoc(doc(db!, "resourceRequests", id)),
+    addResourceRequest: async (req) => {
+      if (!user) return;
+      await addDoc(collection(db!, "resourceRequests"), { ...req, requester: sanitizeForFirestore(user), status: ResourceRequestStatus.Open, timestamp: new Date().toISOString() });
+      await earnPoints(user.id, 5, "Request submitted!");
+    },
+    deleteResourceRequest: async (id) => {
+      const req = resourceRequests.find(r => r.id === id);
+      if (db) await deleteDoc(doc(db!, "resourceRequests", id));
+      if (req) await earnPoints(req.requester.id, -5, "Request deleted");
+    },
     openUploadForRequest: (id) => { const r = resourceRequests.find(x => x.id === id); if (r) { setFulfillingRequest(r); setIsUploadModalOpen(true); } },
     toggleUserSubscription: async (id) => user && await updateDoc(doc(db!, "users", user.id), { "subscriptions.users": user.subscriptions?.users?.includes(id) ? arrayRemove(id) : arrayUnion(id) }),
     toggleLecturerSubscription: async (n) => user && await updateDoc(doc(db!, "users", user.id), { "subscriptions.lecturers": user.subscriptions?.lecturers?.includes(n) ? arrayRemove(n) : arrayUnion(n) }),
@@ -311,14 +338,19 @@ const App: React.FC = () => {
     clearAllNotifications: async () => { if (!user) return; const sn = await getDocs(query(collection(db!, "notifications"), where("recipientId", "==", user.id))); const b = writeBatch(db!); sn.forEach(d => b.delete(d.ref)); await b.commit(); },
     markMessagesAsRead: async (id) => { if (!user) return; const unread = directMessages.filter(m => m.conversationId === id && m.recipientId === user.id && m.status !== MessageStatus.Read); if (unread.length) { const b = writeBatch(db!); unread.forEach(m => b.update(doc(db!, "directMessages", m.id), { status: MessageStatus.Read })); await b.commit(); } },
     goBack: () => { if (viewHistory.length > 1) { const newHistory = [...viewHistory]; newHistory.pop(); const prev = newHistory[newHistory.length-1]; setViewState(prev.view); setSelectedId(prev.id); setViewHistory(newHistory); } else setViewState('dashboard'); },
-    deleteResource: async (id, fileUrl, previewUrl) => { setViewState('dashboard'); if (db) await deleteDoc(doc(db!, "resources", id)); },
+    deleteResource: async (id, fileUrl, previewUrl) => {
+        const res = resources.find(r => r.id === id);
+        setViewState('dashboard');
+        if (db) await deleteDoc(doc(db!, "resources", id));
+        if (res) await earnPoints(res.author.id, fulfillingRequest ? -50 : -25, "Resource removed");
+    },
     hasUnreadMessages: directMessages.some(m => m.recipientId === user?.id && m.status !== MessageStatus.Read), 
     hasUnreadDiscussions: false, isLoading, areResourcesLoading, scrollTargetId, setScrollTargetId, showToast,
     banUser: async (uId) => user?.isAdmin && await updateDoc(doc(db!, "users", uId), { status: 'banned' }),
     unbanUser: async (uId) => user?.isAdmin && await updateDoc(doc(db!, "users", uId), { status: 'active' }),
     toggleAdminStatus: async (uId) => {
         if (!user?.isAdmin) return;
-        const target = rawUsers.find(u => u.id === uId);
+        const target = users.find(u => u.id === uId);
         if (!target) return;
         await updateDoc(doc(db!, "users", uId), { isAdmin: !target.isAdmin });
     },
@@ -358,8 +390,12 @@ const App: React.FC = () => {
                 const pUrl = c ? await getDownloadURL(ref(storage, `cv/${Date.now()}_${c.name}`)) : generateFilePreview(f.name);
                 const nRes = { ...d, author: sanitizeForFirestore(user), uploadDate: new Date().toISOString(), upvotes: 0, downvotes: 0, upvotedBy: [], downvotedBy: [], comments: [], fileUrl: dUrl, fileName: f.name, previewImageUrl: pUrl, mimeType: f.type };
                 const dRef = await addDoc(collection(db!, "resources"), sanitizeForFirestore(nRes));
-                if (fulfillingRequest) await updateDoc(doc(db!, "resourceRequests", fulfillingRequest.id), { status: ResourceRequestStatus.Fulfilled, fulfillment: { fulfiller: sanitizeForFirestore(user), resourceId: dRef.id, timestamp: new Date().toISOString() } });
-                showToast("Uploaded successfully!", "success", fulfillingRequest ? 50 : 25);
+                if (fulfillingRequest) {
+                  await updateDoc(doc(db!, "resourceRequests", fulfillingRequest.id), { status: ResourceRequestStatus.Fulfilled, fulfillment: { fulfiller: sanitizeForFirestore(user), resourceId: dRef.id, timestamp: new Date().toISOString() } });
+                  await earnPoints(user.id, 50, "Request fulfilled!");
+                } else {
+                  await earnPoints(user.id, 25, "Uploaded successfully!");
+                }
                 setIsUploadModalOpen(false);
             } catch (e) { showToast("Upload failed", "error"); } finally { setIsUploading(false); }
         }} isLoading={isUploading} fulfillingRequest={fulfillingRequest} />}

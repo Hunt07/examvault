@@ -86,16 +86,17 @@ const AdminPage: React.FC = () => {
 
     // Presence calculation
     const getPresenceStatus = (u: any) => {
-        if (u.status === 'banned') return { label: 'Banned', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' };
-        if (u.status === 'deactivated') return { label: 'Deactivated', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' };
+        if (u.status === 'banned') return { label: 'BANNED', color: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' };
+        if (u.status === 'deactivated') return { label: 'DEACTIVATED', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' };
         
         if (u.lastSeen) {
             const lastSeenDate = new Date(u.lastSeen);
             const now = new Date();
+            // Threshold of 2 minutes for online status
             const diffMinutes = (now.getTime() - lastSeenDate.getTime()) / (1000 * 60);
-            if (diffMinutes < 10) return { label: 'Online', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' };
+            if (diffMinutes < 2) return { label: 'ONLINE', color: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' };
         }
-        return { label: 'Offline', color: 'bg-slate-100 text-slate-600 dark:bg-zinc-800 dark:text-slate-400' };
+        return { label: 'OFFLINE', color: 'bg-slate-100 text-slate-500 dark:bg-zinc-800 dark:text-slate-400' };
     };
 
     if (!currentUser?.isAdmin) {
@@ -276,7 +277,7 @@ const AdminPage: React.FC = () => {
                                                 </button>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${presence.color}`}>
+                                                <span className={`px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${presence.color}`}>
                                                     {presence.label}
                                                 </span>
                                             </td>

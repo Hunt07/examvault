@@ -52,6 +52,7 @@ export interface Comment {
   parentId?: string | null;
   upvotes: number;
   upvotedBy: string[];
+  attachment?: Attachment; // Added attachment support for comments
 }
 
 export interface Resource {

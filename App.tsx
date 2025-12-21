@@ -118,7 +118,7 @@ const App: React.FC = () => {
   const [scrollTargetId, setScrollTargetId] = useState<string | null>(null);
   const isExiting = useRef(false);
 
-  const [rawUsers, setRawUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
   const [forumPosts, setForumPosts] = useState<ForumPost[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -132,19 +132,6 @@ const App: React.FC = () => {
   const [fulfillingRequest, setFulfillingRequest] = useState<ResourceRequest | undefined>(undefined);
   const [toast, setToast] = useState<{ message: string; points?: number; type?: 'success' | 'error' | 'info' } | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('examvault_theme') === 'dark');
-
-  // Deduplicate users by email for UI consistency
-  const users = useMemo(() => {
-    const emailMap = new Map<string, User>();
-    rawUsers.forEach(u => {
-        const existing = emailMap.get(u.email);
-        // If there's a duplicate, keep the one that matches the current login ID or has higher points
-        if (!existing || u.id === user?.id || u.points > existing.points) {
-            emailMap.set(u.email, u);
-        }
-    });
-    return Array.from(emailMap.values());
-  }, [rawUsers, user?.id]);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info', points?: number) => setToast({ message, type, points });
 
@@ -209,22 +196,11 @@ const App: React.FC = () => {
     return () => { unsubscribeAuth(); if (unsubUserDoc) unsubUserDoc(); };
   }, []);
 
-  // Presence Heartbeat
-  useEffect(() => {
-    if (!user || !db) return;
-    const updatePresence = async () => {
-        await updateDoc(doc(db!, "users", user.id), { lastSeen: new Date().toISOString() });
-    };
-    updatePresence();
-    const interval = setInterval(updatePresence, 3 * 60 * 1000); // every 3 mins
-    return () => clearInterval(interval);
-  }, [user?.id]);
-
   useEffect(() => {
     if (!user || !db) return;
     setAreResourcesLoading(true);
     
-    const unsubUsers = onSnapshot(collection(db, "users"), (s) => setRawUsers(s.docs.map(d => ({ ...d.data(), id: d.id } as User))));
+    const unsubUsers = onSnapshot(collection(db, "users"), (s) => setUsers(s.docs.map(d => ({ ...d.data(), id: d.id } as User))));
     const unsubResources = onSnapshot(query(collection(db, "resources"), orderBy("uploadDate", "desc")), (s) => {
       setResources(s.docs.map(d => ({ id: d.id, ...d.data() } as Resource)));
       setAreResourcesLoading(false);
@@ -318,7 +294,7 @@ const App: React.FC = () => {
     unbanUser: async (uId) => user?.isAdmin && await updateDoc(doc(db!, "users", uId), { status: 'active' }),
     toggleAdminStatus: async (uId) => {
         if (!user?.isAdmin) return;
-        const target = rawUsers.find(u => u.id === uId);
+        const target = users.find(u => u.id === uId);
         if (!target) return;
         await updateDoc(doc(db!, "users", uId), { isAdmin: !target.isAdmin });
     },

@@ -1,7 +1,7 @@
 
 import React, { useContext, useState, useMemo } from 'react';
 import { AppContext, MASTER_ADMIN_EMAILS } from '../../App';
-import { Shield, Users, AlertTriangle, Search, ExternalLink, UserX, UserCheck, Check, X, ShieldAlert, Loader2, UserPlus, UserMinus, Eye, EyeOff } from 'lucide-react';
+import { Shield, Users, AlertTriangle, Search, ExternalLink, UserX, UserCheck, Check, X, ShieldAlert, Loader2, UserPlus, UserMinus } from 'lucide-react';
 import Avatar from '../Avatar';
 
 type AdminTab = 'reports' | 'users';
@@ -9,8 +9,7 @@ type AdminTab = 'reports' | 'users';
 const AdminPage: React.FC = () => {
     const { 
         user: currentUser, users, reports, setView, banUser, unbanUser, 
-        toggleAdminStatus, updateReportStatus, showToast,
-        isAdminViewSimulated, setAdminViewSimulated
+        toggleAdminStatus, updateReportStatus, showToast
     } = useContext(AppContext);
     const [activeTab, setActiveTab] = useState<AdminTab>('reports');
     const [searchTerm, setSearchTerm] = useState('');
@@ -108,20 +107,6 @@ const AdminPage: React.FC = () => {
                             <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Admin Dashboard</h1>
                             <p className="text-slate-500 dark:text-slate-400">Security & Moderation Controls</p>
                         </div>
-                        <button 
-                            onClick={() => {
-                                setAdminViewSimulated(!isAdminViewSimulated);
-                                showToast(isAdminViewSimulated ? "Admin interface restored" : "Previewing as Student", "info");
-                            }}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
-                                isAdminViewSimulated 
-                                ? 'bg-amber-100 text-amber-700 border-amber-200 border' 
-                                : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-zinc-800 dark:text-slate-300'
-                            }`}
-                        >
-                            {isAdminViewSimulated ? <Eye size={18} /> : <EyeOff size={18} />}
-                            {isAdminViewSimulated ? "Exit Student View" : "Simulate Student View"}
-                        </button>
                     </div>
                     
                     <div className="flex gap-6 mt-4 border-b dark:border-zinc-700">
@@ -290,7 +275,7 @@ const AdminPage: React.FC = () => {
                                                         <Shield size={10} /> Admin
                                                     </span>
                                                 ) : (
-                                                    <span className="px-2 py-1 bg-slate-100 text-slate-600 dark:bg-zinc-800 dark:text-slate-400 text-[10px] font-bold uppercase rounded">
+                                                    <span className="px-2 py-1 bg-slate-100 text-slate-600 dark:text-zinc-800 dark:text-slate-400 text-[10px] font-bold uppercase rounded">
                                                         Student
                                                     </span>
                                                 )}

@@ -4,7 +4,7 @@ import { AppContext, View } from '../App';
 import { LayoutDashboard, MessageSquare, BarChart3, Send, ClipboardList, Shield } from 'lucide-react';
 
 const SideNav: React.FC = () => {
-    const { view, setView, user, hasUnreadMessages, hasUnreadDiscussions, isAdminViewSimulated } = useContext(AppContext);
+    const { view, setView, user, hasUnreadMessages, hasUnreadDiscussions } = useContext(AppContext);
     const [isHovered, setIsHovered] = useState(false);
 
     const navItems: { name: string; icon: React.ElementType; view: View; id: string }[] = [
@@ -15,7 +15,7 @@ const SideNav: React.FC = () => {
         { name: 'Leaderboard', icon: BarChart3, view: 'leaderboard', id: 'tour-leaderboard' },
     ];
 
-    const isAdmin = user?.isAdmin && !isAdminViewSimulated;
+    const isAdmin = user?.isAdmin;
 
     return (
         <aside 

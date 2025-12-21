@@ -90,8 +90,6 @@ interface AppContextType {
   unbanUser: (userId: string) => Promise<void>;
   toggleAdminStatus: (userId: string) => Promise<void>;
   updateReportStatus: (reportId: string, status: 'resolved' | 'dismissed') => Promise<void>;
-  isAdminViewSimulated: boolean;
-  setAdminViewSimulated: (sim: boolean) => void;
 }
 
 export const AppContext = React.createContext<AppContextType>({} as AppContextType);
@@ -118,7 +116,6 @@ const App: React.FC = () => {
   const [viewHistory, setViewHistory] = useState<{ view: View; id?: string }[]>([]);
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
   const [scrollTargetId, setScrollTargetId] = useState<string | null>(null);
-  const [isAdminViewSimulated, setAdminViewSimulated] = useState(false);
   const isExiting = useRef(false);
 
   const [users, setUsers] = useState<User[]>([]);
@@ -302,7 +299,6 @@ const App: React.FC = () => {
         await updateDoc(doc(db!, "users", uId), { isAdmin: !target.isAdmin });
     },
     updateReportStatus: async (rId, status) => user?.isAdmin && await updateDoc(doc(db!, "reports", rId), { status }),
-    isAdminViewSimulated, setAdminViewSimulated
   };
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg"><Loader2 size={48} className="animate-spin text-primary-600" /></div>;

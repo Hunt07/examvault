@@ -14,7 +14,7 @@ const CommentComponent: React.FC<{
   resourceId: string;
   children: React.ReactNode;
 }> = ({ comment, resourceId, children }) => {
-  const { user, userRanks, setView, handleCommentVote, addCommentToResource, deleteCommentFromResource, isAdminViewSimulated } = useContext(AppContext);
+  const { user, userRanks, setView, handleCommentVote, addCommentToResource, deleteCommentFromResource } = useContext(AppContext);
   const [isReplying, setIsReplying] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
@@ -22,7 +22,7 @@ const CommentComponent: React.FC<{
   const authorRank = userRanks.get(comment.author.id);
   const isUpvoted = comment.upvotedBy?.includes(user?.id || '');
   const isOwnComment = user?.id === comment.author.id;
-  const canDelete = isOwnComment || (user?.isAdmin && !isAdminViewSimulated);
+  const canDelete = isOwnComment || user?.isAdmin;
 
   const handleUserClick = (userId: string) => {
     if (userId === user?.id) setView('profile');
@@ -90,7 +90,7 @@ const CommentComponent: React.FC<{
 };
 
 const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
-  const { user, userRanks, setView, handleVote, goBack, savedResourceIds, toggleSaveResource, deleteResource, scrollTargetId, setScrollTargetId, isAdminViewSimulated } = useContext(AppContext);
+  const { user, userRanks, setView, handleVote, goBack, savedResourceIds, toggleSaveResource, deleteResource, scrollTargetId, setScrollTargetId } = useContext(AppContext);
   const [summary, setSummary] = useState('');
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -99,7 +99,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
 
   const isSaved = savedResourceIds.includes(resource.id);
   const isAuthor = user?.id === resource.author.id;
-  const isAdmin = user?.isAdmin && !isAdminViewSimulated;
+  const isAdmin = user?.isAdmin;
   const canDelete = isAuthor || isAdmin;
   
   const isUpvoted = resource.upvotedBy?.includes(user?.id || '');

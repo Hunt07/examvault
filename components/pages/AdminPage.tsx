@@ -1,13 +1,17 @@
 
 import React, { useContext, useState, useMemo } from 'react';
-import { AppContext } from '../../App';
-import { Shield, Users, AlertTriangle, Search, ExternalLink, UserX, UserCheck, Check, X, ShieldAlert, Loader2 } from 'lucide-react';
+import { AppContext, MASTER_ADMIN_EMAILS } from '../../App';
+import { Shield, Users, AlertTriangle, Search, ExternalLink, UserX, UserCheck, Check, X, ShieldAlert, Loader2, UserPlus, UserMinus, Eye, EyeOff } from 'lucide-react';
 import Avatar from '../Avatar';
 
 type AdminTab = 'reports' | 'users';
 
 const AdminPage: React.FC = () => {
-    const { user: currentUser, users, reports, setView, banUser, unbanUser, updateReportStatus, showToast } = useContext(AppContext);
+    const { 
+        user: currentUser, users, reports, setView, banUser, unbanUser, 
+        toggleAdminStatus, updateReportStatus, showToast,
+        isAdminViewSimulated, setAdminViewSimulated
+    } = useContext(AppContext);
     const [activeTab, setActiveTab] = useState<AdminTab>('reports');
     const [searchTerm, setSearchTerm] = useState('');
     const [reportFilter, setReportFilter] = useState<'all' | 'pending' | 'resolved' | 'dismissed'>('all');
@@ -51,6 +55,26 @@ const AdminPage: React.FC = () => {
         }
     };
 
+    const handleToggleAdmin = async (userId: string) => {
+        if (userId === currentUser?.id) {
+            showToast("You cannot revoke your own admin rights.", "error");
+            return;
+        }
+        const targetUser = users.find(u => u.id === userId);
+        if (targetUser && MASTER_ADMIN_EMAILS.includes(targetUser.email)) {
+            showToast("Master admin roles cannot be changed.", "error");
+            return;
+        }
+
+        setActionLoading(userId);
+        try {
+            await toggleAdminStatus(userId);
+            showToast("User role updated.", "success");
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
     const handleReportAction = async (reportId: string, status: 'resolved' | 'dismissed') => {
         setActionLoading(reportId);
         try {
@@ -79,8 +103,26 @@ const AdminPage: React.FC = () => {
                     <Shield size={32} />
                 </div>
                 <div className="flex-grow">
-                    <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Admin Dashboard</h1>
-                    <p className="text-slate-500 dark:text-slate-400">Security & Moderation Controls</p>
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Admin Dashboard</h1>
+                            <p className="text-slate-500 dark:text-slate-400">Security & Moderation Controls</p>
+                        </div>
+                        <button 
+                            onClick={() => {
+                                setAdminViewSimulated(!isAdminViewSimulated);
+                                showToast(isAdminViewSimulated ? "Admin interface restored" : "Previewing as Student", "info");
+                            }}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+                                isAdminViewSimulated 
+                                ? 'bg-amber-100 text-amber-700 border-amber-200 border' 
+                                : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-zinc-800 dark:text-slate-300'
+                            }`}
+                        >
+                            {isAdminViewSimulated ? <Eye size={18} /> : <EyeOff size={18} />}
+                            {isAdminViewSimulated ? "Exit Student View" : "Simulate Student View"}
+                        </button>
+                    </div>
                     
                     <div className="flex gap-6 mt-4 border-b dark:border-zinc-700">
                         <button 
@@ -211,7 +253,8 @@ const AdminPage: React.FC = () => {
                                 <tr>
                                     <th className="px-6 py-4">User</th>
                                     <th className="px-6 py-4">Status</th>
-                                    <th className="px-6 py-4 text-right">Restrict Access</th>
+                                    <th className="px-6 py-4">Role</th>
+                                    <th className="px-6 py-4 text-right">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-zinc-800">
@@ -226,9 +269,6 @@ const AdminPage: React.FC = () => {
                                                 <div className="overflow-hidden">
                                                     <div className="flex items-center gap-2">
                                                         <p className="font-bold text-slate-800 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400 truncate">{u.name}</p>
-                                                        {u.isAdmin && (
-                                                            <span className="px-1.5 py-0.5 bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 text-[9px] font-black uppercase rounded">Admin</span>
-                                                        )}
                                                     </div>
                                                     <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{u.email}</p>
                                                 </div>
@@ -243,30 +283,61 @@ const AdminPage: React.FC = () => {
                                                 {u.status || 'active'}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 text-right">
-                                            {u.email === 'b09220024@student.unimy.edu.my' ? (
-                                                <span className="text-xs text-slate-400 italic font-medium">Protected Account</span>
-                                            ) : (
-                                                u.status === 'banned' ? (
-                                                    <button 
-                                                        disabled={actionLoading === u.id}
-                                                        onClick={() => handleUnban(u.id)}
-                                                        className="inline-flex items-center gap-2 text-green-600 hover:text-green-700 font-bold text-sm transition-colors disabled:opacity-50"
-                                                    >
-                                                        {actionLoading === u.id ? <Loader2 size={14} className="animate-spin" /> : <UserCheck size={14} />}
-                                                        Restore Access
-                                                    </button>
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-2">
+                                                {u.isAdmin ? (
+                                                    <span className="px-2 py-1 bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 text-[10px] font-black uppercase rounded flex items-center gap-1">
+                                                        <Shield size={10} /> Admin
+                                                    </span>
                                                 ) : (
+                                                    <span className="px-2 py-1 bg-slate-100 text-slate-600 dark:bg-zinc-800 dark:text-slate-400 text-[10px] font-bold uppercase rounded">
+                                                        Student
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <div className="flex justify-end gap-3">
+                                                {/* Role Management */}
+                                                {!MASTER_ADMIN_EMAILS.includes(u.email) && u.id !== currentUser.id && (
                                                     <button 
                                                         disabled={actionLoading === u.id}
-                                                        onClick={() => handleBan(u.id)}
-                                                        className="inline-flex items-center gap-2 text-red-400 hover:text-red-600 font-bold text-sm transition-colors disabled:opacity-50"
+                                                        onClick={() => handleToggleAdmin(u.id)}
+                                                        className={`p-2 rounded-lg transition-colors flex items-center gap-1 text-xs font-bold ${
+                                                            u.isAdmin 
+                                                            ? 'text-amber-600 bg-amber-50 dark:bg-amber-900/20' 
+                                                            : 'text-primary-600 bg-primary-50 dark:bg-primary-900/20'
+                                                        }`}
+                                                        title={u.isAdmin ? "Revoke Admin Rights" : "Make Admin"}
                                                     >
-                                                        {actionLoading === u.id ? <Loader2 size={14} className="animate-spin" /> : <UserX size={14} />}
-                                                        Ban User
+                                                        {actionLoading === u.id ? <Loader2 size={14} className="animate-spin" /> : (u.isAdmin ? <UserMinus size={14} /> : <UserPlus size={14} />)}
+                                                        {u.isAdmin ? "Demote" : "Promote"}
                                                     </button>
-                                                )
-                                            )}
+                                                )}
+
+                                                {/* Account Restriction */}
+                                                {!MASTER_ADMIN_EMAILS.includes(u.email) && u.id !== currentUser.id && (
+                                                    u.status === 'banned' ? (
+                                                        <button 
+                                                            disabled={actionLoading === u.id}
+                                                            onClick={() => handleUnban(u.id)}
+                                                            className="p-2 text-green-600 bg-green-50 dark:bg-green-900/20 rounded-lg hover:text-green-700 font-bold transition-colors disabled:opacity-50"
+                                                            title="Restore Access"
+                                                        >
+                                                            {actionLoading === u.id ? <Loader2 size={14} className="animate-spin" /> : <UserCheck size={14} />}
+                                                        </button>
+                                                    ) : (
+                                                        <button 
+                                                            disabled={actionLoading === u.id}
+                                                            onClick={() => handleBan(u.id)}
+                                                            className="p-2 text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg hover:text-red-600 font-bold transition-colors disabled:opacity-50"
+                                                            title="Ban User"
+                                                        >
+                                                            {actionLoading === u.id ? <Loader2 size={14} className="animate-spin" /> : <UserX size={14} />}
+                                                        </button>
+                                                    )
+                                                )}
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}

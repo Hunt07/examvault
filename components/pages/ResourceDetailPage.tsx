@@ -14,7 +14,7 @@ import ResourceCard from '../ResourceCard';
 import Avatar from '../Avatar';
 import { db, storage } from '../../services/firebase';
 import { collection, addDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL, getBlob } from 'firebase/storage';
 
 const CommentComponent: React.FC<{
   comment: Comment;
@@ -32,11 +32,8 @@ const CommentComponent: React.FC<{
   const isOwnComment = user?.id === comment.author.id;
 
   const handleUserClick = (userId: string) => {
-    if (userId === user?.id) {
-      setView('profile');
-    } else {
-      setView('publicProfile', userId);
-    }
+    if (userId === user?.id) setView('profile');
+    else setView('publicProfile', userId);
   };
 
   const handleVoteForComment = () => {
@@ -221,10 +218,8 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   const isUpvoted = resource.upvotedBy?.includes(user?.id || '');
   const isDownvoted = resource.downvotedBy?.includes(user?.id || '');
 
-  // Handle Deep Linking / Scrolling
   useEffect(() => {
       if (scrollTargetId) {
-          // Allow DOM to render
           setTimeout(() => {
               const targetElement = document.getElementById(scrollTargetId);
               if (targetElement) {
@@ -265,9 +260,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     const group: Record<string, Comment[]> = {};
     for (const comment of resource.comments) {
         const parentId = comment.parentId || 'root';
-        if (!group[parentId]) {
-            group[parentId] = [];
-        }
+        if (!group[parentId]) group[parentId] = [];
         group[parentId].push(comment);
     }
     for (const parentId in group) {
@@ -283,16 +276,12 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
         const subjectMatch = resource.courseCode.match(/^[A-Za-z]+/);
         if (subjectMatch) {
             const subject = subjectMatch[0];
-            const subjectMatches = candidates.filter(r => 
-                r.courseCode.startsWith(subject) && !matches.includes(r)
-            );
+            const subjectMatches = candidates.filter(r => r.courseCode.startsWith(subject) && !matches.includes(r));
             matches = [...matches, ...subjectMatches];
         }
     }
     if (matches.length < 8) {
-        const typeMatches = candidates.filter(r => 
-            r.type === resource.type && !matches.includes(r)
-        );
+        const typeMatches = candidates.filter(r => r.type === resource.type && !matches.includes(r));
         matches = [...matches, ...typeMatches];
     }
     if (matches.length < 8) {
@@ -303,19 +292,19 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   }, [resources, resource]);
 
   const handleAuthorClick = (authorId: string) => {
-    if (authorId === user?.id) {
-        setView('profile');
-    } else {
-        setView('publicProfile', authorId);
-    }
+    if (authorId === user?.id) setView('profile');
+    else setView('publicProfile', authorId);
   };
 
+  /**
+   * Robust base64 resolver using getBlob to bypass CORS "Content Access Error"
+   */
   const resolveFileBase64 = async (): Promise<string | undefined> => {
     if (resource.fileBase64) return resource.fileBase64;
     try {
-        const response = await fetch(resource.fileUrl);
-        if (!response.ok) throw new Error('Fetch failed');
-        const blob = await response.blob();
+        // Direct Firebase Storage read to avoid standard fetch CORS blocks
+        const fileRef = ref(storage, resource.fileUrl);
+        const blob = await getBlob(fileRef);
         return await new Promise<string>((resolve, reject) => {
             const reader = new FileReader();
             reader.onloadend = () => resolve(reader.result as string);
@@ -323,8 +312,20 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
             reader.readAsDataURL(blob);
         });
     } catch (error) {
-        console.error("Error fetching file for AI:", error);
-        return undefined;
+        // Fallback to fetch if it's not a Firebase URL or fails
+        try {
+            const response = await fetch(resource.fileUrl);
+            const blob = await response.blob();
+            return await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        } catch (inner) {
+            console.error("Critical: AI access failed.", inner);
+            return undefined;
+        }
     }
   };
 
@@ -333,7 +334,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     setSummary('');
     const base64 = await resolveFileBase64();
     if (!base64 && resource.fileUrl !== '#') {
-        setSummary("⚠️ **Content Access Error**");
+        setSummary("⚠️ **Content Access Error**\n\nUnable to access file content for AI analysis. Ensure file is accessible.");
         setIsSummarizing(false);
         return;
     }
@@ -344,29 +345,13 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     setIsSummarizing(false);
   };
   
-  const handleGeneratePreview = async () => {
-    if (!isAISupported) return;
-    setIsGeneratingPreview(true);
-    const base64 = await resolveFileBase64();
-    if (!base64 && resource.fileUrl !== '#') {
-        setAiGeneratedPreview("⚠️ **Content Access Error**");
-        setIsGeneratingPreview(false);
-        return;
-    }
-    let textContext = `Title: ${resource.title}\nCourse: ${resource.courseCode}`;
-    if (!base64 && resource.fileUrl === '#') textContext += `\n\n[Mock Content]:\n${resource.contentForAI}`;
-    const result = await summarizeContent(textContext, base64, resource.mimeType);
-    setAiGeneratedPreview(result);
-    setIsGeneratingPreview(false);
-  };
-  
   const handleGenerateStudySet = async (type: 'flashcards' | 'quiz') => {
     setIsGeneratingStudySet(true);
     setStudySet(null);
     setStudySetType(type);
     const base64 = await resolveFileBase64();
     if (!base64 && resource.fileUrl !== '#') {
-        setStudySet([]);
+        setStudySet([]); 
         setIsGeneratingStudySet(false);
         return;
     }
@@ -392,12 +377,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
                 const storageRef = ref(storage, `comments/${Date.now()}_${commentFile.name}`);
                 await uploadBytes(storageRef, commentFile);
                 const url = await getDownloadURL(storageRef);
-                attachment = {
-                    url,
-                    name: commentFile.name,
-                    type: commentFile.type.startsWith('image/') ? 'image' : 'file',
-                    size: `${(commentFile.size / 1024).toFixed(0)} KB`
-                };
+                attachment = { url, name: commentFile.name, type: commentFile.type.startsWith('image/') ? 'image' : 'file', size: `${(commentFile.size / 1024).toFixed(0)} KB` };
             } catch (err) {
                 showToast("Failed to upload attachment", "error");
                 setIsUploadingCommentFile(false);
@@ -414,25 +394,6 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   const handleUpvoteClick = () => handleVote(resource.id, 'up');
   const handleDownvoteClick = () => handleVote(resource.id, 'down');
   
-  const handleSubmitReport = async () => {
-    if (reportReason.trim() !== "") {
-      try {
-        await addDoc(collection(db, "reports"), {
-          resourceId: resource.id, resourceTitle: resource.title,
-          uploaderId: resource.author.id, uploaderName: resource.author.name,
-          reporterId: user?.id || 'anonymous', reporterName: user?.name || 'Anonymous',
-          reason: reportReason, timestamp: new Date().toISOString(), status: 'pending'
-        });
-        setIsReporting(false); setReportReason(''); setHasReported(true);
-      } catch (error) { showToast("Report failed", "error"); }
-    }
-  };
-
-  const confirmDelete = () => {
-      deleteResource(resource.id, resource.fileUrl, resource.previewImageUrl);
-      setIsDeleteConfirmOpen(false);
-  };
-
   const handleDownloadClick = () => {
       setIsDownloading(true);
       setTimeout(() => setIsDownloading(false), 2000);
@@ -447,15 +408,8 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     ));
   };
 
-
   const fileType = resource.fileName.split('.').pop()?.toUpperCase();
-  const formattedUploadDate = new Date(resource.uploadDate).toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
+  const formattedUploadDate = new Date(resource.uploadDate).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
   const InfoTag: React.FC<{ label: string; value: string | number }> = ({ label, value }) => (
     <div className="bg-slate-100 dark:bg-zinc-800 p-3 rounded-lg">
@@ -470,18 +424,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     const isPdf = ext === 'pdf';
     const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext || '');
     const isOfficeDoc = ['ppt', 'pptx', 'doc', 'docx', 'xls', 'xlsx'].includes(ext || '');
-
-    if (isMock) {
-        return (
-            <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-                <AlertCircle size={64} className="text-amber-400 mb-4" />
-                <h3 className="text-xl font-bold text-slate-800 mb-2">Preview Simulated</h3>
-                <div className="w-full max-w-3xl bg-white rounded-lg border border-slate-200 p-6 text-left h-96 overflow-y-auto shadow-inner">
-                    <MarkdownRenderer content={resource.contentForAI} />
-                </div>
-            </div>
-        );
-    }
+    if (isMock) return <div className="p-8"><MarkdownRenderer content={resource.contentForAI} /></div>;
     if (isImage) return <img src={resource.fileUrl} alt="Preview" className="max-w-full max-h-full object-contain" />;
     if (isPdf) return <iframe src={resource.fileUrl} className="w-full h-full border-none" title="PDF Preview"></iframe>;
     if (isOfficeDoc) return <iframe src={`https://docs.google.com/gview?url=${encodeURIComponent(resource.fileUrl)}&embedded=true`} className="w-full h-full border-none" title="Office Document Preview" />;
@@ -583,14 +526,14 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
                         <textarea value={reportReason} onChange={(e) => setReportReason(e.target.value)} placeholder="Reason for reporting..." className="w-full bg-white dark:bg-zinc-900 text-slate-900 dark:text-white px-4 py-2 border border-slate-300 dark:border-zinc-700 rounded-lg focus:ring-primary-500 outline-none transition" rows={3} autoFocus />
                         <div className="flex justify-end gap-2 mt-4">
                             <button onClick={() => setIsReporting(false)} className="bg-slate-200 dark:bg-zinc-700 text-slate-700 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 transition">Cancel</button>
-                            <button onClick={handleSubmitReport} className="bg-red-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-red-700 transition">Submit Report</button>
+                            <button onClick={async () => { if (reportReason.trim()) { await addDoc(collection(db, "reports"), { resourceId: resource.id, resourceTitle: resource.title, uploaderId: resource.author.id, reporterId: user?.id, reason: reportReason, timestamp: new Date().toISOString(), status: 'pending' }); setIsReporting(false); setHasReported(true); } }} className="bg-red-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-red-700 transition">Submit Report</button>
                         </div>
                     </div>
                 )}
             </div>
           </div>
 
-          <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md mt-8 border border-transparent dark:border-zinc-700">
+          <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md mt-8 transition-colors duration-300 border border-transparent dark:border-zinc-700">
             <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4">AI Summary</h3>
             {!summary && !isSummarizing && (
               <div className="border-2 border-dashed border-slate-300 dark:border-zinc-700 rounded-lg p-6 text-center">
@@ -608,6 +551,33 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
               </div>
             )}
             {summary && <div className="bg-slate-50 dark:bg-zinc-800/50 border border-slate-200 dark:border-zinc-700 rounded-lg p-4 sm:p-6"><MarkdownRenderer content={summary} /></div>}
+          </div>
+          
+          <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md mt-8 border border-transparent dark:border-zinc-700">
+            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4">AI Study Tools</h3>
+            {isGeneratingStudySet && (
+                <div className="border border-slate-200 dark:border-zinc-700 rounded-lg p-6 text-center">
+                    <Loader2 className="mx-auto h-12 w-12 text-primary-500 animate-spin" />
+                    <p className="mt-4 text-slate-600 dark:text-slate-300 font-medium">Gemini is generating {studySetType}...</p>
+                </div>
+            )}
+            {!isGeneratingStudySet && !studySet && (
+                <div className={`border-2 border-dashed border-slate-300 dark:border-zinc-700 rounded-lg p-6 text-center ${!isAISupported ? 'opacity-50' : ''}`}>
+                    <div className="flex justify-center gap-4">
+                        <button onClick={() => handleGenerateStudySet('flashcards')} disabled={!isAISupported} className="flex-1 flex flex-col items-center gap-2 bg-slate-50 dark:bg-zinc-800 text-slate-700 dark:text-slate-200 font-bold py-4 rounded-lg hover:bg-slate-100 transition border">
+                            <BookCopy size={24} /> Generate Flashcards
+                        </button>
+                        <button onClick={() => handleGenerateStudySet('quiz')} disabled={!isAISupported} className="flex-1 flex flex-col items-center gap-2 bg-slate-50 dark:bg-zinc-800 text-slate-700 dark:text-slate-200 font-bold py-4 rounded-lg hover:bg-slate-100 transition border">
+                            <HelpCircle size={24} /> Generate Practice Quiz
+                        </button>
+                    </div>
+                </div>
+            )}
+            {!isGeneratingStudySet && studySet && (
+                <div className="bg-slate-50 dark:bg-zinc-800/50 border border-slate-200 dark:border-zinc-700 rounded-lg p-4 sm:p-6">
+                    {studySetType === 'flashcards' ? <FlashcardViewer flashcards={studySet as Flashcard[]} onReset={resetStudySet} /> : <QuizComponent questions={studySet as QuizQuestion[]} onReset={resetStudySet} />}
+                </div>
+            )}
           </div>
 
           <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md mt-8 border border-transparent dark:border-zinc-700">
@@ -678,15 +648,13 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
       
       {isDeleteConfirmOpen && (
             <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                <div className="bg-white dark:bg-zinc-800 p-6 rounded-xl shadow-xl max-w-sm w-full border dark:border-zinc-700">
-                    <div className="flex flex-col items-center text-center">
-                        <Trash2 size={32} className="text-red-600 mb-4" />
-                        <h3 className="text-xl font-bold dark:text-white mb-2">Delete Resource?</h3>
-                        <p className="text-slate-500 mb-6 text-sm">Are you sure you want to delete <strong>{resource.title}</strong>?</p>
-                        <div className="flex gap-3 w-full">
-                            <button onClick={() => setIsDeleteConfirmOpen(false)} className="flex-1 py-2.5 bg-slate-100 dark:bg-zinc-700 font-semibold rounded-lg">Cancel</button>
-                            <button onClick={confirmDelete} className="flex-1 py-2.5 bg-red-600 text-white font-semibold rounded-lg">Delete</button>
-                        </div>
+                <div className="bg-white dark:bg-zinc-800 p-6 rounded-xl shadow-xl max-w-sm w-full border dark:border-zinc-700 text-center">
+                    <Trash2 size={32} className="text-red-600 mb-4 mx-auto" />
+                    <h3 className="text-xl font-bold dark:text-white mb-2">Delete Resource?</h3>
+                    <p className="text-slate-500 mb-6 text-sm">Are you sure you want to delete <strong>{resource.title}</strong>?</p>
+                    <div className="flex gap-3 w-full">
+                        <button onClick={() => setIsDeleteConfirmOpen(false)} className="flex-1 py-2.5 bg-slate-100 dark:bg-zinc-700 font-semibold rounded-lg">Cancel</button>
+                        <button onClick={() => deleteResource(resource.id, resource.fileUrl)} className="flex-1 py-2.5 bg-red-600 text-white font-semibold rounded-lg">Delete</button>
                     </div>
                 </div>
             </div>
@@ -696,9 +664,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
              <div className="bg-white dark:bg-dark-surface rounded-xl w-full max-w-5xl h-[85vh] flex flex-col relative animate-in zoom-in-95">
                 <div className="p-4 border-b flex justify-between items-center bg-slate-50 dark:bg-zinc-800 rounded-t-xl">
-                    <div className="flex items-center gap-3 overflow-hidden">
-                        <h3 className="font-bold text-slate-800 dark:text-white truncate text-lg">{resource.title}</h3>
-                    </div>
+                    <h3 className="font-bold text-slate-800 dark:text-white truncate text-lg">{resource.title}</h3>
                      <div className="flex items-center gap-2">
                         <a href={resource.fileUrl} download={resource.fileName} className="p-2 rounded-full hover:bg-slate-200 text-slate-600"><Download size={20} /></a>
                         <button onClick={() => setIsPreviewOpen(false)} className="p-2 rounded-full hover:bg-red-100 text-slate-500"><X size={24} /></button>

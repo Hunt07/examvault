@@ -107,14 +107,14 @@ const generateDefaultAvatar = (name: string): string => {
 };
 
 /**
- * Deep propagation helper to update user profiles across all content
+ * Platform-wide synchronization helper
  */
 const propagateUserUpdates = async (userId: string, updateData: Partial<User>) => {
     if (!db) return;
     const batch = writeBatch(db);
     const sanitized = sanitizeForFirestore(updateData);
     
-    // 1. Update Resources
+    // 1. Update Resources Author Info
     const resQuery = query(collection(db, "resources"), where("author.id", "==", userId));
     const resSnap = await getDocs(resQuery);
     resSnap.forEach((docSnap) => {
@@ -122,7 +122,7 @@ const propagateUserUpdates = async (userId: string, updateData: Partial<User>) =
          batch.update(docSnap.ref, { author: { ...currentAuthor, ...sanitized } });
     });
 
-    // 2. Update Forum Posts
+    // 2. Update Forum Posts Author Info
     const postQuery = query(collection(db, "forumPosts"), where("author.id", "==", userId));
     const postSnap = await getDocs(postQuery);
     postSnap.forEach((docSnap) => {
@@ -130,7 +130,7 @@ const propagateUserUpdates = async (userId: string, updateData: Partial<User>) =
          batch.update(docSnap.ref, { author: { ...currentAuthor, ...sanitized } });
     });
 
-    // 3. Update Resource Requests
+    // 3. Update Resource Requests Requester Info
     const reqQuery = query(collection(db, "resourceRequests"), where("requester.id", "==", userId));
     const reqSnap = await getDocs(reqQuery);
     reqSnap.forEach((docSnap) => {
@@ -140,7 +140,7 @@ const propagateUserUpdates = async (userId: string, updateData: Partial<User>) =
 
     await batch.commit();
 
-    // 4. Update Arrays (Comments & Replies) - needs individual doc updates as writeBatch doesn't support nested array maps
+    // 4. Update Nested Arrays (Comments & Replies)
     const allResSnap = await getDocs(collection(db, "resources"));
     for (const docSnap of allResSnap.docs) {
         const res = docSnap.data() as Resource;
@@ -272,29 +272,25 @@ const App: React.FC = () => {
     user, users, resources, forumPosts, notifications, conversations, directMessages, resourceRequests, reports, view, setView,
     logout: async () => { isExiting.current = true; if (auth) await signOut(auth); setUser(null); },
     isDarkMode, toggleDarkMode: () => setIsDarkMode(!isDarkMode),
-    userRanks: new Map(users.sort((a, b) => b.points - a.points).map((u, i) => [u.id, i])),
+    userRanks: new Map(users.sort((a,b) => b.points - a.points).map((u, i) => [u.id, i])),
     savedResourceIds: user?.savedResourceIds || [],
     toggleSaveResource: async (id) => user && await updateDoc(doc(db!, "users", user.id), { savedResourceIds: user.savedResourceIds?.includes(id) ? arrayRemove(id) : arrayUnion(id) }),
     handleVote: async (id, action) => {
       if (!user || !db) return;
       const resource = resources.find(x => x.id === id); if (!resource) return;
-      
       const isUp = resource.upvotedBy?.includes(user.id);
       const isDown = resource.downvotedBy?.includes(user.id);
       const resRef = doc(db, "resources", id);
       const batch = writeBatch(db);
-
       if (action === 'up') {
-          if (isUp) {
-              batch.update(resRef, { upvotes: increment(-1), upvotedBy: arrayRemove(user.id) });
-          } else {
+          if (isUp) { batch.update(resRef, { upvotes: increment(-1), upvotedBy: arrayRemove(user.id) }); } 
+          else { 
               batch.update(resRef, { upvotes: increment(1), upvotedBy: arrayUnion(user.id) });
               if (isDown) batch.update(resRef, { downvotes: increment(-1), downvotedBy: arrayRemove(user.id) });
           }
       } else {
-          if (isDown) {
-              batch.update(resRef, { downvotes: increment(-1), downvotedBy: arrayRemove(user.id) });
-          } else {
+          if (isDown) { batch.update(resRef, { downvotes: increment(-1), downvotedBy: arrayRemove(user.id) }); } 
+          else {
               batch.update(resRef, { downvotes: increment(1), downvotedBy: arrayUnion(user.id) });
               if (isUp) batch.update(resRef, { upvotes: increment(-1), upvotedBy: arrayRemove(user.id) });
           }
@@ -303,29 +299,14 @@ const App: React.FC = () => {
     },
     addCommentToResource: async (rid, txt, pid, attachment) => {
       if (!user || !db) return;
-      const newComment = { 
-          id: `c-${Date.now()}`, 
-          author: sanitizeForFirestore(user), 
-          text: txt, 
-          timestamp: new Date().toISOString(), 
-          parentId: pid, 
-          upvotes: 0, 
-          upvotedBy: [],
-          attachment: attachment ? sanitizeForFirestore(attachment) : null
-      };
+      const newComment = { id: `c-${Date.now()}`, author: sanitizeForFirestore(user), text: txt, timestamp: new Date().toISOString(), parentId: pid, upvotes: 0, upvotedBy: [], attachment: attachment ? sanitizeForFirestore(attachment) : null };
       await updateDoc(doc(db!, "resources", rid), { comments: arrayUnion(sanitizeForFirestore(newComment)) });
     },
     handleCommentVote: async (rid, cid) => {
       if (!user || !db) return;
       const snap = await getDoc(doc(db!, "resources", rid));
       if (snap.exists()) {
-        const upds = (snap.data().comments as Comment[]).map(c => {
-             if (c.id === cid) {
-                 const isUp = c.upvotedBy.includes(user.id);
-                 return { ...c, upvotes: isUp ? c.upvotes - 1 : c.upvotes + 1, upvotedBy: isUp ? arrayRemove(user.id) : arrayUnion(user.id) };
-             }
-             return c;
-        });
+        const upds = (snap.data().comments as Comment[]).map(c => c.id === cid ? { ...c, upvotes: c.upvotedBy.includes(user!.id) ? c.upvotes - 1 : c.upvotes + 1, upvotedBy: c.upvotedBy.includes(user!.id) ? arrayRemove(user!.id) : arrayUnion(user!.id) } : c);
         await updateDoc(doc(db!, "resources", rid), { comments: upds });
       }
     },
@@ -342,10 +323,9 @@ const App: React.FC = () => {
     deleteForumPost: async (id) => { const p = forumPosts.find(x => x.id === id); setViewState('discussions'); if (db) { await deleteDoc(doc(db!, "forumPosts", id)); if (p) earnPoints(p.author.id, -10, "Post deleted"); } },
     addReplyToPost: async (id, txt, pid) => await updateDoc(doc(db!, "forumPosts", id), { replies: arrayUnion({ id: `r-${Date.now()}`, author: sanitizeForFirestore(user), text: txt, timestamp: new Date().toISOString(), upvotes: 0, upvotedBy: [], isVerified: false, parentId: pid }) }),
     handleReplyVote: async (id, rid) => {
-      if (!user || !db) return;
       const snap = await getDoc(doc(db!, "forumPosts", id));
       if (snap.exists()) {
-        const upds = (snap.data().replies as ForumReply[]).map(r => r.id === rid ? { ...r, upvotes: r.upvotedBy.includes(user.id) ? r.upvotes - 1 : r.upvotes + 1, upvotedBy: r.upvotedBy.includes(user.id) ? arrayRemove(user.id) : arrayUnion(user.id) } : r);
+        const upds = (snap.data().replies as ForumReply[]).map(r => r.id === rid ? { ...r, upvotes: r.upvotedBy.includes(user!.id) ? r.upvotes - 1 : r.upvotes + 1, upvotedBy: r.upvotedBy.includes(user!.id) ? arrayRemove(user!.id) : arrayUnion(user!.id) } : r);
         await updateDoc(doc(db!, "forumPosts", id), { replies: upds });
       }
     },
@@ -390,9 +370,7 @@ const App: React.FC = () => {
             const dr = await addDoc(collection(db!, "conversations"), { participants: [user.id, uid], lastMessageTimestamp: new Date().toISOString() }); 
             convoId = dr.id;
         }
-        if (msg) {
-            await addDoc(collection(db!, "directMessages"), { conversationId: convoId, senderId: user.id, recipientId: uid, text: msg, timestamp: new Date().toISOString(), status: MessageStatus.Sent });
-        }
+        if (msg) await addDoc(collection(db!, "directMessages"), { conversationId: convoId, senderId: user.id, recipientId: uid, text: msg, timestamp: new Date().toISOString(), status: MessageStatus.Sent });
         setView('messages', convoId);
     },
     sendDirectMessageToUser: async (uid, text) => {

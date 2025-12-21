@@ -4,7 +4,6 @@ import { GoogleGenAI, Type } from "@google/genai";
 import JSZip from "jszip";
 
 // Strictly initialize using the environment variable as per the latest guidelines
-// The ReferenceError is now handled by the polyfill in index.tsx
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
 
 const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
@@ -19,7 +18,6 @@ const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
 
 /**
  * "Nuclear" Regex Extraction: Finds text inside any tag ending in 't' (like <w:t>, <a:t>, <t>)
- * Restoration of user's custom extraction logic.
  */
 const extractTextFromXmlContent = (xmlContent: string): string => {
     const regex = /<(?:\w+:)?t[^>]*>(.*?)<\/(?:\w+:)?t>/g;
@@ -55,6 +53,7 @@ const extractTextFromPptx = async (fileBase64: string): Promise<string> => {
         const zip = await JSZip.loadAsync(arrayBuffer);
         let extractedText = "";
 
+        // 1. Extract Slides
         const slideFolder = zip.folder("ppt/slides");
         if (slideFolder) {
             const slideFiles: { path: string, file: any }[] = [];
@@ -79,6 +78,7 @@ const extractTextFromPptx = async (fileBase64: string): Promise<string> => {
             }
         }
 
+        // 2. Extract Speaker Notes (fixed with proper async handling)
         const notesFolder = zip.folder("ppt/notesSlides");
         if (notesFolder) {
             let notesText = "";
@@ -113,29 +113,32 @@ export const summarizeContent = async (
   mimeType?: string
 ): Promise<string> => {
   try {
-    const systemInstruction = "You are an expert academic assistant. Analyze the material and provide a markdown summary with exactly these sections: **Key Concepts**, **Main Takeaways**, and **Potential Exam Questions** (3 questions).";
+    const systemInstruction = `You are an expert academic assistant. Your task is to analyze study material and create a markdown summary with exactly these sections:
+- **Key Concepts:** Important terms and definitions.
+- **Main Takeaways:** 2-3 sentences of core message.
+- **Potential Exam Questions:** 3 sample questions.`;
+
     const parts: any[] = [];
     
     if (fileBase64 && mimeType) {
         const isWord = mimeType.includes('wordprocessingml') || mimeType.includes('msword') || mimeType.includes('doc');
         const isPowerPoint = mimeType.includes('presentationml') || mimeType.includes('powerpoint') || mimeType.includes('ppt');
-        const isPDF = mimeType.includes('pdf');
-        const isImage = mimeType.startsWith('image/');
+        const isNative = mimeType.includes('pdf') || mimeType.startsWith('image/');
 
         if (isWord) {
             const text = await extractTextFromDocx(fileBase64);
-            parts.push({ text: `Analyze this document. Metadata:\n${metadata}\n\nContent:\n${text || "No text could be extracted."}` });
+            parts.push({ text: `Metadata:\n${metadata}\n\nExtracted Content:\n${text || "No text could be extracted."}` });
         } else if (isPowerPoint) {
             const text = await extractTextFromPptx(fileBase64);
-            parts.push({ text: `Analyze this presentation. Metadata:\n${metadata}\n\nContent:\n${text || "No text could be extracted."}` });
-        } else if (isPDF || isImage) {
+            parts.push({ text: `Metadata:\n${metadata}\n\nExtracted Content:\n${text || "No text could be extracted."}` });
+        } else if (isNative) {
             parts.push({ text: `Analyze this material. Metadata: ${metadata}` });
             parts.push({ inlineData: { data: fileBase64.replace(/^data:.+;base64,/, ''), mimeType } });
         } else {
-            return "⚠️ Format not supported for AI Summarization. Please use PDF, Word, PowerPoint, or Images.";
+            return "⚠️ Format not supported for AI processing.";
         }
     } else {
-        parts.push({ text: `Analyze this study material: ${metadata}` });
+        parts.push({ text: `Summarize this material: ${metadata}` });
     }
 
     const response = await ai.models.generateContent({
@@ -144,10 +147,10 @@ export const summarizeContent = async (
         contents: [{ role: 'user', parts }]
     });
 
-    return response.text || "Summary generation returned no text.";
+    return response.text || "No summary could be generated.";
   } catch (error: any) {
-    console.error("Gemini Summary Error:", error);
-    return "AI Summarization is currently unavailable. Please check your connection and try again.";
+    console.error("Gemini Error:", error);
+    return "AI service is temporarily unavailable. Please try again later.";
   }
 };
 
@@ -166,10 +169,7 @@ export const generateStudySet = async (
         type: Type.ARRAY,
         items: {
           type: Type.OBJECT,
-          properties: {
-            term: { type: Type.STRING },
-            definition: { type: Type.STRING }
-          },
+          properties: { term: { type: Type.STRING }, definition: { type: Type.STRING } },
           required: ['term', 'definition'],
         },
       } : {
@@ -191,19 +191,16 @@ export const generateStudySet = async (
             const text = mimeType.includes('word') ? await extractTextFromDocx(fileBase64) : await extractTextFromPptx(fileBase64);
             parts.push({ text: `${promptText}\n\nContent:\n${text || metadata}` });
         } else {
-            parts.push({ text: `${promptText}\n\nMetadata: ${metadata}` });
+            parts.push({ text: promptText });
             parts.push({ inlineData: { data: fileBase64.replace(/^data:.+;base64,/, ''), mimeType } });
         }
     } else {
-        parts.push({ text: `${promptText}\n\nContext:\n${metadata}` });
+        parts.push({ text: `${promptText}\n\nContext: ${metadata}` });
     }
     
     const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        config: { 
-            responseMimeType: "application/json", 
-            responseSchema: schema 
-        },
+        config: { responseMimeType: "application/json", responseSchema: schema },
         contents: [{ role: 'user', parts }]
     });
 
@@ -222,7 +219,7 @@ export const describeImage = async (base64Data: string, mimeType: string): Promi
             role: 'user',
             parts: [
                 { inlineData: { mimeType, data: base64Data.replace(/^data:.+;base64,/, '') } },
-                { text: "Analyze this image for academic purposes." }
+                { text: "Analyze this academic image." }
             ]
         }]
     });

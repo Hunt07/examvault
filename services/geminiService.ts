@@ -3,8 +3,9 @@ import { GoogleGenAI, Type } from "@google/genai";
 // @ts-ignore
 import JSZip from "jszip";
 
-// Strictly initialize using the environment variable as per guidelines
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Strictly initialize using the environment variable as per the latest guidelines
+// The ReferenceError is now handled by the polyfill in index.tsx
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
 
 const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
     const binaryString = window.atob(base64.replace(/^data:.+;base64,/, ''));
@@ -18,6 +19,7 @@ const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
 
 /**
  * "Nuclear" Regex Extraction: Finds text inside any tag ending in 't' (like <w:t>, <a:t>, <t>)
+ * Restoration of user's custom extraction logic.
  */
 const extractTextFromXmlContent = (xmlContent: string): string => {
     const regex = /<(?:\w+:)?t[^>]*>(.*?)<\/(?:\w+:)?t>/g;
@@ -122,10 +124,10 @@ export const summarizeContent = async (
 
         if (isWord) {
             const text = await extractTextFromDocx(fileBase64);
-            parts.push({ text: `Metadata:\n${metadata}\n\nExtracted Word Content:\n${text || "No text could be extracted."}` });
+            parts.push({ text: `Analyze this document. Metadata:\n${metadata}\n\nContent:\n${text || "No text could be extracted."}` });
         } else if (isPowerPoint) {
             const text = await extractTextFromPptx(fileBase64);
-            parts.push({ text: `Metadata:\n${metadata}\n\nExtracted PowerPoint Content:\n${text || "No text could be extracted."}` });
+            parts.push({ text: `Analyze this presentation. Metadata:\n${metadata}\n\nContent:\n${text || "No text could be extracted."}` });
         } else if (isPDF || isImage) {
             parts.push({ text: `Analyze this material. Metadata: ${metadata}` });
             parts.push({ inlineData: { data: fileBase64.replace(/^data:.+;base64,/, ''), mimeType } });
@@ -145,7 +147,7 @@ export const summarizeContent = async (
     return response.text || "Summary generation returned no text.";
   } catch (error: any) {
     console.error("Gemini Summary Error:", error);
-    return "AI Summarization is currently unavailable. Please check your file and try again.";
+    return "AI Summarization is currently unavailable. Please check your connection and try again.";
   }
 };
 

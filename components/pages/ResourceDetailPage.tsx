@@ -277,13 +277,8 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   }, [resource.comments]);
 
   const relatedResources = useMemo(() => {
-    // Filter out the current resource
     const candidates = resources.filter(r => r.id !== resource.id);
-    
-    // 1. Priority: Same Course Code
     let matches = candidates.filter(r => r.courseCode === resource.courseCode);
-    
-    // 2. Fallback: Same Subject Area
     if (matches.length < 8) {
         const subjectMatch = resource.courseCode.match(/^[A-Za-z]+/);
         if (subjectMatch) {
@@ -294,21 +289,16 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
             matches = [...matches, ...subjectMatches];
         }
     }
-
-    // 3. Fallback: Same Resource Type
     if (matches.length < 8) {
         const typeMatches = candidates.filter(r => 
             r.type === resource.type && !matches.includes(r)
         );
         matches = [...matches, ...typeMatches];
     }
-    
-    // 4. Fallback: Any other resources
     if (matches.length < 8) {
         const otherMatches = candidates.filter(r => !matches.includes(r));
         matches = [...matches, ...otherMatches];
     }
-
     return matches.slice(0, 8);
   }, [resources, resource]);
 
@@ -486,7 +476,6 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
             <div className="flex flex-col items-center justify-center h-full p-8 text-center">
                 <AlertCircle size={64} className="text-amber-400 mb-4" />
                 <h3 className="text-xl font-bold text-slate-800 mb-2">Preview Simulated</h3>
-                <p className="text-slate-600 mb-6 max-w-md">Mock resource text content displayed below.</p>
                 <div className="w-full max-w-3xl bg-white rounded-lg border border-slate-200 p-6 text-left h-96 overflow-y-auto shadow-inner">
                     <MarkdownRenderer content={resource.contentForAI} />
                 </div>
@@ -601,7 +590,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
             </div>
           </div>
 
-          <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md mt-8 transition-colors duration-300 border border-transparent dark:border-zinc-700">
+          <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md mt-8 border border-transparent dark:border-zinc-700">
             <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4">AI Summary</h3>
             {!summary && !isSummarizing && (
               <div className="border-2 border-dashed border-slate-300 dark:border-zinc-700 rounded-lg p-6 text-center">
@@ -658,10 +647,10 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
             <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md lg:sticky top-24 border border-transparent dark:border-zinc-700">
                 <img src={resource.previewImageUrl} alt={resource.title} className="w-full h-80 object-cover rounded-lg mb-6" />
                 <div className="flex items-center gap-2">
-                    <button onClick={handleUpvoteClick} className={`flex items-center gap-2 p-3 rounded-lg transition font-medium ${isUpvoted ? 'bg-green-600 text-white' : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200'}`}>
+                    <button onClick={handleUpvoteClick} className={`flex items-center gap-2 p-3 rounded-lg transition font-medium ${isUpvoted ? 'bg-green-600 text-white shadow-md' : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200'}`}>
                         <ThumbsUp size={18} /> {resource.upvotes > 0 && <span>{resource.upvotes}</span>}
                     </button>
-                    <button onClick={handleDownvoteClick} className={`flex items-center gap-2 p-3 rounded-lg transition font-medium ${isDownvoted ? 'bg-red-600 text-white' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200'}`}>
+                    <button onClick={handleDownvoteClick} className={`flex items-center gap-2 p-3 rounded-lg transition font-medium ${isDownvoted ? 'bg-red-600 text-white shadow-md' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200'}`}>
                         <ThumbsDown size={18} /> {resource.downvotes > 0 && <span>{resource.downvotes}</span>}
                     </button>
                     <button onClick={() => toggleSaveResource(resource.id)} className={`p-3 rounded-lg transition font-medium ${isSaved ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600' : 'bg-slate-100 dark:bg-zinc-800 text-slate-500 hover:bg-slate-200'}`}>

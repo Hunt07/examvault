@@ -1,6 +1,8 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
-import type { User, Resource, ForumPost, Comment, ForumReply, Notification, Conversation, DirectMessage, ResourceRequest, Attachment, Report } from './types';
+import type { User, Resource, ForumPost, Comment, ForumReply, Notification, Conversation, DirectMessage, ResourceRequest, Attachment, Report, View, AppContextType } from './types';
 import { NotificationType, MessageStatus, ResourceRequestStatus } from './types';
+import { MASTER_ADMIN_EMAILS } from './constants';
 import AuthPage from './components/pages/AuthPage';
 import DashboardPage from './components/pages/DashboardPage';
 import ResourceDetailPage from './components/pages/ResourceDetailPage';
@@ -23,76 +25,10 @@ import { auth, db, storage } from './services/firebase';
 import * as firebaseAuth from 'firebase/auth';
 import { 
   collection, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, getDocs,
-  onSnapshot, query, orderBy, arrayUnion, increment, where, arrayRemove, deleteField, writeBatch 
+  onSnapshot, query, orderBy, arrayUnion, increment, where, arrayRemove, writeBatch 
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { Loader2, AlertCircle } from 'lucide-react';
-
-export type View = 'dashboard' | 'resourceDetail' | 'discussions' | 'forumDetail' | 'profile' | 'publicProfile' | 'messages' | 'leaderboard' | 'requests' | 'admin';
-
-export const MASTER_ADMIN_EMAILS = ['b09220024@student.unimy.edu.my'];
-
-interface AppContextType {
-  user: User | null;
-  users: User[];
-  resources: Resource[];
-  forumPosts: ForumPost[];
-  notifications: Notification[];
-  conversations: Conversation[];
-  directMessages: DirectMessage[];
-  resourceRequests: ResourceRequest[];
-  reports: Report[];
-  view: View;
-  setView: (view: View, id?: string, options?: { replace?: boolean }) => void;
-  logout: () => void;
-  isDarkMode: boolean;
-  toggleDarkMode: () => void;
-  userRanks: Map<string, number>;
-  savedResourceIds: string[];
-  toggleSaveResource: (resourceId: string) => void;
-  handleVote: (resourceId: string, action: 'up' | 'down') => void;
-  addCommentToResource: (resourceId: string, text: string, parentId: string | null) => void;
-  handleCommentVote: (resourceId: string, commentId: string) => void;
-  deleteCommentFromResource: (resourceId: string, comment: Comment) => Promise<void>;
-  addForumPost: (post: { title: string; courseCode: string; body: string; tags: string[] }, file?: File) => void;
-  handlePostVote: (postId: string, action: 'up' | 'down') => void;
-  deleteForumPost: (postId: string) => Promise<void>;
-  addReplyToPost: (postId: string, text: string, parentId: string | null, file?: File) => void;
-  handleReplyVote: (postId: string, replyId: string) => void;
-  deleteReplyFromPost: (postId: string, reply: ForumReply) => Promise<void>;
-  toggleVerifiedAnswer: (postId: string, replyId: string) => void;
-  addResourceRequest: (req: { title: string; courseCode: string; details: string }, file?: File) => void;
-  deleteResourceRequest: (requestId: string) => Promise<void>;
-  openUploadForRequest: (requestId: string) => void;
-  toggleUserSubscription: (userId: string) => void;
-  toggleLecturerSubscription: (lecturerName: string) => void;
-  toggleCourseCodeSubscription: (courseCode: string) => void;
-  updateUserProfile: (data: Partial<User>) => void;
-  sendMessage: (conversationId: string, text: string) => void;
-  editMessage: (messageId: string, newText: string) => void;
-  deleteMessage: (messageId: string) => void;
-  startConversation: (userId: string, initialMessage?: string) => void;
-  sendDirectMessageToUser: (userId: string, text: string) => void;
-  markNotificationAsRead: (id: string) => void;
-  markAllNotificationsAsRead: () => void;
-  clearAllNotifications: () => void;
-  markMessagesAsRead: (conversationId: string) => void;
-  goBack: () => void;
-  deleteResource: (resourceId: string, fileUrl: string, previewUrl?: string) => Promise<void>;
-  banUser: (userId: string) => Promise<void>;
-  unbanUser: (userId: string) => Promise<void>;
-  toggleAdminStatus: (userId: string) => Promise<void>;
-  updateReportStatus: (reportId: string, status: 'resolved' | 'dismissed') => Promise<void>;
-  deleteAccount: () => Promise<void>;
-  deactivateAccount: () => Promise<void>;
-  hasUnreadMessages: boolean;
-  hasUnreadDiscussions: boolean;
-  isLoading: boolean;
-  areResourcesLoading: boolean;
-  scrollTargetId: string | null;
-  setScrollTargetId: (id: string | null) => void;
-  showToast: (message: string, type?: 'success' | 'error' | 'info', points?: number) => void;
-}
+import { Loader2 } from 'lucide-react';
 
 export const AppContext = React.createContext<AppContextType>({} as AppContextType);
 
@@ -104,9 +40,7 @@ const generateDefaultAvatar = (name: string): string => {
   const initial = name && name.length > 0 ? name.charAt(0).toUpperCase() : '?';
   const colors = ['#2563eb', '#db2777', '#ca8a04', '#16a34a', '#dc2626', '#7c3aed', '#0891b2', '#be123c'];
   let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
+  for (let i = 0; i < name.length; i++) { hash = name.charCodeAt(i) + ((hash << 5) - hash); }
   const color = colors[Math.abs(hash) % colors.length];
   const svgString = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="${color}"/><text x="50" y="65" font-family="Arial, sans-serif" font-size="50" font-weight="bold" fill="white" text-anchor="middle">${initial}</text></svg>`;
   return `data:image/svg+xml;base64,${btoa(svgString.trim())}`;
@@ -220,13 +154,12 @@ const App: React.FC = () => {
       if (!user || !db || !storage) { showToast("Upload service unavailable.", "error"); return; }
       setIsUploading(true);
       try {
-          // Pre-extract text to avoid CORS issues for AI features
           let extractedText = "";
           let fileBase64Data = "";
           const mimeType = file.type;
           if (mimeType.includes('word')) extractedText = await extractTextFromDocx(file);
           else if (mimeType.includes('presentation')) extractedText = await extractTextFromPptx(file);
-          else if (file.size < 1.2 * 1024 * 1024) fileBase64Data = await fileToBase64(file);
+          else if (file.size < 1 * 1024 * 1024) fileBase64Data = await fileToBase64(file);
 
           const storageRef = ref(storage, `resources/${Date.now()}_${file.name}`);
           await uploadBytes(storageRef, file);
@@ -235,7 +168,7 @@ const App: React.FC = () => {
           let previewUrl = coverImage ? await getDownloadURL(ref(storage, `covers/${Date.now()}_${coverImage.name}`)) : generateFilePreview(file.name);
           if (coverImage) await uploadBytes(ref(storage, `covers/${Date.now()}_${coverImage.name}`), coverImage);
 
-          const newResource = { ...resourceData, author: sanitizeForFirestore(user), uploadDate: new Date().toISOString(), upvotes: 0, downvotes: 0, upvotedBy: [], downvotedBy: [], comments: [], fileUrl: downloadURL, fileName: file.name, previewImageUrl: previewUrl, fileBase64: fileBase64Data, extractedText, mimeType, contentForAI: "Content in file..." };
+          const newResource = { ...resourceData, author: sanitizeForFirestore(user), uploadDate: new Date().toISOString(), upvotes: 0, downvotes: 0, upvotedBy: [], downvotedBy: [], comments: [], fileUrl: downloadURL, fileName: file.name, previewImageUrl: previewUrl, fileBase64: fileBase64Data, extractedText, mimeType, contentForAI: "AI Ready" };
           const docRef = await addDoc(collection(db, "resources"), sanitizeForFirestore(newResource));
           
           if (fulfillingRequest) {
@@ -262,28 +195,14 @@ const App: React.FC = () => {
       } catch (error) { showToast("Delete failed.", "error"); }
   };
 
-  const handleVote = async (id: string, action: 'up' | 'down') => {
-    if (!user || !db) return;
-    const res = resources.find(r => r.id === id); if (!res) return;
-    const ref = doc(db, "resources", id);
-    const isUp = res.upvotedBy?.includes(user.id);
-    const isDown = res.downvotedBy?.includes(user.id);
-    if (action === 'up') await updateDoc(ref, { upvotes: increment(isUp ? -1 : 1), upvotedBy: isUp ? arrayRemove(user.id) : arrayUnion(user.id), downvotes: isDown ? increment(-1) : increment(0), downvotedBy: isDown ? arrayRemove(user.id) : arrayUnion() });
-    else await updateDoc(ref, { downvotes: increment(isDown ? -1 : 1), downvotedBy: isDown ? arrayRemove(user.id) : arrayUnion(user.id), upvotes: isUp ? increment(-1) : increment(0), upvotedBy: isUp ? arrayRemove(user.id) : arrayUnion() });
-  };
-
-  const addCommentToResource = async (id: string, text: string, parentId: string | null) => {
-    if (!user || !db) return;
-    await updateDoc(doc(db, "resources", id), { comments: arrayUnion(sanitizeForFirestore({ id: `c-${Date.now()}`, author: sanitizeForFirestore(user), text, timestamp: new Date().toISOString(), parentId, upvotes: 0, upvotedBy: [] })) });
-  };
-
   const markMessagesAsRead = async (id: string) => { if (user && db) { const unread = directMessages.filter(m => m.conversationId === id && m.recipientId === user.id && m.status !== MessageStatus.Read); if (unread.length) { const b = writeBatch(db); unread.forEach(m => b.update(doc(db!, "directMessages", m.id), { status: MessageStatus.Read })); await b.commit(); } } };
 
   const appContextValue: AppContextType = {
     user, users, resources, forumPosts, notifications, conversations, directMessages, resourceRequests, reports, view, setView, logout, isDarkMode, toggleDarkMode: () => setIsDarkMode(!isDarkMode),
     userRanks, savedResourceIds: user?.savedResourceIds || [],
     toggleSaveResource: async (id) => user && await updateDoc(doc(db!, "users", user.id), { savedResourceIds: user.savedResourceIds?.includes(id) ? arrayRemove(id) : arrayUnion(id) }),
-    handleVote, addCommentToResource,
+    handleVote: async (id, action) => { if (!user || !db) return; const res = resources.find(r => r.id === id); if (!res) return; const rRef = doc(db, "resources", id); const isUp = res.upvotedBy?.includes(user.id); if (action === 'up') await updateDoc(rRef, { upvotes: increment(isUp ? -1 : 1), upvotedBy: isUp ? arrayRemove(user.id) : arrayUnion(user.id) }); },
+    addCommentToResource: async (id, text, parentId) => { if (!user || !db) return; await updateDoc(doc(db, "resources", id), { comments: arrayUnion(sanitizeForFirestore({ id: `c-${Date.now()}`, author: sanitizeForFirestore(user), text, timestamp: new Date().toISOString(), parentId, upvotes: 0, upvotedBy: [] })) }); },
     handleCommentVote: async (rid, cid) => { if (!user || !db) return; const snap = await getDoc(doc(db!, "resources", rid)); if (snap.exists()) { const upd = snap.data().comments.map((c: any) => c.id === cid ? { ...c, upvotes: c.upvotedBy.includes(user.id) ? c.upvotes - 1 : c.upvotes + 1, upvotedBy: c.upvotedBy.includes(user.id) ? arrayRemove(user.id) : arrayUnion(user.id) } : c); await updateDoc(doc(db!, "resources", rid), { comments: upd }); } },
     deleteCommentFromResource: async (rid, c) => { if (db) await updateDoc(doc(db!, "resources", rid), { comments: arrayRemove(c) }); },
     addForumPost: async (pd) => { if (!user || !db) return; await addDoc(collection(db!, "forumPosts"), sanitizeForFirestore({ ...pd, author: sanitizeForFirestore(user), timestamp: new Date().toISOString(), upvotes: 0, downvotes: 0, upvotedBy: [], downvotedBy: [], replies: [] })); earnPoints(10, "Post created!"); },
@@ -303,7 +222,7 @@ const App: React.FC = () => {
     sendMessage: async (id, tx) => { if (user && db) await addDoc(collection(db!, "directMessages"), { conversationId: id, senderId: user.id, text: tx, timestamp: new Date().toISOString(), status: MessageStatus.Sent }); },
     editMessage: async (id, tx) => { if (db) await updateDoc(doc(db!, "directMessages", id), { text: tx }); },
     deleteMessage: async (id) => { if (db) await updateDoc(doc(db!, "directMessages", id), { isDeleted: true }); },
-    startConversation: async (uid, msg) => { if (!user || !db) return; const ex = conversations.find(c => c.participants.includes(user.id) && c.participants.includes(uid)); let cid = ex?.id; if (!cid) cid = (await addDoc(collection(db!, "conversations"), { participants: [user.id, uid], lastMessageTimestamp: new Date().toISOString() })).id; if (msg) await addDoc(collection(db!, "directMessages"), { conversationId: cid, senderId: user.id, text: msg, timestamp: new Date().toISOString(), status: MessageStatus.Sent }); setViewState('messages'); setSelectedId(cid); },
+    startConversation: async (uid, msg) => { if (!user || !db) return; const ex = conversations.find(c => c.participants.includes(user.id) && c.participants.includes(uid)); let cid = ex?.id || (await addDoc(collection(db!, "conversations"), { participants: [user.id, uid], lastMessageTimestamp: new Date().toISOString() })).id; if (msg) await addDoc(collection(db!, "directMessages"), { conversationId: cid, senderId: user.id, text: msg, timestamp: new Date().toISOString(), status: MessageStatus.Sent }); setViewState('messages'); setSelectedId(cid); },
     sendDirectMessageToUser: async (uid, tx) => { if (!user || !db) return; const ex = conversations.find(c => c.participants.includes(user.id) && c.participants.includes(uid)); let cid = ex?.id || (await addDoc(collection(db!, "conversations"), { participants: [user.id, uid], lastMessageTimestamp: new Date().toISOString() })).id; await addDoc(collection(db!, "directMessages"), { conversationId: cid, senderId: user.id, text: tx, timestamp: new Date().toISOString(), status: MessageStatus.Sent }); },
     markNotificationAsRead: async (id) => { if (db) await updateDoc(doc(db!, "notifications", id), { isRead: true }); },
     markAllNotificationsAsRead: () => notifications.forEach(n => updateDoc(doc(db!, "notifications", n.id), { isRead: true })),
@@ -319,7 +238,7 @@ const App: React.FC = () => {
     hasUnreadDiscussions: false, isLoading, areResourcesLoading, scrollTargetId, setScrollTargetId, showToast
   };
 
-  if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg"><Loader2 size={48} className="animate-spin text-primary-600" /></div>;
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-zinc-900"><Loader2 size={48} className="animate-spin text-primary-600" /></div>;
   if (!user) return <AuthPage onLogin={() => {}} />;
 
   return (

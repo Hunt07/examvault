@@ -1,6 +1,7 @@
 
 import React, { useContext, useState } from 'react';
-import { AppContext, View } from '../App';
+import { AppContext } from '../App';
+import type { View } from '../types';
 import { LayoutDashboard, MessageSquare, BarChart3, Send, ClipboardList, Shield } from 'lucide-react';
 
 const SideNav: React.FC = () => {
@@ -50,12 +51,9 @@ const SideNav: React.FC = () => {
                                     className={`shrink-0 transition-colors duration-300 ${isActive ? 'text-white' : 'text-slate-400 dark:text-slate-500 group-hover:text-primary-600 dark:group-hover:text-white'}`} 
                                 />
                             </div>
-                            
                             <span className={`ml-4 transition-all duration-500 ease-out font-semibold ${isHovered ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-8'}`}>
                                 {item.name}
                             </span>
-                            
-                            {/* Status Dot */}
                             {hasUnread && (
                                 <span className={`absolute w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-dark-surface ${isHovered ? 'right-4 top-1/2 -translate-y-1/2' : 'top-3 right-4'}`} />
                             )}
@@ -79,10 +77,7 @@ const SideNav: React.FC = () => {
                         title={!isHovered ? 'Admin Panel' : ''}
                     >
                         <div className="flex items-center justify-center min-w-[1.5rem]">
-                            <Shield 
-                                size={24} 
-                                className={`shrink-0 transition-colors duration-300 ${view === 'admin' ? 'text-white' : 'text-red-500'}`} 
-                            />
+                            <Shield size={24} className={`shrink-0 transition-colors duration-300 ${view === 'admin' ? 'text-white' : 'text-red-500'}`} />
                         </div>
                         <span className={`ml-4 transition-all duration-500 ease-out ${isHovered ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-8'}`}>
                             Admin Panel

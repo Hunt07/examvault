@@ -16,13 +16,13 @@ export interface User {
   savedResourceIds: string[];
   status?: 'active' | 'deactivated' | 'banned';
   isAdmin?: boolean;
-  lastSeen?: string; // ISO string for presence detection
+  lastSeen?: string;
 }
 
 export interface UserSubscriptions {
-  users: string[]; // array of user IDs
-  lecturers: string[]; // array of lecturer names
-  courseCodes: string[]; // array of course codes
+  users: string[];
+  lecturers: string[];
+  courseCodes: string[];
 }
 
 export enum ResourceType {
@@ -52,7 +52,7 @@ export interface Comment {
   parentId?: string | null;
   upvotes: number;
   upvotedBy: string[];
-  attachment?: Attachment; // Added attachment support for comments
+  attachment?: Attachment;
 }
 
 export interface Resource {
@@ -66,12 +66,12 @@ export interface Resource {
   semester: SemesterIntake;
   examType?: ExamType;
   description: string;
-  fileUrl: string; // URL to PDF/image
-  fileName: string; // Original name of the uploaded file
-  fileBase64?: string; // base64 data for AI analysis (small files only)
-  extractedText?: string; // Text content extracted during upload (for DOCX/PPTX)
-  mimeType?: string; // Mime type for AI analysis
-  previewImageUrl: string; // URL for a thumbnail
+  fileUrl: string;
+  fileName: string;
+  fileBase64?: string;
+  extractedText?: string;
+  mimeType?: string;
+  previewImageUrl: string;
   author: User;
   uploadDate: string;
   upvotes: number;
@@ -79,7 +79,7 @@ export interface Resource {
   upvotedBy: string[];
   downvotedBy: string[];
   comments: Comment[];
-  contentForAI: string; // Mock text content for Gemini (fallback)
+  contentForAI: string;
 }
 
 export interface Attachment {
@@ -163,7 +163,7 @@ export interface DirectMessage {
 
 export interface Conversation {
   id: string;
-  participants: [string, string]; // Array of two user IDs
+  participants: [string, string];
   lastMessageTimestamp: string;
 }
 
@@ -209,4 +209,68 @@ export interface QuizQuestion {
   question: string;
   options: string[];
   correctAnswer: string;
+}
+
+export type View = 'dashboard' | 'resourceDetail' | 'discussions' | 'forumDetail' | 'profile' | 'publicProfile' | 'messages' | 'leaderboard' | 'requests' | 'admin';
+
+export interface AppContextType {
+  user: User | null;
+  users: User[];
+  resources: Resource[];
+  forumPosts: ForumPost[];
+  notifications: Notification[];
+  conversations: Conversation[];
+  directMessages: DirectMessage[];
+  resourceRequests: ResourceRequest[];
+  reports: Report[];
+  view: View;
+  setView: (view: View, id?: string, options?: { replace?: boolean }) => void;
+  logout: () => void;
+  isDarkMode: boolean;
+  toggleDarkMode: () => void;
+  userRanks: Map<string, number>;
+  savedResourceIds: string[];
+  toggleSaveResource: (resourceId: string) => void;
+  handleVote: (resourceId: string, action: 'up' | 'down') => void;
+  addCommentToResource: (resourceId: string, text: string, parentId: string | null) => void;
+  handleCommentVote: (resourceId: string, commentId: string) => void;
+  deleteCommentFromResource: (resourceId: string, comment: Comment) => Promise<void>;
+  addForumPost: (post: { title: string; courseCode: string; body: string; tags: string[] }, file?: File) => void;
+  handlePostVote: (postId: string, action: 'up' | 'down') => void;
+  deleteForumPost: (postId: string) => Promise<void>;
+  addReplyToPost: (postId: string, text: string, parentId: string | null, file?: File) => void;
+  handleReplyVote: (postId: string, replyId: string) => void;
+  deleteReplyFromPost: (postId: string, reply: ForumReply) => Promise<void>;
+  toggleVerifiedAnswer: (postId: string, replyId: string) => void;
+  addResourceRequest: (req: { title: string; courseCode: string; details: string }, file?: File) => void;
+  deleteResourceRequest: (requestId: string) => Promise<void>;
+  openUploadForRequest: (requestId: string) => void;
+  toggleUserSubscription: (userId: string) => void;
+  toggleLecturerSubscription: (lecturerName: string) => void;
+  toggleCourseCodeSubscription: (courseCode: string) => void;
+  updateUserProfile: (data: Partial<User>) => void;
+  sendMessage: (conversationId: string, text: string) => void;
+  editMessage: (messageId: string, newText: string) => void;
+  deleteMessage: (messageId: string) => void;
+  startConversation: (userId: string, initialMessage?: string) => void;
+  sendDirectMessageToUser: (userId: string, text: string) => void;
+  markNotificationAsRead: (id: string) => void;
+  markAllNotificationsAsRead: () => void;
+  clearAllNotifications: () => void;
+  markMessagesAsRead: (conversationId: string) => void;
+  goBack: () => void;
+  deleteResource: (resourceId: string, fileUrl: string, previewUrl?: string) => Promise<void>;
+  banUser: (userId: string) => Promise<void>;
+  unbanUser: (userId: string) => Promise<void>;
+  toggleAdminStatus: (userId: string) => Promise<void>;
+  updateReportStatus: (reportId: string, status: 'resolved' | 'dismissed') => Promise<void>;
+  deleteAccount: () => Promise<void>;
+  deactivateAccount: () => Promise<void>;
+  hasUnreadMessages: boolean;
+  hasUnreadDiscussions: boolean;
+  isLoading: boolean;
+  areResourcesLoading: boolean;
+  scrollTargetId: string | null;
+  setScrollTargetId: (id: string | null) => void;
+  showToast: (message: string, type?: 'success' | 'error' | 'info', points?: number) => void;
 }

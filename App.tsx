@@ -30,7 +30,7 @@ import { Loader2, AlertCircle } from 'lucide-react';
 
 export type View = 'dashboard' | 'resourceDetail' | 'discussions' | 'forumDetail' | 'profile' | 'publicProfile' | 'messages' | 'leaderboard' | 'requests' | 'admin';
 
-export const MASTER_ADMIN_EMAILS = ['b09220024@student.unimy.edu.my', 'Osama@unimy.edu.my'];
+export const MASTER_ADMIN_EMAILS = ['b09220024@student.unimy.edu.my'];
 
 interface AppContextType {
   user: User | null;

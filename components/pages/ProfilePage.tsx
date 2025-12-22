@@ -4,7 +4,7 @@ import type { User, Resource } from '../../types';
 import { ResourceRequestStatus } from '../../types';
 import { AppContext } from '../../App';
 import ResourceCard from '../ResourceCard';
-import { Award, UploadCloud, Calendar, MessageSquare as MessageSquareIcon, Edit, X, Save, ArrowLeft, UserPlus, UserMinus, ThumbsUp, MessageSquare, Clock, Loader2, Trash2, AlertTriangle, LogOut, Power, UserX } from 'lucide-react';
+import { Award, UploadCloud, Calendar, MessageSquare as MessageSquareIcon, Edit, X, Save, ArrowLeft, UserPlus, UserMinus, ThumbsUp, MessageSquare, Clock, Loader2, Trash2, AlertTriangle, LogOut, Power } from 'lucide-react';
 import UserRankBadge from '../UserRankBadge';
 import Avatar from '../Avatar';
 import { storage } from '../../services/firebase';
@@ -70,24 +70,6 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, allResources, isCurrent
         setIsActionLoading(true);
         try { await action(); } finally { setIsActionLoading(false); }
     };
-
-    // New: If the profile belongs to another user and is deactivated
-    if (user.status === 'deactivated' && !isCurrentUser) {
-        return (
-            <div className="max-w-2xl mx-auto py-20 text-center px-4">
-                <div className="bg-white dark:bg-dark-surface p-12 rounded-2xl shadow-lg border dark:border-zinc-800 animate-in zoom-in-95">
-                    <div className="w-20 h-20 bg-slate-100 dark:bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-6 text-slate-400">
-                        <UserX size={40} />
-                    </div>
-                    <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Account Deactivated</h2>
-                    <p className="text-slate-600 dark:text-slate-400 mb-8 max-w-sm mx-auto">This user has chosen to temporarily hide their profile and contributions from the community.</p>
-                    <button onClick={goBack} className="inline-flex items-center gap-2 bg-primary-600 text-white font-bold py-3 px-8 rounded-xl hover:bg-primary-700 transition shadow-md hover:shadow-lg transform hover:-translate-y-0.5">
-                        <ArrowLeft size={20} /> Go Back
-                    </button>
-                </div>
-            </div>
-        );
-    }
 
     return (
         <div className="max-w-6xl mx-auto pb-12">
@@ -197,6 +179,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, allResources, isCurrent
                     </div>
                     
                     <div className="space-y-4">
+                        {/* Deactivation */}
                         <div className="bg-white dark:bg-zinc-900 border dark:border-zinc-800 rounded-xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
                             <div>
                                 <h3 className="text-lg font-bold text-slate-900 dark:text-white">Deactivate Account</h3>
@@ -207,6 +190,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, allResources, isCurrent
                             </button>
                         </div>
 
+                        {/* Deletion */}
                         <div className="bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 rounded-xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
                             <div>
                                 <h3 className="text-lg font-bold text-slate-900 dark:text-white">Delete Account (Purge)</h3>
@@ -220,6 +204,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, allResources, isCurrent
                 </div>
             )}
 
+            {/* Deactivation Modal */}
             {isDeactivateModalOpen && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
                     <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-md p-8 text-center border dark:border-zinc-800 animate-in zoom-in-95">
@@ -238,6 +223,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, allResources, isCurrent
                 </div>
             )}
 
+            {/* Deletion Modal */}
             {isDeleteModalOpen && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
                     <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-md p-8 text-center border border-red-100 dark:border-red-900/30 animate-in zoom-in-95">

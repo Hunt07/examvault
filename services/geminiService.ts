@@ -107,14 +107,16 @@ const extractTextFromPptx = async (fileBase64: string): Promise<string> => {
         for (const slide of xmlFiles) {
             const xmlContent = await slide.file.async("string");
             
-            // 1. Extract text from <a:t> tags (standard text)
-            // Use a regex that handles namespaces and attributes gracefully
-            const textMatches = xmlContent.match(/<a:t(?:\s+[^>]*)?>(.*?)<\/a:t>/g);
+            // IMPROVED EXTRACTION:
+            // 1. Matches <a:t> (standard DrawingML) OR <t> (sometimes used)
+            // 2. Handles namespace prefixes optionally (?:a:)?
+            // 3. Handles attributes inside the tag
+            const textMatches = xmlContent.match(/<(?:a:)?t(?:\s+[^>]*)?>(.*?)<\/(?:a:)?t>/g);
             
             let slideContent = "";
             if (textMatches) {
                 slideContent = textMatches
-                    .map((t: string) => t.replace(/<\/?a:t(?:\s+[^>]*)?>/g, ''))
+                    .map((t: string) => t.replace(/<\/?(?:a:)?t(?:\s+[^>]*)?>/g, '')) // Strip tags
                     .join(" ");
             }
 
@@ -162,14 +164,16 @@ Based on the following material, please provide the summary with these exact sec
         // Branching logic for extraction
         if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
             const extractedText = await extractTextFromDocx(fileBase64);
-            if (!extractedText) {
-                return "⚠️ **No Text Found**\n\nThe AI could not extract readable text from this Word document. It might contain only images or scanned pages, which are not currently supported for Word files.";
+            // Check for empty text result BEFORE sending to AI
+            if (!extractedText || extractedText.length < 50) {
+                return "⚠️ **No Readable Text Found**\n\nThe AI could not extract enough text from this Word document.\n\n**Possible reasons:**\n- The document contains scanned images instead of text.\n- The file is empty or corrupted.\n\n*Try converting the file to PDF first.*";
             }
             parts.push({ text: `Analyze the following document content:\n\n${extractedText}` });
         } else if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
             const extractedText = await extractTextFromPptx(fileBase64);
-            if (!extractedText) {
-                return "⚠️ **No Text Found**\n\nThe AI could not extract readable text from this presentation. It might contain only images/diagrams without selectable text.";
+            // Check for empty text result BEFORE sending to AI
+            if (!extractedText || extractedText.length < 20) {
+                return "⚠️ **No Readable Text Found**\n\nThe AI could not extract text from this presentation.\n\n**Possible reasons:**\n- The slides contain only images or screenshots (scanned).\n- The text is inside complex shapes/SmartArt not supported by the extractor.\n\n*Try converting the file to PDF first for better results.*";
             }
             parts.push({ text: `Analyze the following presentation slides:\n\n${extractedText}` });
         } else {
@@ -266,11 +270,11 @@ export const generateStudySet = async (
         // Branching logic for extraction
         if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
             const extractedText = await extractTextFromDocx(fileBase64);
-            if (!extractedText) return [];
+            if (!extractedText || extractedText.length < 50) return [];
             parts.push({ text: `${promptText}\n\nMaterial:\n${extractedText}` });
         } else if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
             const extractedText = await extractTextFromPptx(fileBase64);
-            if (!extractedText) return [];
+            if (!extractedText || extractedText.length < 20) return [];
             parts.push({ text: `${promptText}\n\nMaterial:\n${extractedText}` });
         } else {
             // PDF or Image

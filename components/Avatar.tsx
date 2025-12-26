@@ -5,10 +5,9 @@ interface AvatarProps {
   src?: string;
   alt: string;
   className?: string;
-  onClick?: () => void;
 }
 
-const Avatar: React.FC<AvatarProps> = ({ src, alt, className = "w-10 h-10", onClick }) => {
+const Avatar: React.FC<AvatarProps> = ({ src, alt, className = "w-10 h-10" }) => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [currentSrc, setCurrentSrc] = useState(src);
 
@@ -23,10 +22,10 @@ const Avatar: React.FC<AvatarProps> = ({ src, alt, className = "w-10 h-10", onCl
   const initial = alt && alt.length > 0 ? alt.charAt(0).toUpperCase() : '?';
 
   // Ensure className includes 'rounded-full' if not explicitly overridden (though usually passed in)
-  const containerClass = `${className} relative rounded-full overflow-hidden bg-slate-200 dark:bg-zinc-700 shrink-0 flex items-center justify-center ${onClick ? 'cursor-pointer' : ''}`;
+  const containerClass = `${className} relative rounded-full overflow-hidden bg-slate-200 dark:bg-zinc-700 shrink-0 flex items-center justify-center`;
 
   return (
-    <div className={containerClass} onClick={onClick}>
+    <div className={containerClass}>
       {/* Background/Placeholder - Always rendered behind */}
       <span className="absolute text-slate-500 dark:text-slate-400 font-bold uppercase select-none text-sm md:text-base">
         {initial}

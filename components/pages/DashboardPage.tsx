@@ -49,6 +49,7 @@ const DashboardPage: React.FC = () => {
     value: ActiveFilters[K] extends Set<infer U> ? U : never
   ) => {
     setActiveFilters(prev => {
+      // Type assertion needed because TypeScript struggles with union of Sets in constructor
       const newSet = new Set(prev[category] as Set<any>);
       if (newSet.has(value)) {
         newSet.delete(value);
@@ -73,6 +74,7 @@ const DashboardPage: React.FC = () => {
 
   const filteredResources = useMemo((): Resource[] => {
     return resources.filter(resource => {
+      // 1. Search Term Filter
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch =
         !searchTerm ||
@@ -84,6 +86,7 @@ const DashboardPage: React.FC = () => {
 
       if (!matchesSearch) return false;
 
+      // 2. Faceted Filters
       if (activeFilters.resourceTypes.size > 0 && !activeFilters.resourceTypes.has(resource.type)) return false;
       if (activeFilters.years.size > 0 && !activeFilters.years.has(resource.year)) return false;
       if (activeFilters.semesters.size > 0 && !activeFilters.semesters.has(resource.semester)) return false;
@@ -97,8 +100,7 @@ const DashboardPage: React.FC = () => {
   const filteredUsers = useMemo<User[]>(() => {
       if (!searchTerm) return [];
       const term = searchTerm.toLowerCase();
-      // Only show active users in search results
-      return users.filter(u => u.status !== 'deactivated' && (u.name.toLowerCase().includes(term) || u.course.toLowerCase().includes(term)));
+      return users.filter(u => u.name.toLowerCase().includes(term) || u.course.toLowerCase().includes(term));
   }, [users, searchTerm]);
 
   const hasResourceResults = filteredResources.length > 0;
@@ -112,6 +114,7 @@ const DashboardPage: React.FC = () => {
 
   return (
     <div>
+      {/* Search and Filter Bar */}
       <div className="sticky top-20 z-10 bg-slate-50 dark:bg-dark-bg pt-2 pb-6 transition-colors duration-300">
         <div className="flex flex-col md:flex-row gap-4">
           <div className="relative flex-grow">
@@ -145,6 +148,7 @@ const DashboardPage: React.FC = () => {
           </button>
         </div>
 
+        {/* Filter Panel */}
         {isFilterOpen && (
           <div className="mt-4 bg-white dark:bg-dark-surface p-6 rounded-xl shadow-lg border border-slate-100 dark:border-zinc-700 animate-in slide-in-from-top-2">
             <div className="flex justify-between items-center mb-4">
@@ -157,6 +161,7 @@ const DashboardPage: React.FC = () => {
             </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+              {/* Resource Type */}
               <div>
                 <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-3 uppercase tracking-wider">Type</h4>
                 <div className="space-y-2">
@@ -177,6 +182,7 @@ const DashboardPage: React.FC = () => {
                 </div>
               </div>
 
+              {/* Semester */}
               <div>
                 <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-3 uppercase tracking-wider">Intake</h4>
                 <div className="space-y-2">
@@ -197,6 +203,7 @@ const DashboardPage: React.FC = () => {
                 </div>
               </div>
 
+              {/* Year */}
               <div>
                 <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-3 uppercase tracking-wider">Year</h4>
                 <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
@@ -217,6 +224,7 @@ const DashboardPage: React.FC = () => {
                 </div>
               </div>
 
+              {/* Course */}
               <div>
                 <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-3 uppercase tracking-wider">Course</h4>
                 <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
@@ -237,6 +245,7 @@ const DashboardPage: React.FC = () => {
                 </div>
               </div>
 
+              {/* Lecturer */}
               <div>
                 <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-3 uppercase tracking-wider">Lecturer</h4>
                 <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
@@ -261,6 +270,7 @@ const DashboardPage: React.FC = () => {
         )}
       </div>
 
+      {/* Loading State */}
       {areResourcesLoading && (
         <div className="flex flex-col items-center justify-center py-20">
             <Loader2 size={48} className="animate-spin text-primary-500 mb-4" />
@@ -268,6 +278,7 @@ const DashboardPage: React.FC = () => {
         </div>
       )}
 
+      {/* Empty State / Database Setup - Only show if NOT loading */}
       {isEmptyDatabase && !searchTerm && !areResourcesLoading && (
         <div className="bg-white dark:bg-dark-surface rounded-xl shadow-md p-8 text-center border border-dashed border-slate-300 dark:border-zinc-700">
             <Database size={48} className="mx-auto text-slate-400 dark:text-slate-500 mb-4" />
@@ -278,6 +289,7 @@ const DashboardPage: React.FC = () => {
         </div>
       )}
 
+      {/* User Search Results */}
       {hasUserResults && (
         <div className="mb-8">
           <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-4">Users</h2>
@@ -289,6 +301,7 @@ const DashboardPage: React.FC = () => {
         </div>
       )}
 
+      {/* Resource Grid */}
       <div className="mb-8">
         {hasResourceResults && (
              <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-4">

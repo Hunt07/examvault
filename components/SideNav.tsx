@@ -1,10 +1,10 @@
 
 import React, { useContext, useState } from 'react';
 import { AppContext, View } from '../App';
-import { LayoutDashboard, MessageSquare, BarChart3, Send, ClipboardList, Shield } from 'lucide-react';
+import { LayoutDashboard, MessageSquare, BarChart3, Send, ClipboardList } from 'lucide-react';
 
 const SideNav: React.FC = () => {
-    const { view, setView, user, hasUnreadMessages, hasUnreadDiscussions } = useContext(AppContext);
+    const { view, setView, hasUnreadMessages, hasUnreadDiscussions } = useContext(AppContext);
     const [isHovered, setIsHovered] = useState(false);
 
     const navItems: { name: string; icon: React.ElementType; view: View; id: string }[] = [
@@ -15,8 +15,6 @@ const SideNav: React.FC = () => {
         { name: 'Leaderboard', icon: BarChart3, view: 'leaderboard', id: 'tour-leaderboard' },
     ];
 
-    const isAdmin = user?.isAdmin;
-
     return (
         <aside 
             id="tour-sidenav" 
@@ -24,7 +22,7 @@ const SideNav: React.FC = () => {
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
         >
-            <nav className="flex flex-col gap-3 p-3 mt-4 flex-grow">
+            <nav className="flex flex-col gap-3 p-3 mt-4">
                 {navItems.map((item) => {
                     const hasUnread = (item.view === 'messages' && hasUnreadMessages) || (item.view === 'discussions' && hasUnreadDiscussions);
                     const isActive = view === item.view;
@@ -63,33 +61,6 @@ const SideNav: React.FC = () => {
                     );
                 })}
             </nav>
-
-            {isAdmin && (
-                <div className="p-3 border-t dark:border-zinc-800">
-                    <button
-                        onClick={() => {
-                            setView('admin');
-                            setIsHovered(false);
-                        }}
-                        className={`relative group flex items-center px-4 py-3.5 rounded-2xl font-bold transition-all duration-300 w-full text-left overflow-hidden whitespace-nowrap ${
-                            view === 'admin'
-                                ? 'bg-red-600 text-white shadow-lg shadow-red-500/25 translate-x-1'
-                                : 'text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 hover:translate-x-1'
-                        }`}
-                        title={!isHovered ? 'Admin Panel' : ''}
-                    >
-                        <div className="flex items-center justify-center min-w-[1.5rem]">
-                            <Shield 
-                                size={24} 
-                                className={`shrink-0 transition-colors duration-300 ${view === 'admin' ? 'text-white' : 'text-red-500'}`} 
-                            />
-                        </div>
-                        <span className={`ml-4 transition-all duration-500 ease-out ${isHovered ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-8'}`}>
-                            Admin Panel
-                        </span>
-                    </button>
-                </div>
-            )}
         </aside>
     );
 };

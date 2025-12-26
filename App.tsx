@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import type { User, Resource, ForumPost, Comment, ForumReply, Notification, Conversation, DirectMessage, ResourceRequest, Attachment } from './types';
 import { NotificationType, MessageStatus, ResourceRequestStatus } from './types';
@@ -612,6 +611,12 @@ const App: React.FC = () => {
             console.warn("Failed to convert file to base64, AI features may be limited", e);
           }
 
+          // Firestore has a 1MB limit for documents. Storing large base64 strings directly
+          // will cause write errors. If the file is large, we rely on the client fetching
+          // from `fileUrl` and converting it when needed for AI tasks.
+          // 800KB is a safe threshold to leave room for other fields.
+          const firestoreBase64 = fileBase64.length < 800000 ? fileBase64 : "";
+
           const newResource: Omit<Resource, 'id'> = {
               ...resourceData,
               author: sanitizeForFirestore(user), 
@@ -624,7 +629,7 @@ const App: React.FC = () => {
               fileUrl: downloadURL,
               fileName: file.name,
               previewImageUrl: previewUrl, 
-              fileBase64: fileBase64,
+              fileBase64: firestoreBase64, // Store truncated or full base64 depending on size
               mimeType: file.type,
               contentForAI: "Content is in the file...", 
           };

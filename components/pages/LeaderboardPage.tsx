@@ -13,9 +13,7 @@ const LeaderboardPage: React.FC = () => {
     const [showPointsInfo, setShowPointsInfo] = useState(false);
 
     const sortedUsers = useMemo(() => {
-        // Filter out deactivated users from leaderboard
-        const activeUsers = users.filter(u => u.status !== 'deactivated');
-        const usersCopy = [...activeUsers];
+        const usersCopy = [...users];
         switch (activeTab) {
             case 'weekly':
                 return usersCopy.sort((a, b) => b.weeklyPoints - a.weeklyPoints);

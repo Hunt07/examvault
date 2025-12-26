@@ -50,14 +50,14 @@ interface AppContextType {
   addCommentToResource: (resourceId: string, text: string, parentId: string | null) => void;
   handleCommentVote: (resourceId: string, commentId: string) => void;
   deleteCommentFromResource: (resourceId: string, comment: Comment) => Promise<void>;
-  addForumPost: (post: { title: string; courseCode: string; body: string; tags: string[] }) => void;
+  addForumPost: (post: { title: string; courseCode: string; body: string; tags: string[] }, file?: File) => void;
   handlePostVote: (postId: string, action: 'up' | 'down') => void;
   deleteForumPost: (postId: string) => Promise<void>;
   addReplyToPost: (postId: string, text: string, parentId: string | null, file?: File) => void;
   handleReplyVote: (postId: string, replyId: string) => void;
   deleteReplyFromPost: (postId: string, reply: ForumReply) => Promise<void>;
   toggleVerifiedAnswer: (postId: string, replyId: string) => void;
-  addResourceRequest: (req: { title: string; courseCode: string; details: string }) => void;
+  addResourceRequest: (req: { title: string; courseCode: string; details: string }, file?: File) => void;
   deleteResourceRequest: (requestId: string) => Promise<void>;
   openUploadForRequest: (requestId: string) => void;
   toggleUserSubscription: (userId: string) => void;
@@ -318,13 +318,13 @@ const App: React.FC = () => {
     setAreResourcesLoading(true);
 
     const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
-      const fetchedUsers: User[] = [];
       const batch = writeBatch(db!);
       let needsCommit = false;
       const usersToPropagate: { id: string, avatarUrl: string }[] = [];
+      const rawUsers: User[] = [];
 
       snapshot.docs.forEach((docSnap) => {
-        const u = docSnap.data() as User;
+        const u = { ...docSnap.data(), id: docSnap.id } as User;
         const isLegacy = !u.avatarUrl || 
                          (!u.avatarUrl.startsWith('data:') && !u.avatarUrl.includes('firebasestorage.googleapis.com'));
         
@@ -336,8 +336,20 @@ const App: React.FC = () => {
             needsCommit = true;
             usersToPropagate.push({ id: u.id, avatarUrl: newAvatar });
         }
-        fetchedUsers.push(u);
+        rawUsers.push(u);
       });
+
+      // Deduplicate by email to prevent duplicate accounts in leaderboard
+      const uniqueMap = new Map<string, User>();
+      rawUsers.forEach(u => {
+          if (!u.email) return;
+          const existing = uniqueMap.get(u.email);
+          // If duplicate exists, keep the one with higher points (likely the active one or main one)
+          if (!existing || (u.points || 0) > (existing.points || 0)) {
+              uniqueMap.set(u.email, u);
+          }
+      });
+      const uniqueUsers = Array.from(uniqueMap.values());
 
       if (needsCommit) {
           batch.commit().then(() => {
@@ -345,9 +357,11 @@ const App: React.FC = () => {
           }).catch(e => console.error("Avatar migration failed", e));
       }
 
-      setUsers(fetchedUsers);
+      setUsers(uniqueUsers);
+      
+      // Update current user reference if it's in the fetched list
       if (user) {
-        const me = fetchedUsers.find(u => u.id === user.id);
+        const me = uniqueUsers.find(u => u.email === user.email);
         if (me) setUser(me);
       }
     });
@@ -877,7 +891,7 @@ const App: React.FC = () => {
      }
   };
 
-  const addForumPost = async (postData: { title: string; courseCode: string; body: string; tags: string[] }) => {
+  const addForumPost = async (postData: { title: string; courseCode: string; body: string; tags: string[] }, file?: File) => {
       if (!user || !db) return;
       try {
           const newPost: Omit<ForumPost, 'id'> = {
@@ -890,6 +904,19 @@ const App: React.FC = () => {
               downvotedBy: [],
               replies: []
           };
+
+          if (file && storage) {
+              const storageRef = ref(storage, `forum_attachments/${Date.now()}_${file.name}`);
+              await uploadBytes(storageRef, file);
+              const url = await getDownloadURL(storageRef);
+              newPost.attachment = {
+                  type: file.type.startsWith('image/') ? 'image' : 'file',
+                  url: url,
+                  name: file.name,
+                  size: (file.size / 1024).toFixed(0) + ' KB'
+              };
+          }
+
           const docRef = await addDoc(collection(db, "forumPosts"), sanitizeForFirestore(newPost));
           earnPoints(10, "Discussion posted successfully!");
 
@@ -1093,7 +1120,7 @@ const App: React.FC = () => {
       }
   };
 
-  const addResourceRequest = async (reqData: { title: string; courseCode: string; details: string }) => {
+  const addResourceRequest = async (reqData: { title: string; courseCode: string; details: string }, file?: File) => {
       if (!user || !db) return;
       try {
           const newReq: Omit<ResourceRequest, 'id'> = {
@@ -1102,6 +1129,19 @@ const App: React.FC = () => {
               status: ResourceRequestStatus.Open,
               ...reqData
           };
+
+          if (file && storage) {
+              const storageRef = ref(storage, `request_attachments/${Date.now()}_${file.name}`);
+              await uploadBytes(storageRef, file);
+              const url = await getDownloadURL(storageRef);
+              newReq.attachment = {
+                  type: file.type.startsWith('image/') ? 'image' : 'file',
+                  url: url,
+                  name: file.name,
+                  size: (file.size / 1024).toFixed(0) + ' KB'
+              };
+          }
+
           const docRef = await addDoc(collection(db, "resourceRequests"), sanitizeForFirestore(newReq));
           earnPoints(5, "Request posted successfully!");
 

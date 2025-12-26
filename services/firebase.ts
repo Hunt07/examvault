@@ -18,7 +18,7 @@ const getEnv = (key: string, fallback: string = "") => {
 // 🔹 Your Firebase config using Environment Variables
 // Prioritize Vite env vars, fallback to the hardcoded demo values if necessary
 const firebaseConfig = {
-  apiKey: getEnv("VITE_FIREBASE_API_KEY", "AIzaSyCuN5mDneFpeI9ZVaiD6DRahRvSPGKGHZs"), // Ensure you set VITE_FIREBASE_API_KEY in .env
+  apiKey: getEnv("VITE_FIREBASE_API_KEY", " "), // Ensure you set VITE_FIREBASE_API_KEY in .env
   authDomain: getEnv("VITE_FIREBASE_AUTH_DOMAIN", "examvault-live-07.firebaseapp.com"),
   projectId: getEnv("VITE_FIREBASE_PROJECT_ID", "examvault-live-07"),
   storageBucket: getEnv("VITE_FIREBASE_STORAGE_BUCKET", "examvault-live-07.firebasestorage.app"),

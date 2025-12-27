@@ -7,38 +7,24 @@ import JSZip from "jszip";
 /* =========================
    API KEY HANDLING
 ========================= */
-
 const getApiKey = (): string => {
-  // Vite
-  // @ts-ignore
-  if (import.meta.env?.VITE_API_KEY) {
-    // @ts-ignore
-    return import.meta.env.VITE_API_KEY;
-  }
-
-  // Node / Cloud fallback
+  if (import.meta.env?.VITE_API_KEY) return import.meta.env.VITE_API_KEY;
   try {
     if (typeof process !== "undefined" && process.env) {
       return process.env.VITE_API_KEY || process.env.API_KEY || "";
     }
   } catch {}
-
   return "";
 };
 
 const apiKey = getApiKey();
-
 let ai: GoogleGenAI | null = null;
-if (apiKey) {
-  ai = new GoogleGenAI({ apiKey });
-} else {
-  console.warn("Gemini API Key missing. AI features disabled.");
-}
+if (apiKey) ai = new GoogleGenAI({ apiKey });
+else console.warn("Gemini API Key missing. AI features disabled.");
 
 /* =========================
    MIME SUPPORT
 ========================= */
-
 const isMimeTypeSupported = (mimeType: string): boolean => {
   const supported = [
     "application/pdf",
@@ -50,33 +36,29 @@ const isMimeTypeSupported = (mimeType: string): boolean => {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   ];
-
   if (supported.includes(mimeType)) return true;
   if (mimeType.startsWith("image/")) return true;
   if (mimeType.startsWith("audio/")) return true;
   if (mimeType.startsWith("video/")) return true;
-
   return false;
 };
 
 /* =========================
    UTILITIES
 ========================= */
-
 const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
-  const binary = atob(base64);
+  // Node + browser safe
+  const binary =
+    typeof atob === "function"
+      ? atob(base64)
+      : Buffer.from(base64, "base64").toString("binary");
   const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return bytes.buffer;
 };
 
 const normalizeOfficeText = (text: string): string =>
-  text
-    .replace(/\s+/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  text.replace(/\s+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
 
 const capText = (text: string, maxChars = 12000): string =>
   text.length > maxChars
@@ -84,31 +66,20 @@ const capText = (text: string, maxChars = 12000): string =>
     : text;
 
 /* =========================
-   XML EXTRACTION
+   XML TEXT EXTRACTION
+   Node-safe regex-based
 ========================= */
-
-const extractXmlTextByTag = (xml: string, tagName: string): string => {
-  try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(xml, "text/xml");
-    const nodes = doc.getElementsByTagName("*");
-
-    let text = "";
-    for (let i = 0; i < nodes.length; i++) {
-      if (nodes[i].localName === tagName && nodes[i].textContent) {
-        text += nodes[i].textContent + " ";
-      }
-    }
-    return text.trim();
-  } catch {
-    return "";
-  }
+const extractXmlTextByTag = (xml: string, tag: string): string => {
+  const regex = new RegExp(`<[^:>]*:${tag}[^>]*>(.*?)</[^:>]*:${tag}>`, "g");
+  let match;
+  let text = "";
+  while ((match = regex.exec(xml)) !== null) text += match[1] + " ";
+  return text.replace(/<[^>]+>/g, "").trim();
 };
 
 /* =========================
    DOCX EXTRACTION
 ========================= */
-
 const extractTextFromDocx = async (fileBase64: string): Promise<string> => {
   const clean = fileBase64.replace(/^data:.+;base64,/, "");
   const buffer = base64ToArrayBuffer(clean);
@@ -116,9 +87,7 @@ const extractTextFromDocx = async (fileBase64: string): Promise<string> => {
   // Primary: Mammoth
   try {
     const result = await mammoth.extractRawText({ arrayBuffer: buffer });
-    if (result.value && result.value.length > 50) {
-      return result.value;
-    }
+    if (result.value && result.value.length > 50) return result.value;
   } catch {}
 
   // Fallback: Manual XML
@@ -134,16 +103,18 @@ const extractTextFromDocx = async (fileBase64: string): Promise<string> => {
 /* =========================
    PPTX EXTRACTION
 ========================= */
-
 const extractTextFromPptx = async (fileBase64: string): Promise<string> => {
   const clean = fileBase64.replace(/^data:.+;base64,/, "");
   const buffer = base64ToArrayBuffer(clean);
   const zip = await JSZip.loadAsync(buffer);
 
   const slides: { path: string; file: any }[] = [];
-
   zip.forEach((path, file) => {
-    if (/ppt\/slides\/slide\d+\.xml/i.test(path)) {
+    if (
+      /ppt\/slides\/slide\d+\.xml/i.test(path) ||
+      /ppt\/slideLayouts\/slideLayout\d+\.xml/i.test(path) ||
+      /ppt\/slideMasters\/slideMaster\d+\.xml/i.test(path)
+    ) {
       slides.push({ path, file });
     }
   });
@@ -155,14 +126,10 @@ const extractTextFromPptx = async (fileBase64: string): Promise<string> => {
   });
 
   let text = "";
-
   for (const slide of slides) {
     const xml = await slide.file.async("string");
     const slideText = extractXmlTextByTag(xml, "t");
-    if (slideText.trim()) {
-      const n = slide.path.match(/slide(\d+)/)?.[1];
-      text += `[Slide ${n}] ${slideText}\n\n`;
-    }
+    if (slideText.trim()) text += `[${slide.path}] ${slideText}\n\n`;
   }
 
   return text.trim();
@@ -171,7 +138,6 @@ const extractTextFromPptx = async (fileBase64: string): Promise<string> => {
 /* =========================
    SUMMARY
 ========================= */
-
 export const summarizeContent = async (
   content: string,
   fileBase64?: string,
@@ -193,16 +159,13 @@ Sections:
     const parts: any[] = [];
 
     if (fileBase64 && mimeType) {
-      if (!isMimeTypeSupported(mimeType)) {
-        return "Unsupported file format.";
-      }
+      if (!isMimeTypeSupported(mimeType)) return "Unsupported file format.";
 
       if (
         mimeType ===
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
       ) {
-        let text = await extractTextFromDocx(fileBase64);
-        text = normalizeOfficeText(text);
+        let text = normalizeOfficeText(await extractTextFromDocx(fileBase64));
         text = capText(text);
         if (text.length < 50) return "No readable text found.";
         parts.push({ text: `Analyze this document:\n\n${text}` });
@@ -210,21 +173,16 @@ Sections:
         mimeType ===
         "application/vnd.openxmlformats-officedocument.presentationml.presentation"
       ) {
-        let text = await extractTextFromPptx(fileBase64);
-        text = normalizeOfficeText(text);
+        let text = normalizeOfficeText(await extractTextFromPptx(fileBase64));
         text = capText(text);
         if (text.length < 20) return "No readable text found.";
         parts.push({ text: `Analyze these slides:\n\n${text}` });
       } else {
         const clean = fileBase64.replace(/^data:.+;base64,/, "");
-        parts.push({
-          inlineData: { data: clean, mimeType },
-        });
+        parts.push({ inlineData: { data: clean, mimeType } });
         parts.push({ text: "Analyze the above content." });
       }
-    } else {
-      parts.push({ text: content });
-    }
+    } else parts.push({ text: content });
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
@@ -242,7 +200,6 @@ Sections:
 /* =========================
    STUDY SET
 ========================= */
-
 export const generateStudySet = async (
   content: string,
   setType: "flashcards" | "quiz",
@@ -303,16 +260,11 @@ export const generateStudySet = async (
         parts.push({ text: prompt });
         parts.push({ inlineData: { data: clean, mimeType } });
       }
-    } else {
-      parts.push({ text: `${prompt}\n\n${content}` });
-    }
+    } else parts.push({ text: `${prompt}\n\n${content}` });
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: schema,
-      },
+      config: { responseMimeType: "application/json", responseSchema: schema },
       contents: [{ role: "user", parts }],
     });
 

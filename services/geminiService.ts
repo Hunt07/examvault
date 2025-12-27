@@ -66,13 +66,57 @@ const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
     return bytes.buffer;
 };
 
+// Helper: Manual XML Text Extraction using DOMParser (Fallback)
+const extractXmlTextByTag = (xmlString: string, tagName: string): string => {
+    try {
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(xmlString, "text/xml");
+        const textNodes = xmlDoc.getElementsByTagName("*");
+        let text = "";
+        
+        for (let i = 0; i < textNodes.length; i++) {
+            const node = textNodes[i];
+            // Check localName to ignore namespaces (e.g., 'w:t' -> 't', 'a:t' -> 't')
+            if (node.localName === tagName) {
+                if (node.textContent) {
+                    text += node.textContent + " ";
+                }
+            }
+        }
+        return text.trim();
+    } catch (e) {
+        console.error("XML Parse Error", e);
+        return "";
+    }
+};
+
 // Helper: Extract text from DOCX
 const extractTextFromDocx = async (fileBase64: string): Promise<string> => {
     try {
         const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
         const arrayBuffer = base64ToArrayBuffer(cleanBase64);
-        const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
-        return result.value.trim();
+        
+        // 1. Try Mammoth (Standard Library)
+        try {
+            const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+            const text = result.value.trim();
+            if (text.length > 50) return text; // If we got a decent amount of text, return it
+        } catch (err) {
+            console.warn("Mammoth extraction failed, trying manual fallback", err);
+        }
+
+        // 2. Fallback: Manual XML Parsing of word/document.xml
+        // This helps catch text in textboxes or headers that mammoth might skip
+        const zip = await JSZip.loadAsync(arrayBuffer);
+        const docXml = await zip.file("word/document.xml")?.async("string");
+        
+        if (docXml) {
+            // 't' is the tag for text in WordXML (<w:t>)
+            const manualText = extractXmlTextByTag(docXml, "t");
+            if (manualText.length > 0) return manualText;
+        }
+
+        return "";
     } catch (e) {
         console.error("DOCX Extraction failed", e);
         throw new Error("Failed to extract text from Word document.");
@@ -88,7 +132,7 @@ const extractTextFromPptx = async (fileBase64: string): Promise<string> => {
         
         const xmlFiles: { path: string, file: any }[] = [];
         
-        // Scan for slide XML files more robustly
+        // Scan for slide XML files
         zip.forEach((relativePath, file) => {
             if (relativePath.match(/ppt\/slides\/slide\d+\.xml/i)) {
                 xmlFiles.push({ path: relativePath, file: file });
@@ -107,22 +151,13 @@ const extractTextFromPptx = async (fileBase64: string): Promise<string> => {
         for (const slide of xmlFiles) {
             const xmlContent = await slide.file.async("string");
             
-            // IMPROVED EXTRACTION:
-            // 1. Matches <a:t> (standard DrawingML) OR <t> (sometimes used)
-            // 2. Handles namespace prefixes optionally (?:a:)?
-            // 3. Handles attributes inside the tag
-            const textMatches = xmlContent.match(/<(?:a:)?t(?:\s+[^>]*)?>(.*?)<\/(?:a:)?t>/g);
-            
-            let slideContent = "";
-            if (textMatches) {
-                slideContent = textMatches
-                    .map((t: string) => t.replace(/<\/?(?:a:)?t(?:\s+[^>]*)?>/g, '')) // Strip tags
-                    .join(" ");
-            }
+            // Use DOMParser instead of Regex for robust XML handling
+            // 't' is the tag for text in DrawingML (<a:t>)
+            const slideText = extractXmlTextByTag(xmlContent, "t");
 
-            if (slideContent.trim()) {
+            if (slideText.trim()) {
                 const slideNum = slide.path.match(/slide(\d+)\.xml/)?.[1];
-                extractedText += `[Slide ${slideNum}]: ${slideContent}\n\n`;
+                extractedText += `[Slide ${slideNum}]: ${slideText}\n\n`;
             }
         }
         

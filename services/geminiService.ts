@@ -1,368 +1,324 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 // @ts-ignore
 import mammoth from "mammoth";
 // @ts-ignore
 import JSZip from "jszip";
 
-// Robustly retrieve API Key
+/* =========================
+   API KEY HANDLING
+========================= */
+
 const getApiKey = (): string => {
-  // 1. Try standard Vite injection (most likely source)
+  // Vite
   // @ts-ignore
-  if (import.meta.env && import.meta.env.VITE_API_KEY) {
+  if (import.meta.env?.VITE_API_KEY) {
     // @ts-ignore
     return import.meta.env.VITE_API_KEY;
   }
 
-  // 2. Fallback for some cloud environments or alternative setups
+  // Node / Cloud fallback
   try {
-    if (typeof process !== 'undefined' && process.env) {
+    if (typeof process !== "undefined" && process.env) {
       return process.env.VITE_API_KEY || process.env.API_KEY || "";
     }
-  } catch (e) {
-    // ignore
-  }
+  } catch {}
 
   return "";
 };
 
 const apiKey = getApiKey();
 
-// Initialize AI client conditionally
 let ai: GoogleGenAI | null = null;
 if (apiKey) {
-  ai = new GoogleGenAI({ apiKey: apiKey });
+  ai = new GoogleGenAI({ apiKey });
 } else {
-  console.warn("Gemini API Key is missing. AI features will be disabled.");
+  console.warn("Gemini API Key missing. AI features disabled.");
 }
 
+/* =========================
+   MIME SUPPORT
+========================= */
+
 const isMimeTypeSupported = (mimeType: string): boolean => {
-    const supportedExact = [
-        'application/pdf',
-        'application/json',
-        'text/plain',
-        'text/csv', 
-        'text/markdown',
-        'text/html',
-        // Office formats (via extraction)
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // docx
-        'application/vnd.openxmlformats-officedocument.presentationml.presentation' // pptx
-    ];
-    if (supportedExact.includes(mimeType)) return true;
-    if (mimeType.startsWith('image/')) return true;
-    if (mimeType.startsWith('audio/')) return true;
-    if (mimeType.startsWith('video/')) return true;
-    return false;
+  const supported = [
+    "application/pdf",
+    "text/plain",
+    "text/csv",
+    "text/markdown",
+    "text/html",
+    "application/json",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ];
+
+  if (supported.includes(mimeType)) return true;
+  if (mimeType.startsWith("image/")) return true;
+  if (mimeType.startsWith("audio/")) return true;
+  if (mimeType.startsWith("video/")) return true;
+
+  return false;
 };
 
-// Helper: Convert Base64 string to ArrayBuffer
+/* =========================
+   UTILITIES
+========================= */
+
 const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
-    const binaryString = window.atob(base64);
-    const len = binaryString.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-    }
-    return bytes.buffer;
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
 };
 
-// Helper: Manual XML Text Extraction using DOMParser (Fallback)
-const extractXmlTextByTag = (xmlString: string, tagName: string): string => {
-    try {
-        const parser = new DOMParser();
-        const xmlDoc = parser.parseFromString(xmlString, "text/xml");
-        const textNodes = xmlDoc.getElementsByTagName("*");
-        let text = "";
-        
-        for (let i = 0; i < textNodes.length; i++) {
-            const node = textNodes[i];
-            // Check localName to ignore namespaces (e.g., 'w:t' -> 't', 'a:t' -> 't')
-            if (node.localName === tagName) {
-                if (node.textContent) {
-                    text += node.textContent + " ";
-                }
-            }
-        }
-        return text.trim();
-    } catch (e) {
-        console.error("XML Parse Error", e);
-        return "";
+const normalizeOfficeText = (text: string): string =>
+  text
+    .replace(/\s+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+const capText = (text: string, maxChars = 12000): string =>
+  text.length > maxChars
+    ? text.slice(0, maxChars) + "\n\n[Content truncated for analysis]"
+    : text;
+
+/* =========================
+   XML EXTRACTION
+========================= */
+
+const extractXmlTextByTag = (xml: string, tagName: string): string => {
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xml, "text/xml");
+    const nodes = doc.getElementsByTagName("*");
+
+    let text = "";
+    for (let i = 0; i < nodes.length; i++) {
+      if (nodes[i].localName === tagName && nodes[i].textContent) {
+        text += nodes[i].textContent + " ";
+      }
     }
+    return text.trim();
+  } catch {
+    return "";
+  }
 };
 
-// Helper: Extract text from DOCX
+/* =========================
+   DOCX EXTRACTION
+========================= */
+
 const extractTextFromDocx = async (fileBase64: string): Promise<string> => {
-    try {
-        const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
-        const arrayBuffer = base64ToArrayBuffer(cleanBase64);
-        
-        // 1. Try Mammoth (Standard Library)
-        try {
-            const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
-            const text = result.value.trim();
-            if (text.length > 50) return text; // If we got a decent amount of text, return it
-        } catch (err) {
-            console.warn("Mammoth extraction failed, trying manual fallback", err);
-        }
+  const clean = fileBase64.replace(/^data:.+;base64,/, "");
+  const buffer = base64ToArrayBuffer(clean);
 
-        // 2. Fallback: Manual XML Parsing of word/document.xml
-        // This helps catch text in textboxes or headers that mammoth might skip
-        const zip = await JSZip.loadAsync(arrayBuffer);
-        const docXml = await zip.file("word/document.xml")?.async("string");
-        
-        if (docXml) {
-            // 't' is the tag for text in WordXML (<w:t>)
-            const manualText = extractXmlTextByTag(docXml, "t");
-            if (manualText.length > 0) return manualText;
-        }
-
-        return "";
-    } catch (e) {
-        console.error("DOCX Extraction failed", e);
-        throw new Error("Failed to extract text from Word document.");
+  // Primary: Mammoth
+  try {
+    const result = await mammoth.extractRawText({ arrayBuffer: buffer });
+    if (result.value && result.value.length > 50) {
+      return result.value;
     }
+  } catch {}
+
+  // Fallback: Manual XML
+  try {
+    const zip = await JSZip.loadAsync(buffer);
+    const xml = await zip.file("word/document.xml")?.async("string");
+    if (xml) return extractXmlTextByTag(xml, "t");
+  } catch {}
+
+  return "";
 };
 
-// Helper: Extract text from PPTX
+/* =========================
+   PPTX EXTRACTION
+========================= */
+
 const extractTextFromPptx = async (fileBase64: string): Promise<string> => {
-    try {
-        const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
-        const arrayBuffer = base64ToArrayBuffer(cleanBase64);
-        const zip = await JSZip.loadAsync(arrayBuffer);
-        
-        const xmlFiles: { path: string, file: any }[] = [];
-        
-        // Scan for slide XML files
-        zip.forEach((relativePath, file) => {
-            if (relativePath.match(/ppt\/slides\/slide\d+\.xml/i)) {
-                xmlFiles.push({ path: relativePath, file: file });
-            }
-        });
+  const clean = fileBase64.replace(/^data:.+;base64,/, "");
+  const buffer = base64ToArrayBuffer(clean);
+  const zip = await JSZip.loadAsync(buffer);
 
-        // Sort slides naturally (slide1, slide2, slide10...)
-        xmlFiles.sort((a, b) => {
-            const numA = parseInt(a.path.match(/slide(\d+)\.xml/)?.[1] || "0");
-            const numB = parseInt(b.path.match(/slide(\d+)\.xml/)?.[1] || "0");
-            return numA - numB;
-        });
+  const slides: { path: string; file: any }[] = [];
 
-        let extractedText = "";
-        
-        for (const slide of xmlFiles) {
-            const xmlContent = await slide.file.async("string");
-            
-            // Use DOMParser instead of Regex for robust XML handling
-            // 't' is the tag for text in DrawingML (<a:t>)
-            const slideText = extractXmlTextByTag(xmlContent, "t");
-
-            if (slideText.trim()) {
-                const slideNum = slide.path.match(/slide(\d+)\.xml/)?.[1];
-                extractedText += `[Slide ${slideNum}]: ${slideText}\n\n`;
-            }
-        }
-        
-        return extractedText.trim();
-    } catch (e) {
-        console.error("PPTX Extraction failed", e);
-        throw new Error("Failed to extract text from PowerPoint presentation.");
+  zip.forEach((path, file) => {
+    if (/ppt\/slides\/slide\d+\.xml/i.test(path)) {
+      slides.push({ path, file });
     }
-};
+  });
 
-export const summarizeContent = async (
-  content: string, 
-  fileBase64?: string, 
-  mimeType?: string
-): Promise<string> => {
-  if (!ai || !apiKey) {
-      console.error("Missing API Key");
-      return "Configuration Error: API Key is missing. Please ensure VITE_API_KEY is set in your .env.local file and restart the server.";
+  slides.sort((a, b) => {
+    const na = parseInt(a.path.match(/slide(\d+)/)?.[1] || "0");
+    const nb = parseInt(b.path.match(/slide(\d+)/)?.[1] || "0");
+    return na - nb;
+  });
+
+  let text = "";
+
+  for (const slide of slides) {
+    const xml = await slide.file.async("string");
+    const slideText = extractXmlTextByTag(xml, "t");
+    if (slideText.trim()) {
+      const n = slide.path.match(/slide(\d+)/)?.[1];
+      text += `[Slide ${n}] ${slideText}\n\n`;
+    }
   }
 
+  return text.trim();
+};
+
+/* =========================
+   SUMMARY
+========================= */
+
+export const summarizeContent = async (
+  content: string,
+  fileBase64?: string,
+  mimeType?: string
+): Promise<string> => {
+  if (!ai) return "Configuration error: API Key missing.";
+
+  const systemInstruction = `
+You are an expert academic assistant.
+Create a concise markdown summary for exam preparation.
+
+Sections:
+- **Key Concepts**
+- **Main Takeaways**
+- **Potential Exam Questions**
+`.trim();
+
   try {
-    const systemInstruction = `You are an expert academic assistant. Your task is to analyze the provided study material and create a highly informative, concise summary for a university student, formatted in markdown. The summary should be easy to digest and focus on what's most important for exam preparation.
-
-Do not use generic phrases like "This document discusses..." or "The material covers...". Get straight to the point.
-
-Based on the following material, please provide the summary with these exact sections:
-- **Key Concepts:** A bulleted list of the most important terms, definitions, and concepts.
-- **Main Takeaways:** 2-3 sentences summarizing the core message or conclusions.
-- **Potential Exam Questions:** A numbered list of 2-3 sample questions that could be asked on an exam based on this material.`;
-
     const parts: any[] = [];
-    
-    // Handle File Input
-    if (fileBase64 && mimeType) {
-        if (!isMimeTypeSupported(mimeType)) {
-            return "⚠️ **Format Not Supported**\n\nAI Summarization is available for **PDFs**, **Images**, **Word (.docx)**, and **PowerPoint (.pptx)**.\n\nLegacy binary formats like .doc and .ppt are not supported. Please convert them to the newer formats.";
-        }
 
-        // Branching logic for extraction
-        if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-            const extractedText = await extractTextFromDocx(fileBase64);
-            // Check for empty text result BEFORE sending to AI
-            if (!extractedText || extractedText.length < 50) {
-                return "⚠️ **No Readable Text Found**\n\nThe AI could not extract enough text from this Word document.\n\n**Possible reasons:**\n- The document contains scanned images instead of text.\n- The file is empty or corrupted.\n\n*Try converting the file to PDF first.*";
-            }
-            parts.push({ text: `Analyze the following document content:\n\n${extractedText}` });
-        } else if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
-            const extractedText = await extractTextFromPptx(fileBase64);
-            // Check for empty text result BEFORE sending to AI
-            if (!extractedText || extractedText.length < 20) {
-                return "⚠️ **No Readable Text Found**\n\nThe AI could not extract text from this presentation.\n\n**Possible reasons:**\n- The slides contain only images or screenshots (scanned).\n- The text is inside complex shapes/SmartArt not supported by the extractor.\n\n*Try converting the file to PDF first for better results.*";
-            }
-            parts.push({ text: `Analyze the following presentation slides:\n\n${extractedText}` });
-        } else {
-            // PDF or Image (Native Support)
-            const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
-            parts.push({
-                inlineData: {
-                    data: cleanBase64,
-                    mimeType: mimeType
-                }
-            });
-            parts.push({ text: "Analyze the above document/image." });
-        }
+    if (fileBase64 && mimeType) {
+      if (!isMimeTypeSupported(mimeType)) {
+        return "Unsupported file format.";
+      }
+
+      if (
+        mimeType ===
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      ) {
+        let text = await extractTextFromDocx(fileBase64);
+        text = normalizeOfficeText(text);
+        text = capText(text);
+        if (text.length < 50) return "No readable text found.";
+        parts.push({ text: `Analyze this document:\n\n${text}` });
+      } else if (
+        mimeType ===
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+      ) {
+        let text = await extractTextFromPptx(fileBase64);
+        text = normalizeOfficeText(text);
+        text = capText(text);
+        if (text.length < 20) return "No readable text found.";
+        parts.push({ text: `Analyze these slides:\n\n${text}` });
+      } else {
+        const clean = fileBase64.replace(/^data:.+;base64,/, "");
+        parts.push({
+          inlineData: { data: clean, mimeType },
+        });
+        parts.push({ text: "Analyze the above content." });
+      }
     } else {
-        parts.push({ text: `\n\nMaterial to analyze:\n---\n${content}\n---` });
+      parts.push({ text: content });
     }
 
     const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        config: {
-            systemInstruction: systemInstruction,
-        },
-        contents: { parts }
+      model: "gemini-2.5-flash",
+      config: { systemInstruction },
+      contents: [{ role: "user", parts }],
     });
 
     return response.text || "No summary generated.";
-  } catch (error: any) {
-    console.error("Gemini API Error:", error);
-    if (error.message?.includes('403') || error.message?.includes('API key')) {
-        return "Error: Invalid or revoked API Key.";
-    }
-    if (error.message?.includes('429')) {
-        return "Error: Quota exceeded. Please try again later.";
-    }
-    return "Could not generate summary. Please check your Internet connection or file integrity.";
+  } catch (e) {
+    console.error(e);
+    return "Failed to generate summary.";
   }
 };
+
+/* =========================
+   STUDY SET
+========================= */
 
 export const generateStudySet = async (
-  content: string, 
-  setType: 'flashcards' | 'quiz',
-  fileBase64?: string, 
+  content: string,
+  setType: "flashcards" | "quiz",
+  fileBase64?: string,
   mimeType?: string
-): Promise<any> => {
-  if (!ai || !apiKey) {
-      console.error("API Key missing");
-      return [];
-  }
-  try {
-    let promptText;
-    let schema;
+): Promise<any[]> => {
+  if (!ai) return [];
 
-    if (setType === 'flashcards') {
-      promptText = `Analyze the provided study material and generate a set of 5-10 flashcards.`;
-      schema = {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            term: { type: Type.STRING },
-            definition: { type: Type.STRING },
-          },
-          required: ['term', 'definition'],
-        },
-      };
-    } else {
-      promptText = `Analyze the provided study material and generate a 5-question multiple-choice quiz.`;
-      schema = {
-        type: Type.ARRAY,
-        items: {
+  const prompt =
+    setType === "flashcards"
+      ? "Generate 5–10 flashcards."
+      : "Generate a 5-question multiple-choice quiz.";
+
+  const schema =
+    setType === "flashcards"
+      ? {
+          type: Type.ARRAY,
+          items: {
             type: Type.OBJECT,
             properties: {
-                question: { type: Type.STRING },
-                options: { 
-                    type: Type.ARRAY, 
-                    items: { type: Type.STRING } 
-                },
-                correctAnswer: { type: Type.STRING },
+              term: { type: Type.STRING },
+              definition: { type: Type.STRING },
             },
-            required: ['question', 'options', 'correctAnswer'],
+            required: ["term", "definition"],
+          },
         }
-      };
-    }
+      : {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              question: { type: Type.STRING },
+              options: { type: Type.ARRAY, items: { type: Type.STRING } },
+              correctAnswer: { type: Type.STRING },
+            },
+            required: ["question", "options", "correctAnswer"],
+          },
+        };
 
-    const parts: any[] = [];
-    
-    // Handle File Input
-    if (fileBase64 && mimeType) {
-        if (!isMimeTypeSupported(mimeType)) {
-             console.warn("Unsupported MIME type for study set generation:", mimeType);
-             return []; 
-        }
-
-        // Branching logic for extraction
-        if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-            const extractedText = await extractTextFromDocx(fileBase64);
-            if (!extractedText || extractedText.length < 50) return [];
-            parts.push({ text: `${promptText}\n\nMaterial:\n${extractedText}` });
-        } else if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
-            const extractedText = await extractTextFromPptx(fileBase64);
-            if (!extractedText || extractedText.length < 20) return [];
-            parts.push({ text: `${promptText}\n\nMaterial:\n${extractedText}` });
-        } else {
-            // PDF or Image
-            const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
-            parts.push({ text: promptText });
-            parts.push({
-                inlineData: {
-                    data: cleanBase64,
-                    mimeType: mimeType
-                }
-            });
-        }
-    } else {
-        parts.push({ text: `${promptText}\n\nMaterial:\n---\n${content}\n---` });
-    }
-    
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: schema
-        },
-        contents: { parts }
-    });
-
-    const text = response.text;
-    return text ? JSON.parse(text) : [];
-  } catch (error) {
-    console.error(`Error generating ${setType} with Gemini:`, error);
-    return [];
-  }
-};
-
-// Kept for backward compatibility if needed elsewhere
-export const describeImage = async (base64Data: string, mimeType: string): Promise<string> => {
-  if (!ai || !apiKey) return "Error: API Key missing.";
   try {
-    const cleanBase64 = base64Data.replace(/^data:.+;base64,/, '');
-    const prompt = "Analyze this image from a study document. Describe the key information, including any text, diagrams, or main concepts.";
+    const parts: any[] = [];
+
+    if (fileBase64 && mimeType) {
+      if (!isMimeTypeSupported(mimeType)) return [];
+
+      if (mimeType.includes("wordprocessingml")) {
+        let text = normalizeOfficeText(await extractTextFromDocx(fileBase64));
+        text = capText(text);
+        if (text.length < 50) return [];
+        parts.push({ text: `${prompt}\n\n${text}` });
+      } else if (mimeType.includes("presentationml")) {
+        let text = normalizeOfficeText(await extractTextFromPptx(fileBase64));
+        text = capText(text);
+        if (text.length < 20) return [];
+        parts.push({ text: `${prompt}\n\n${text}` });
+      } else {
+        const clean = fileBase64.replace(/^data:.+;base64,/, "");
+        parts.push({ text: prompt });
+        parts.push({ inlineData: { data: clean, mimeType } });
+      }
+    } else {
+      parts.push({ text: `${prompt}\n\n${content}` });
+    }
 
     const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: {
-            parts: [
-                { inlineData: { mimeType, data: cleanBase64 } },
-                { text: prompt }
-            ]
-        }
+      model: "gemini-2.5-flash",
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: schema,
+      },
+      contents: [{ role: "user", parts }],
     });
 
-    return response.text || "No description generated.";
-  } catch (error) {
-    console.error("Error describing image with Gemini:", error);
-    return "Could not generate a description for the image.";
+    return response.text ? JSON.parse(response.text) : [];
+  } catch (e) {
+    console.error(e);
+    return [];
   }
 };

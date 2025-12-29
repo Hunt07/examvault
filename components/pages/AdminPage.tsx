@@ -1,7 +1,7 @@
 
 import React, { useContext, useState, useMemo } from 'react';
 import { AppContext } from '../../App';
-import { Shield, User, UserX, UserCheck, AlertTriangle, Trash2, CheckCircle, Search, Ban, RotateCcw, Eye } from 'lucide-react';
+import { Shield, User, UserX, UserCheck, AlertTriangle, Trash2, CheckCircle, Search, Ban, RotateCcw, Eye, Check, X } from 'lucide-react';
 import Avatar from '../Avatar';
 import type { User as UserType, Report } from '../../types';
 
@@ -38,6 +38,11 @@ const AdminPage: React.FC = () => {
     const handleDismissReport = (reportId: string) => {
         resolveReport(reportId, 'dismissed');
         showToast("Report dismissed.", "info");
+    };
+
+    const handleResolveReport = (reportId: string) => {
+        resolveReport(reportId, 'resolved');
+        showToast("Report marked as resolved (Content kept).", "success");
     };
 
     const handleDeleteResource = async (report: Report) => {
@@ -199,7 +204,7 @@ const AdminPage: React.FC = () => {
                         </div>
                     ) : (
                         reports.map(report => (
-                            <div key={report.id} className="bg-dark-surface dark:bg-zinc-900 rounded-xl p-6 shadow-md border border-zinc-700 flex flex-col md:flex-row gap-6">
+                            <div key={report.id} className="bg-dark-surface dark:bg-zinc-900 rounded-xl p-6 shadow-md border border-zinc-700 flex flex-col lg:flex-row gap-6">
                                 <div className="flex-grow">
                                     <div className="flex items-center gap-2 mb-2">
                                         <span className="bg-red-500/20 text-red-400 text-xs font-bold px-2 py-1 rounded border border-red-500/30 uppercase tracking-wider">Reported</span>
@@ -215,22 +220,31 @@ const AdminPage: React.FC = () => {
                                         <p className="text-zinc-300 text-sm">{report.reason}</p>
                                     </div>
                                 </div>
-                                <div className="flex flex-row md:flex-col justify-center gap-3 min-w-[200px] border-t md:border-t-0 md:border-l border-zinc-700 pt-4 md:pt-0 md:pl-6">
+                                <div className="flex flex-row lg:flex-col justify-center gap-3 min-w-[200px] border-t lg:border-t-0 lg:border-l border-zinc-700 pt-4 lg:pt-0 lg:pl-6 flex-wrap">
                                     <button 
                                         onClick={() => setView('resourceDetail', report.resourceId)}
-                                        className="flex-1 flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-white py-2 px-4 rounded-lg transition text-sm font-semibold border border-zinc-600"
+                                        className="flex-1 flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-white py-2 px-4 rounded-lg transition text-sm font-semibold border border-zinc-600 whitespace-nowrap"
                                     >
                                         <Eye size={16} /> View Resource
                                     </button>
                                     <button 
                                         onClick={() => handleDismissReport(report.id)}
-                                        className="flex-1 flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-2 px-4 rounded-lg transition text-sm font-semibold border border-zinc-600"
+                                        className="flex-1 flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-2 px-4 rounded-lg transition text-sm font-semibold border border-zinc-600 whitespace-nowrap"
+                                        title="Dismiss report (Keep content)"
                                     >
-                                        <CheckCircle size={16} /> Dismiss
+                                        <X size={16} /> Dismiss
+                                    </button>
+                                    <button 
+                                        onClick={() => handleResolveReport(report.id)}
+                                        className="flex-1 flex items-center justify-center gap-2 bg-green-900/30 hover:bg-green-900/50 text-green-400 py-2 px-4 rounded-lg transition text-sm font-semibold border border-green-800 whitespace-nowrap"
+                                        title="Mark resolved without deleting"
+                                    >
+                                        <Check size={16} /> Resolve (Keep)
                                     </button>
                                     <button 
                                         onClick={() => handleDeleteResource(report)}
-                                        className="flex-1 flex items-center justify-center gap-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 py-2 px-4 rounded-lg transition text-sm font-semibold border border-red-600/30"
+                                        className="flex-1 flex items-center justify-center gap-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 py-2 px-4 rounded-lg transition text-sm font-semibold border border-red-600/30 whitespace-nowrap"
+                                        title="Delete content and resolve"
                                     >
                                         <Trash2 size={16} /> Delete Content
                                     </button>

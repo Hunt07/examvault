@@ -407,9 +407,12 @@ const App: React.FC = () => {
     // Admin: Subscribe to Reports
     let unsubReports = () => {};
     if (user.role === 'admin') {
-        const q = query(collection(db, "reports"), where("status", "==", "pending"), orderBy("timestamp", "desc"));
+        // Query only by status to avoid compound index requirements on Firebase
+        const q = query(collection(db, "reports"), where("status", "==", "pending"));
         unsubReports = onSnapshot(q, (snapshot) => {
             const fetchedReports = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Report));
+            // Client-side sort
+            fetchedReports.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
             setReports(fetchedReports);
         });
     }

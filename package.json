@@ -12,12 +12,13 @@
   "dependencies": {
     "@google/genai": "*",
     "@google/generative-ai": "^0.21.0",
-    "lucide-react": "^0.344.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
     "firebase": "^10.8.0",
+    "jszip": "^3.10.1",
+    "libreoffice-convert": "^1.7.0",
+    "lucide-react": "^0.344.0",
     "mammoth": "^1.6.0",
-    "jszip": "^3.10.1"
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.64",

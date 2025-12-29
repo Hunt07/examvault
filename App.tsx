@@ -357,7 +357,7 @@ const App: React.FC = () => {
             // Check for lecturer email
             const isLecturerEmail = firebaseUser.email?.endsWith('@unimy.edu.my') && !firebaseUser.email?.endsWith('@student.unimy.edu.my');
             const role = isLecturerEmail ? 'lecturer' : 'student';
-            const bio = isLecturerEmail ? 'I am a lecturer at UNIMY.' : 'I am a student at UNIMY.';
+            const bio = isLecturerEmail ? 'Lecturer' : 'Student'; // Default bio for new lecturers
             const course = isLecturerEmail ? 'Lecturer' : 'Student';
 
             const newUser: User = {
@@ -445,17 +445,28 @@ const App: React.FC = () => {
              u.role = 'admin'; // Update local instance to reflect immediately in UI
         }
         
-        // Automatic Lecturer Role Assignment
+        // Automatic Lecturer Role & Bio Assignment
         const isLecturerEmail = u.email.endsWith('@unimy.edu.my') && !u.email.endsWith('@student.unimy.edu.my');
-        if (isLecturerEmail && u.role === 'student') {
-            const ref = doc(db!, "users", u.id);
-            batch.update(ref, { 
-                role: 'lecturer',
-                course: 'Lecturer' 
-            });
-            needsCommit = true;
-            u.role = 'lecturer';
-            u.course = 'Lecturer';
+        if (isLecturerEmail) {
+            let updates: any = {};
+            if (u.role === 'student') {
+                updates.role = 'lecturer';
+                updates.course = 'Lecturer';
+                u.role = 'lecturer';
+                u.course = 'Lecturer';
+            }
+            
+            // Fix Bio if it defaults to Student text
+            if (u.bio === 'Student' || u.bio === 'student' || u.bio === 'I am a student at UNIMY.') {
+                updates.bio = 'Lecturer';
+                u.bio = 'Lecturer';
+            }
+
+            if (Object.keys(updates).length > 0) {
+                const ref = doc(db!, "users", u.id);
+                batch.update(ref, updates);
+                needsCommit = true;
+            }
         }
 
         const isLegacy = !u.avatarUrl || 

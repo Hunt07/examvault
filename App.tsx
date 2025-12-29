@@ -402,18 +402,32 @@ const App: React.FC = () => {
     setAreResourcesLoading(true);
 
     const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
+      // 1. Fetch raw data first to perform sorting
+      let rawUsers = snapshot.docs.map(docSnap => ({ ...docSnap.data(), id: docSnap.id } as User));
+
+      // 2. Sort to prioritize the correct Master Admin account ("Osama") over duplicates
+      // This ensures "Osama" is processed first and kept, while duplicates are filtered out below.
+      rawUsers.sort((a, b) => {
+          if (a.email === MASTER_ADMIN_EMAIL && b.email === MASTER_ADMIN_EMAIL) {
+              // Explicitly prefer "Osama"
+              if (a.name === 'Osama') return -1;
+              if (b.name === 'Osama') return 1;
+              // Fallback: Prefer shorter name (usually the clean one)
+              return a.name.length - b.name.length;
+          }
+          return 0;
+      });
+
       const fetchedUsers: User[] = [];
       const batch = writeBatch(db!);
       let needsCommit = false;
       const usersToPropagate: { id: string, avatarUrl: string }[] = [];
       const seenEmails = new Set<string>();
 
-      snapshot.docs.forEach((docSnap) => {
-        const u = { ...docSnap.data(), id: docSnap.id } as User;
-        
+      rawUsers.forEach((u) => {
         // DEDUPLICATION LOGIC:
-        // If we have already seen this email in this snapshot, skip it.
-        // This prevents duplicate accounts from showing up in the UI if DB has dirty data.
+        // If we have already seen this email in this sorted list, skip it.
+        // Since we sorted 'Osama' to be first, the other duplicates will be skipped here.
         if (seenEmails.has(u.email)) {
             return;
         }

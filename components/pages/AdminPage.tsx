@@ -240,7 +240,7 @@ const AdminPage: React.FC = () => {
                                 <div className="flex-grow">
                                     <div className="flex items-center gap-2 mb-2">
                                         <span className="bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400 text-xs font-bold px-2 py-1 rounded border border-red-200 dark:border-red-500/30 uppercase tracking-wider">Reported</span>
-                                        <span className="text-slate-500 dark:text-zinc-500 text-sm">• {new Date(report.timestamp).toLocaleDateString()}</span>
+                                        <span className="text-slate-500 dark:text-zinc-500 text-sm">• {new Date(report.timestamp).toLocaleDateString('en-GB')}</span>
                                     </div>
                                     <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1">Resource: {report.resourceTitle}</h3>
                                     <div className="text-sm text-slate-500 dark:text-zinc-400 mb-4 space-y-1">

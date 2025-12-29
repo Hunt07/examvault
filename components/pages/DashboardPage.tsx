@@ -70,7 +70,7 @@ const DashboardPage: React.FC = () => {
     });
   };
 
-  const activeFilterCount = Object.values(activeFilters).reduce((acc: number, set: Set<any>) => acc + set.size, 0);
+  const activeFilterCount = Object.values(activeFilters).reduce((acc: number, set: any) => acc + set.size, 0) as number;
 
   const filteredResources = useMemo((): Resource[] => {
     return resources.filter(resource => {

@@ -51,6 +51,14 @@ const AdminPage: React.FC = () => {
         showToast("Resource deleted and report resolved.", "success");
     };
 
+    const isUserOnline = (lastActive?: string) => {
+        if (!lastActive) return false;
+        const now = new Date().getTime();
+        const lastActivity = new Date(lastActive).getTime();
+        const threshold = 60 * 1000; // 1 minute threshold for "Online"
+        return (now - lastActivity) < threshold;
+    };
+
     return (
         <div className="space-y-6">
             {/* Header Card */}
@@ -134,9 +142,13 @@ const AdminPage: React.FC = () => {
                                                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-red-500/20 text-red-400 border border-red-500/30">
                                                     BANNED
                                                 </span>
-                                            ) : (
+                                            ) : isUserOnline(user.lastActive) ? (
                                                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-green-500/20 text-green-400 border border-green-500/30">
-                                                    ACTIVE
+                                                    ONLINE
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-zinc-700/50 text-zinc-400 border border-zinc-600">
+                                                    OFFLINE
                                                 </span>
                                             )}
                                         </td>

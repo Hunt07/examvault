@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import type { User, Resource, ForumPost, Comment, ForumReply, Notification, Conversation, DirectMessage, ResourceRequest, Attachment, Report } from './types';
 import { NotificationType, MessageStatus, ResourceRequestStatus } from './types';
 import AuthPage from './components/pages/AuthPage';
@@ -231,6 +231,51 @@ const App: React.FC = () => {
   const [runTour, setRunTour] = useState(false);
   const [tourStep, setTourStep] = useState(0);
 
+  // Presence Heartbeat
+  const lastUpdateRef = useRef<number>(0);
+  
+  useEffect(() => {
+    if (!user?.id || !db) return;
+
+    const updatePresence = async () => {
+        const now = Date.now();
+        // Throttle updates to at least every 10 seconds to avoid spamming on focus/click
+        if (now - lastUpdateRef.current < 10000) return;
+
+        try {
+            lastUpdateRef.current = now;
+            const userRef = doc(db, "users", user.id);
+            await updateDoc(userRef, {
+                lastActive: new Date().toISOString()
+            });
+        } catch (error) {
+            console.error("Presence update failed", error);
+        }
+    };
+
+    updatePresence(); // Initial update
+    
+    // Increased frequency to 30 seconds for near "real-time" accuracy
+    const interval = setInterval(updatePresence, 30 * 1000); 
+
+    const handleInteraction = () => {
+        if (document.visibilityState === 'visible') {
+            updatePresence();
+        }
+    };
+
+    document.addEventListener("visibilitychange", handleInteraction);
+    window.addEventListener("focus", handleInteraction);
+    window.addEventListener("click", handleInteraction); // Update on clicks too
+
+    return () => {
+        clearInterval(interval);
+        document.removeEventListener("visibilitychange", handleInteraction);
+        window.removeEventListener("focus", handleInteraction);
+        window.removeEventListener("click", handleInteraction);
+    };
+  }, [user?.id]);
+
   useEffect(() => {
     if (!auth || !db) {
         setIsLoading(false);
@@ -313,6 +358,7 @@ const App: React.FC = () => {
               email: firebaseUser.email || "",
               avatarUrl: defaultAvatar,
               joinDate: new Date().toISOString(),
+              lastActive: new Date().toISOString(),
               bio: "I am a student at UNIMY.",
               points: 0,
               weeklyPoints: 0,

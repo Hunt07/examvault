@@ -5,6 +5,7 @@ export interface User {
   email: string;
   avatarUrl: string;
   joinDate: string;
+  lastActive?: string; // Timestamp for online status
   bio: string;
   points: number;
   weeklyPoints: number;

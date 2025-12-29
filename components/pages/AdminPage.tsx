@@ -1,7 +1,7 @@
 
 import React, { useContext, useState, useMemo } from 'react';
 import { AppContext } from '../../App';
-import { Shield, User, UserX, UserCheck, AlertTriangle, Trash2, CheckCircle, Search, Ban, RotateCcw, Eye, Check, X, GraduationCap, Lock } from 'lucide-react';
+import { Shield, User, UserX, UserCheck, AlertTriangle, Trash2, CheckCircle, Search, Ban, RotateCcw, Eye, Check, X, GraduationCap, Lock, Clock } from 'lucide-react';
 import Avatar from '../Avatar';
 import type { User as UserType, Report } from '../../types';
 
@@ -149,6 +149,10 @@ const AdminPage: React.FC = () => {
                                                 {user.status === 'banned' ? (
                                                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-500/30">
                                                         BANNED
+                                                    </span>
+                                                ) : user.status === 'deactivated' ? (
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-yellow-100 dark:bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-500/30">
+                                                        <Clock size={12} /> DEACTIVATED
                                                     </span>
                                                 ) : isUserOnline(user.lastActive) ? (
                                                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-500/30">

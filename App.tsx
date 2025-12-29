@@ -192,6 +192,8 @@ const propagateUserUpdates = async (userId: string, updateData: any) => {
     });
 };
 
+const MASTER_ADMIN_EMAIL = 'b09220024@student.unimy.edu.my';
+
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -404,16 +406,25 @@ const App: React.FC = () => {
       const batch = writeBatch(db!);
       let needsCommit = false;
       const usersToPropagate: { id: string, avatarUrl: string }[] = [];
+      const seenEmails = new Set<string>();
 
       snapshot.docs.forEach((docSnap) => {
         const u = { ...docSnap.data(), id: docSnap.id } as User;
         
+        // DEDUPLICATION LOGIC:
+        // If we have already seen this email in this snapshot, skip it.
+        // This prevents duplicate accounts from showing up in the UI if DB has dirty data.
+        if (seenEmails.has(u.email)) {
+            return;
+        }
+        seenEmails.add(u.email);
+
         // Ensure defaults for all users in view
         if (!u.role) u.role = 'student';
         if (!u.status) u.status = 'active';
 
         // Master Admin Hardcode Logic
-        if (u.email === 'b09220024@student.unimy.edu.my' && u.role !== 'admin') {
+        if (u.email === MASTER_ADMIN_EMAIL && u.role !== 'admin') {
              const ref = doc(db!, "users", u.id);
              batch.update(ref, { role: 'admin' });
              needsCommit = true;
@@ -693,12 +704,26 @@ const App: React.FC = () => {
   // Admin Actions
   const toggleUserRole = async (userId: string, role: 'student' | 'admin') => {
       if (!db || user?.role !== 'admin') return;
+      
+      const targetUser = users.find(u => u.id === userId);
+      if (targetUser && targetUser.email === MASTER_ADMIN_EMAIL) {
+          showToast("Cannot modify Master Admin role.", "error");
+          return;
+      }
+
       const userRef = doc(db, "users", userId);
       await updateDoc(userRef, { role });
   };
 
   const toggleUserStatus = async (userId: string, status: 'active' | 'banned') => {
       if (!db || user?.role !== 'admin') return;
+
+      const targetUser = users.find(u => u.id === userId);
+      if (targetUser && targetUser.email === MASTER_ADMIN_EMAIL) {
+          showToast("Cannot ban Master Admin.", "error");
+          return;
+      }
+
       const userRef = doc(db, "users", userId);
       await updateDoc(userRef, { status });
   };

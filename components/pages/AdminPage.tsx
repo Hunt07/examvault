@@ -1,11 +1,13 @@
 
 import React, { useContext, useState, useMemo } from 'react';
 import { AppContext } from '../../App';
-import { Shield, User, UserX, UserCheck, AlertTriangle, Trash2, CheckCircle, Search, Ban, RotateCcw, Eye, Check, X, GraduationCap } from 'lucide-react';
+import { Shield, User, UserX, UserCheck, AlertTriangle, Trash2, CheckCircle, Search, Ban, RotateCcw, Eye, Check, X, GraduationCap, Lock } from 'lucide-react';
 import Avatar from '../Avatar';
 import type { User as UserType, Report } from '../../types';
 
 type AdminTab = 'reports' | 'users';
+
+const MASTER_ADMIN_EMAIL = 'b09220024@student.unimy.edu.my';
 
 const AdminPage: React.FC = () => {
     const { users, reports, toggleUserRole, toggleUserStatus, resolveReport, setView, showToast, deleteResource } = useContext(AppContext);
@@ -126,86 +128,96 @@ const AdminPage: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-zinc-700">
-                                {filteredUsers.map(user => (
-                                    <tr 
-                                        key={user.id} 
-                                        onClick={() => setView('publicProfile', user.id)}
-                                        className="hover:bg-zinc-800/50 transition cursor-pointer"
-                                    >
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-3">
-                                                <Avatar src={user.avatarUrl} alt={user.name} className="w-10 h-10" />
-                                                <div>
-                                                    <p className="font-bold text-white text-sm">{user.name}</p>
-                                                    <p className="text-zinc-500 text-xs">{user.email}</p>
+                                {filteredUsers.map(user => {
+                                    const isMasterAdmin = user.email === MASTER_ADMIN_EMAIL;
+                                    return (
+                                        <tr 
+                                            key={user.id} 
+                                            onClick={() => setView('publicProfile', user.id)}
+                                            className="hover:bg-zinc-800/50 transition cursor-pointer"
+                                        >
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-3">
+                                                    <Avatar src={user.avatarUrl} alt={user.name} className="w-10 h-10" />
+                                                    <div>
+                                                        <p className="font-bold text-white text-sm">{user.name}</p>
+                                                        <p className="text-zinc-500 text-xs">{user.email}</p>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            {user.status === 'banned' ? (
-                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-red-500/20 text-red-400 border border-red-500/30">
-                                                    BANNED
-                                                </span>
-                                            ) : isUserOnline(user.lastActive) ? (
-                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-green-500/20 text-green-400 border border-green-500/30">
-                                                    ONLINE
-                                                </span>
-                                            ) : (
-                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-zinc-700/50 text-zinc-400 border border-zinc-600">
-                                                    OFFLINE
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            {user.role === 'admin' ? (
-                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-red-500/10 text-red-400 border border-red-500/20">
-                                                    <Shield size={10} /> ADMIN
-                                                </span>
-                                            ) : user.role === 'lecturer' ? (
-                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                                                    <GraduationCap size={12} /> LECTURER
-                                                </span>
-                                            ) : (
-                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-zinc-700 text-zinc-300 border border-zinc-600">
-                                                    STUDENT
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <div className="flex items-center justify-end gap-2">
-                                                {/* Only allow role toggle if not a lecturer (auto-assigned) or if promoting student/admin */}
-                                                {user.role !== 'lecturer' && (
-                                                    <button 
-                                                        onClick={(e) => { e.stopPropagation(); handlePromote(user.id, user.role as 'student' | 'admin'); }}
-                                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/10 text-blue-400 hover:bg-blue-600/20 border border-blue-600/20 text-xs font-semibold transition"
-                                                    >
-                                                        {user.role === 'student' ? <UserCheck size={14} /> : <UserX size={14} />}
-                                                        {user.role === 'student' ? 'Promote' : 'Demote'}
-                                                    </button>
-                                                )}
+                                            </td>
+                                            <td className="px-6 py-4">
                                                 {user.status === 'banned' ? (
-                                                    <button 
-                                                        onClick={(e) => { e.stopPropagation(); handleBan(user.id, user.status); }}
-                                                        className="p-1.5 rounded-lg bg-green-600/10 text-green-400 hover:bg-green-600/20 border border-green-600/20 transition group relative"
-                                                        title="Restore Access"
-                                                    >
-                                                        <RotateCcw size={16} />
-                                                        <span className="absolute bottom-full mb-2 right-0 w-max px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition">Restore Access</span>
-                                                    </button>
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-red-500/20 text-red-400 border border-red-500/30">
+                                                        BANNED
+                                                    </span>
+                                                ) : isUserOnline(user.lastActive) ? (
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-green-500/20 text-green-400 border border-green-500/30">
+                                                        ONLINE
+                                                    </span>
                                                 ) : (
-                                                    <button 
-                                                        onClick={(e) => { e.stopPropagation(); handleBan(user.id, user.status); }}
-                                                        className="p-1.5 rounded-lg bg-red-600/10 text-red-400 hover:bg-red-600/20 border border-red-600/20 transition group relative"
-                                                        title="Restrict User"
-                                                    >
-                                                        <UserX size={16} />
-                                                        <span className="absolute bottom-full mb-2 right-0 w-max px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition">Restrict User</span>
-                                                    </button>
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-zinc-700/50 text-zinc-400 border border-zinc-600">
+                                                        OFFLINE
+                                                    </span>
                                                 )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {user.role === 'admin' ? (
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-red-500/10 text-red-400 border border-red-500/20">
+                                                        <Shield size={10} /> ADMIN
+                                                    </span>
+                                                ) : user.role === 'lecturer' ? (
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                                                        <GraduationCap size={12} /> LECTURER
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-zinc-700 text-zinc-300 border border-zinc-600">
+                                                        STUDENT
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                {isMasterAdmin ? (
+                                                    <div className="flex items-center justify-end gap-2 text-zinc-500 text-xs font-bold uppercase tracking-wider">
+                                                        <Lock size={12} />
+                                                        System Protected
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        {/* Only allow role toggle if not a lecturer (auto-assigned) or if promoting student/admin */}
+                                                        {user.role !== 'lecturer' && (
+                                                            <button 
+                                                                onClick={(e) => { e.stopPropagation(); handlePromote(user.id, user.role as 'student' | 'admin'); }}
+                                                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/10 text-blue-400 hover:bg-blue-600/20 border border-blue-600/20 text-xs font-semibold transition"
+                                                            >
+                                                                {user.role === 'student' ? <UserCheck size={14} /> : <UserX size={14} />}
+                                                                {user.role === 'student' ? 'Promote' : 'Demote'}
+                                                            </button>
+                                                        )}
+                                                        {user.status === 'banned' ? (
+                                                            <button 
+                                                                onClick={(e) => { e.stopPropagation(); handleBan(user.id, user.status); }}
+                                                                className="p-1.5 rounded-lg bg-green-600/10 text-green-400 hover:bg-green-600/20 border border-green-600/20 transition group relative"
+                                                                title="Restore Access"
+                                                            >
+                                                                <RotateCcw size={16} />
+                                                                <span className="absolute bottom-full mb-2 right-0 w-max px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition">Restore Access</span>
+                                                            </button>
+                                                        ) : (
+                                                            <button 
+                                                                onClick={(e) => { e.stopPropagation(); handleBan(user.id, user.status); }}
+                                                                className="p-1.5 rounded-lg bg-red-600/10 text-red-400 hover:bg-red-600/20 border border-red-600/20 transition group relative"
+                                                                title="Restrict User"
+                                                            >
+                                                                <UserX size={16} />
+                                                                <span className="absolute bottom-full mb-2 right-0 w-max px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition">Restrict User</span>
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                         {filteredUsers.length === 0 && (

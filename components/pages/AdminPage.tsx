@@ -30,8 +30,8 @@ const AdminPage: React.FC = () => {
         showToast(newRole === 'admin' ? "User promoted to Admin" : "User demoted to Student", "success");
     };
 
-    const handleBan = (userId: string, currentStatus: 'active' | 'banned') => {
-        const newStatus = currentStatus === 'active' ? 'banned' : 'active';
+    const handleBan = (userId: string, currentStatus: 'active' | 'banned' | 'deactivated') => {
+        const newStatus = currentStatus === 'banned' ? 'active' : 'banned';
         toggleUserStatus(userId, newStatus);
         showToast(newStatus === 'banned' ? "User has been restricted." : "User access restored.", newStatus === 'banned' ? 'success' : 'success');
     };

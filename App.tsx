@@ -82,6 +82,7 @@ interface AppContextType {
   markMessagesAsRead: (conversationId: string) => void;
   goBack: () => void;
   deleteResource: (resourceId: string, fileUrl: string, previewUrl?: string) => Promise<void>;
+  deactivateAccount: () => Promise<void>; // Added deactivateAccount
   hasUnreadMessages: boolean;
   hasUnreadDiscussions: boolean;
   isLoading: boolean;
@@ -333,13 +334,6 @@ const App: React.FC = () => {
                 hasUpdates = true;
             }
 
-            if (hasUpdates) {
-                await updateDoc(userRef, updates);
-                if (updates.avatarUrl) {
-                    propagateUserUpdates(userData.id, { avatarUrl: updates.avatarUrl });
-                }
-            }
-
             // Check if user is banned
             if (userData.status === 'banned') {
                 await firebaseAuth.signOut(auth);
@@ -347,6 +341,21 @@ const App: React.FC = () => {
                 showToast("Your account has been restricted. Contact support.", "error");
                 setIsLoading(false);
                 return;
+            }
+
+            // Handle Reactivation
+            if (userData.status === 'deactivated') {
+                updates.status = 'active';
+                userData.status = 'active';
+                hasUpdates = true;
+                showToast("Welcome back! Your account has been reactivated.", "success");
+            }
+
+            if (hasUpdates) {
+                await updateDoc(userRef, updates);
+                if (updates.avatarUrl) {
+                    propagateUserUpdates(userData.id, { avatarUrl: updates.avatarUrl });
+                }
             }
 
             setUser(userData);
@@ -696,6 +705,18 @@ const App: React.FC = () => {
     setViewHistory([]);
   };
 
+  const deactivateAccount = async () => {
+      if (!user || !db) return;
+      try {
+          const userRef = doc(db, "users", user.id);
+          await updateDoc(userRef, { status: 'deactivated' });
+          await logout();
+      } catch (error) {
+          console.error("Failed to deactivate account", error);
+          showToast("Failed to deactivate account.", "error");
+      }
+  };
+
   const toggleSaveResource = async (resourceId: string) => {
     if (!user || !db) return;
     const isSaved = user.savedResourceIds?.includes(resourceId);
@@ -923,16 +944,6 @@ const App: React.FC = () => {
                 }
             }
           }
-
-          // If current user is author, decrement count. If admin is deleting someone else's, maybe don't decrement? 
-          // Usually we decrement the author's count. We need the resource author ID. 
-          // Since we might not have the resource object here if called from Admin page with just ID, 
-          // we might skip decrementing for simplicity or fetch before delete.
-          // For now, let's just stick to deleting the doc. 
-          // The previous implementation assumed user was deleting their own resource. 
-          
-          // Note: Realistically, we should fetch the resource to know the author to decrement. 
-          // Given the context constraints, we'll proceed with simple deletion.
 
       } catch (error) {
           console.error("Delete failed", error);
@@ -1605,7 +1616,7 @@ const App: React.FC = () => {
       updateUserProfile, sendMessage, editMessage, deleteMessage, startConversation, sendDirectMessageToUser, markNotificationAsRead, markAllNotificationsAsRead, markMessagesAsRead,
       clearAllNotifications,
       goBack, hasUnreadMessages, hasUnreadDiscussions,
-      isLoading, deleteResource,
+      isLoading, deleteResource, deactivateAccount,
       areResourcesLoading,
       scrollTargetId, setScrollTargetId,
       showToast,

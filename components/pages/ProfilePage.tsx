@@ -4,7 +4,7 @@ import type { User, Resource } from '../../types';
 import { ResourceRequestStatus } from '../../types';
 import { AppContext } from '../../App';
 import ResourceCard from '../ResourceCard';
-import { Award, UploadCloud, Calendar, MessageSquare as MessageSquareIcon, Edit, X, Save, ArrowLeft, UserPlus, UserMinus, ThumbsUp, MessageSquare, Clock, Loader2, GraduationCap } from 'lucide-react';
+import { Award, UploadCloud, Calendar, MessageSquare as MessageSquareIcon, Edit, X, Save, ArrowLeft, UserPlus, UserMinus, ThumbsUp, MessageSquare, Clock, Loader2, GraduationCap, AlertTriangle, Power, Trash2, ShieldAlert } from 'lucide-react';
 import UserRankBadge from '../UserRankBadge';
 import { storage } from '../../services/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -28,7 +28,7 @@ const StatCard: React.FC<{ icon: React.ReactNode; label: string; value: string |
 );
 
 const ProfilePage: React.FC<ProfilePageProps> = ({ user, allResources, isCurrentUser }) => {
-    const { userRanks, setView, forumPosts, updateUserProfile, user: loggedInUser, goBack, toggleUserSubscription, startConversation, resourceRequests } = useContext(AppContext);
+    const { userRanks, setView, forumPosts, updateUserProfile, user: loggedInUser, goBack, toggleUserSubscription, startConversation, resourceRequests, deactivateAccount } = useContext(AppContext);
 
     const [isEditing, setIsEditing] = useState(false);
     const [editedName, setEditedName] = useState(user.name);
@@ -39,6 +39,10 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, allResources, isCurrent
     const [editedSemester, setEditedSemester] = useState(user.currentSemester);
     const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
     
+    // New state for Danger Zone Modals
+    const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
     const userResources = useMemo(() => {
         return allResources.filter(resource => resource.author.id === user.id);
     }, [allResources, user.id]);
@@ -135,6 +139,31 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, allResources, isCurrent
         }
     };
 
+    const confirmDeactivate = () => {
+        deactivateAccount();
+        setShowDeactivateConfirm(false);
+    };
+
+    // If viewing another user and they are deactivated, block access
+    if (!isCurrentUser && user.status === 'deactivated') {
+        return (
+            <div>
+                <button onClick={goBack} className="flex items-center gap-2 text-primary-600 dark:text-primary-400 font-semibold hover:text-primary-800 dark:hover:text-primary-300 transition mb-6">
+                    <ArrowLeft size={20} />
+                    Back
+                </button>
+                <div className="bg-white dark:bg-dark-surface rounded-xl shadow-md p-12 flex flex-col items-center justify-center text-center border border-slate-200 dark:border-zinc-700">
+                    <div className="bg-slate-100 dark:bg-zinc-800 p-4 rounded-full mb-4">
+                        <ShieldAlert size={48} className="text-slate-400" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Deactivated Account</h2>
+                    <p className="text-slate-500 dark:text-slate-400 max-w-md">
+                        This user has deactivated their account. Their profile and contributions are currently hidden.
+                    </p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div>
@@ -383,6 +412,87 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, allResources, isCurrent
                             <p className="text-slate-500 dark:text-slate-400">You have no open resource requests.</p>
                         </div>
                     )}
+                </div>
+            )}
+
+            {/* Danger Zone */}
+            {isCurrentUser && (
+                <div className="mt-12 border border-red-200 dark:border-red-900/50 rounded-xl overflow-hidden shadow-sm">
+                    <div className="bg-red-50 dark:bg-red-900/10 p-4 border-b border-red-100 dark:border-red-900/30 flex items-center gap-2">
+                        <AlertTriangle className="text-red-600 dark:text-red-500" size={20} />
+                        <h3 className="font-bold text-red-800 dark:text-red-400">Danger Zone</h3>
+                    </div>
+                    <div className="bg-white dark:bg-dark-surface p-4 divide-y divide-slate-100 dark:divide-zinc-800">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-2">
+                            <div>
+                                <h4 className="font-bold text-slate-800 dark:text-white text-sm">Deactivate Account</h4>
+                                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-xl">
+                                    Temporarily hide your profile and uploads from the community. Everything will be restored when you log back in.
+                                </p>
+                            </div>
+                            <button 
+                                onClick={() => setShowDeactivateConfirm(true)}
+                                className="px-4 py-2 bg-amber-600/10 hover:bg-amber-600/20 text-amber-600 dark:text-amber-500 font-bold text-sm rounded-lg border border-amber-600/20 transition flex items-center justify-center gap-2 shrink-0"
+                            >
+                                <Power size={16} />
+                                Deactivate
+                            </button>
+                        </div>
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-2 pt-4 mt-2">
+                            <div>
+                                <h4 className="font-bold text-slate-800 dark:text-white text-sm">Delete Account (Purge)</h4>
+                                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-xl">
+                                    Permanently remove your account and <strong>all your uploads, posts, and requests</strong> from the platform. This cannot be undone.
+                                </p>
+                            </div>
+                            <button 
+                                onClick={() => setShowDeleteConfirm(true)}
+                                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-sm rounded-lg transition flex items-center justify-center gap-2 shrink-0 shadow-sm"
+                            >
+                                <Trash2 size={16} />
+                                Delete Permanently
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Deactivation Confirmation Modal */}
+            {showDeactivateConfirm && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-in fade-in">
+                    <div className="bg-white dark:bg-zinc-900 p-6 rounded-xl shadow-2xl max-w-md w-full border border-slate-200 dark:border-zinc-700">
+                        <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Deactivate Account?</h3>
+                        <p className="text-slate-600 dark:text-slate-300 mb-6">
+                            Are you sure you want to deactivate your account? You will be logged out immediately. 
+                            <br/><br/>
+                            Simply log in again to reactivate your account and restore your profile visibility.
+                        </p>
+                        <div className="flex gap-3 justify-end">
+                            <button onClick={() => setShowDeactivateConfirm(false)} className="px-4 py-2 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-slate-200 font-bold rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-700 transition">Cancel</button>
+                            <button onClick={confirmDeactivate} className="px-4 py-2 bg-amber-600 text-white font-bold rounded-lg hover:bg-amber-700 transition">Yes, Deactivate</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete Confirmation Modal (Placeholder) */}
+            {showDeleteConfirm && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-in fade-in">
+                    <div className="bg-white dark:bg-zinc-900 p-6 rounded-xl shadow-2xl max-w-md w-full border border-red-200 dark:border-red-900">
+                        <div className="flex items-center gap-2 mb-2 text-red-600">
+                            <AlertTriangle size={24} />
+                            <h3 className="text-xl font-bold">Delete Account?</h3>
+                        </div>
+                        <p className="text-slate-600 dark:text-slate-300 mb-6">
+                            This action is permanent and cannot be undone. All your data will be wiped. 
+                            <br/><br/>
+                            <span className="text-sm italic text-slate-500">Feature currently disabled for safety demo.</span>
+                        </p>
+                        <div className="flex gap-3 justify-end">
+                            <button onClick={() => setShowDeleteConfirm(false)} className="px-4 py-2 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-slate-200 font-bold rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-700 transition">Cancel</button>
+                            <button disabled className="px-4 py-2 bg-red-600/50 text-white font-bold rounded-lg cursor-not-allowed">Delete</button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

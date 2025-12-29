@@ -16,7 +16,7 @@ export interface User {
   subscriptions: UserSubscriptions;
   savedResourceIds: string[];
   role: 'student' | 'admin' | 'lecturer';
-  status: 'active' | 'banned';
+  status: 'active' | 'banned' | 'deactivated';
 }
 
 export interface UserSubscriptions {

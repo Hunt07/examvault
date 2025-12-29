@@ -15,7 +15,7 @@ export interface User {
   currentSemester: number;
   subscriptions: UserSubscriptions;
   savedResourceIds: string[];
-  role: 'student' | 'admin';
+  role: 'student' | 'admin' | 'lecturer';
   status: 'active' | 'banned';
 }
 

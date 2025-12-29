@@ -351,6 +351,12 @@ const App: React.FC = () => {
           } else {
             const displayName = firebaseUser.displayName || "Student";
             const defaultAvatar = generateDefaultAvatar(displayName);
+            
+            // Check for lecturer email
+            const isLecturerEmail = firebaseUser.email?.endsWith('@unimy.edu.my') && !firebaseUser.email?.endsWith('@student.unimy.edu.my');
+            const role = isLecturerEmail ? 'lecturer' : 'student';
+            const bio = isLecturerEmail ? 'I am a lecturer at UNIMY.' : 'I am a student at UNIMY.';
+            const course = isLecturerEmail ? 'Lecturer' : 'Student';
 
             const newUser: User = {
               id: firebaseUser.uid,
@@ -359,16 +365,16 @@ const App: React.FC = () => {
               avatarUrl: defaultAvatar,
               joinDate: new Date().toISOString(),
               lastActive: new Date().toISOString(),
-              bio: "I am a student at UNIMY.",
+              bio: bio,
               points: 0,
               weeklyPoints: 0,
               uploadCount: 0,
-              course: "Student",
+              course: course,
               currentYear: 1,
               currentSemester: 1,
               subscriptions: { users: [], lecturers: [], courseCodes: [] },
               savedResourceIds: [],
-              role: 'student',
+              role: role,
               status: 'active'
             };
             
@@ -412,6 +418,19 @@ const App: React.FC = () => {
              batch.update(ref, { role: 'admin' });
              needsCommit = true;
              u.role = 'admin'; // Update local instance to reflect immediately in UI
+        }
+        
+        // Automatic Lecturer Role Assignment
+        const isLecturerEmail = u.email.endsWith('@unimy.edu.my') && !u.email.endsWith('@student.unimy.edu.my');
+        if (isLecturerEmail && u.role === 'student') {
+            const ref = doc(db!, "users", u.id);
+            batch.update(ref, { 
+                role: 'lecturer',
+                course: 'Lecturer' 
+            });
+            needsCommit = true;
+            u.role = 'lecturer';
+            u.course = 'Lecturer';
         }
 
         const isLegacy = !u.avatarUrl || 

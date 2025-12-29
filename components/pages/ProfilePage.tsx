@@ -4,7 +4,7 @@ import type { User, Resource } from '../../types';
 import { ResourceRequestStatus } from '../../types';
 import { AppContext } from '../../App';
 import ResourceCard from '../ResourceCard';
-import { Award, UploadCloud, Calendar, MessageSquare as MessageSquareIcon, Edit, X, Save, ArrowLeft, UserPlus, UserMinus, ThumbsUp, MessageSquare, Clock, Loader2 } from 'lucide-react';
+import { Award, UploadCloud, Calendar, MessageSquare as MessageSquareIcon, Edit, X, Save, ArrowLeft, UserPlus, UserMinus, ThumbsUp, MessageSquare, Clock, Loader2, GraduationCap } from 'lucide-react';
 import UserRankBadge from '../UserRankBadge';
 import { storage } from '../../services/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -80,6 +80,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, allResources, isCurrent
         "DFT"
     ];
 
+    const isLecturer = user.role === 'lecturer';
+
     const handleSave = () => {
         if (editedName.trim() === '') {
             alert('Name cannot be empty.');
@@ -89,7 +91,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, allResources, isCurrent
             name: editedName,
             bio: editedBio,
             avatarUrl: editedAvatarUrl,
-            course: editedCourse,
+            course: isLecturer ? 'Lecturer' : editedCourse,
             currentYear: editedYear,
             currentSemester: editedSemester
         });
@@ -155,15 +157,26 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, allResources, isCurrent
                         
                         <div className="flex-grow text-center md:text-left">
                             <div className="flex flex-col md:flex-row md:items-center gap-2 mb-2">
-                                     <h1 className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white">{user.name}</h1>
+                                     <h1 className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white flex items-center gap-2 justify-center md:justify-start">
+                                        {user.name}
+                                        {isLecturer && (
+                                            <span className="bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 text-xs px-2 py-1 rounded-full border border-purple-200 dark:border-purple-800 flex items-center gap-1 font-bold uppercase tracking-wider">
+                                                <GraduationCap size={14} /> Lecturer
+                                            </span>
+                                        )}
+                                     </h1>
                                      <div className="flex justify-center md:justify-start">
-                                        <UserRankBadge rank={userRank} size={28}/>
+                                        {!isLecturer && <UserRankBadge rank={userRank} size={28}/>}
                                      </div>
                             </div>
                             <div className="text-slate-600 dark:text-slate-300 font-medium mb-3 flex flex-wrap justify-center md:justify-start gap-x-4 gap-y-1 items-center">
-                                <span>{user.course}</span>
-                                <span className="hidden md:inline">•</span>
-                                <span>Year {user.currentYear}, Sem {user.currentSemester}</span>
+                                <span>{isLecturer ? 'Lecturer' : user.course}</span>
+                                {!isLecturer && (
+                                    <>
+                                        <span className="hidden md:inline">•</span>
+                                        <span>Year {user.currentYear}, Sem {user.currentSemester}</span>
+                                    </>
+                                )}
                                 <span className="hidden md:inline">•</span>
                                 <span className="flex items-center gap-1 text-sm text-slate-500 dark:text-slate-400">
                                     <Clock size={14} className="inline"/> Joined {formattedJoinDate}
@@ -222,37 +235,39 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, allResources, isCurrent
                                     <label className="block text-sm font-bold text-slate-700 dark:text-white mb-1" htmlFor="edit-name">Full Name</label>
                                     <input id="edit-name" type="text" value={editedName} onChange={e => setEditedName(e.target.value)} className="w-full bg-slate-50 dark:bg-zinc-900 dark:border-dark-border dark:text-white text-slate-900 px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition" required />
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-bold text-slate-700 dark:text-white mb-1" htmlFor="edit-course">Course</label>
-                                        <select 
-                                            id="edit-course" 
-                                            value={editedCourse} 
-                                            onChange={e => setEditedCourse(e.target.value)} 
-                                            className="w-full bg-slate-50 dark:bg-zinc-900 dark:border-dark-border dark:text-white text-slate-900 px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition"
-                                        >
-                                            {courseOptions.map(option => (
-                                                <option key={option} value={option}>{option}</option>
-                                            ))}
-                                        </select>
+                                {!isLecturer && (
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-bold text-slate-700 dark:text-white mb-1" htmlFor="edit-course">Course</label>
+                                            <select 
+                                                id="edit-course" 
+                                                value={editedCourse} 
+                                                onChange={e => setEditedCourse(e.target.value)} 
+                                                className="w-full bg-slate-50 dark:bg-zinc-900 dark:border-dark-border dark:text-white text-slate-900 px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition"
+                                            >
+                                                {courseOptions.map(option => (
+                                                    <option key={option} value={option}>{option}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-bold text-slate-700 dark:text-white mb-1" htmlFor="edit-year">Year</label>
+                                            <select id="edit-year" value={editedYear} onChange={e => setEditedYear(parseInt(e.target.value))} className="w-full bg-slate-50 dark:bg-zinc-900 dark:border-dark-border dark:text-white text-slate-900 px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition">
+                                                {[1, 2, 3, 4].map(y => (
+                                                    <option key={y} value={y}>{y}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-bold text-slate-700 dark:text-white mb-1" htmlFor="edit-sem">Semester</label>
+                                            <select id="edit-sem" value={editedSemester} onChange={e => setEditedSemester(parseInt(e.target.value))} className="w-full bg-slate-50 dark:bg-zinc-900 dark:border-dark-border dark:text-white text-slate-900 px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition">
+                                                {[1, 2, 3].map(s => (
+                                                    <option key={s} value={s}>{s}</option>
+                                                ))}
+                                            </select>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label className="block text-sm font-bold text-slate-700 dark:text-white mb-1" htmlFor="edit-year">Year</label>
-                                        <select id="edit-year" value={editedYear} onChange={e => setEditedYear(parseInt(e.target.value))} className="w-full bg-slate-50 dark:bg-zinc-900 dark:border-dark-border dark:text-white text-slate-900 px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition">
-                                            {[1, 2, 3, 4].map(y => (
-                                                <option key={y} value={y}>{y}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-bold text-slate-700 dark:text-white mb-1" htmlFor="edit-sem">Semester</label>
-                                        <select id="edit-sem" value={editedSemester} onChange={e => setEditedSemester(parseInt(e.target.value))} className="w-full bg-slate-50 dark:bg-zinc-900 dark:border-dark-border dark:text-white text-slate-900 px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition">
-                                            {[1, 2, 3].map(s => (
-                                                <option key={s} value={s}>{s}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                </div>
+                                )}
                              </div>
                         </div>
                          <div className="mt-6">

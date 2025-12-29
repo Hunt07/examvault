@@ -1,7 +1,7 @@
 
 import React, { useContext, useState, useMemo } from 'react';
 import { AppContext } from '../../App';
-import { Shield, User, UserX, UserCheck, AlertTriangle, Trash2, CheckCircle, Search, Ban, RotateCcw, Eye, Check, X } from 'lucide-react';
+import { Shield, User, UserX, UserCheck, AlertTriangle, Trash2, CheckCircle, Search, Ban, RotateCcw, Eye, Check, X, GraduationCap } from 'lucide-react';
 import Avatar from '../Avatar';
 import type { User as UserType, Report } from '../../types';
 
@@ -127,7 +127,11 @@ const AdminPage: React.FC = () => {
                             </thead>
                             <tbody className="divide-y divide-zinc-700">
                                 {filteredUsers.map(user => (
-                                    <tr key={user.id} className="hover:bg-zinc-800/50 transition">
+                                    <tr 
+                                        key={user.id} 
+                                        onClick={() => setView('publicProfile', user.id)}
+                                        className="hover:bg-zinc-800/50 transition cursor-pointer"
+                                    >
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
                                                 <Avatar src={user.avatarUrl} alt={user.name} className="w-10 h-10" />
@@ -157,6 +161,10 @@ const AdminPage: React.FC = () => {
                                                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-red-500/10 text-red-400 border border-red-500/20">
                                                     <Shield size={10} /> ADMIN
                                                 </span>
+                                            ) : user.role === 'lecturer' ? (
+                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                                                    <GraduationCap size={12} /> LECTURER
+                                                </span>
                                             ) : (
                                                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-zinc-700 text-zinc-300 border border-zinc-600">
                                                     STUDENT
@@ -165,16 +173,19 @@ const AdminPage: React.FC = () => {
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex items-center justify-end gap-2">
-                                                <button 
-                                                    onClick={() => handlePromote(user.id, user.role)}
-                                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/10 text-blue-400 hover:bg-blue-600/20 border border-blue-600/20 text-xs font-semibold transition"
-                                                >
-                                                    {user.role === 'student' ? <UserCheck size={14} /> : <UserX size={14} />}
-                                                    {user.role === 'student' ? 'Promote' : 'Demote'}
-                                                </button>
+                                                {/* Only allow role toggle if not a lecturer (auto-assigned) or if promoting student/admin */}
+                                                {user.role !== 'lecturer' && (
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); handlePromote(user.id, user.role as 'student' | 'admin'); }}
+                                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/10 text-blue-400 hover:bg-blue-600/20 border border-blue-600/20 text-xs font-semibold transition"
+                                                    >
+                                                        {user.role === 'student' ? <UserCheck size={14} /> : <UserX size={14} />}
+                                                        {user.role === 'student' ? 'Promote' : 'Demote'}
+                                                    </button>
+                                                )}
                                                 {user.status === 'banned' ? (
                                                     <button 
-                                                        onClick={() => handleBan(user.id, user.status)}
+                                                        onClick={(e) => { e.stopPropagation(); handleBan(user.id, user.status); }}
                                                         className="p-1.5 rounded-lg bg-green-600/10 text-green-400 hover:bg-green-600/20 border border-green-600/20 transition group relative"
                                                         title="Restore Access"
                                                     >
@@ -183,7 +194,7 @@ const AdminPage: React.FC = () => {
                                                     </button>
                                                 ) : (
                                                     <button 
-                                                        onClick={() => handleBan(user.id, user.status)}
+                                                        onClick={(e) => { e.stopPropagation(); handleBan(user.id, user.status); }}
                                                         className="p-1.5 rounded-lg bg-red-600/10 text-red-400 hover:bg-red-600/20 border border-red-600/20 transition group relative"
                                                         title="Restrict User"
                                                     >

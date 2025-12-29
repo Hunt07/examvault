@@ -1,18 +1,19 @@
 
 import React, { useContext, useState } from 'react';
 import { AppContext, View } from '../App';
-import { LayoutDashboard, MessageSquare, BarChart3, Send, ClipboardList } from 'lucide-react';
+import { LayoutDashboard, MessageSquare, BarChart3, Send, ClipboardList, Shield } from 'lucide-react';
 
 const SideNav: React.FC = () => {
-    const { view, setView, hasUnreadMessages, hasUnreadDiscussions } = useContext(AppContext);
+    const { view, setView, hasUnreadMessages, hasUnreadDiscussions, user } = useContext(AppContext);
     const [isHovered, setIsHovered] = useState(false);
 
-    const navItems: { name: string; icon: React.ElementType; view: View; id: string }[] = [
+    const navItems: { name: string; icon: React.ElementType; view: View; id: string; adminOnly?: boolean }[] = [
         { name: 'Dashboard', icon: LayoutDashboard, view: 'dashboard', id: 'tour-dashboard' },
         { name: 'Discussions', icon: MessageSquare, view: 'discussions', id: 'tour-discussions' },
         { name: 'Requests', icon: ClipboardList, view: 'requests', id: 'tour-requests' },
         { name: 'Messages', icon: Send, view: 'messages', id: 'tour-messages' },
         { name: 'Leaderboard', icon: BarChart3, view: 'leaderboard', id: 'tour-leaderboard' },
+        { name: 'Admin Dashboard', icon: Shield, view: 'admin', id: 'admin-dashboard', adminOnly: true },
     ];
 
     return (
@@ -24,6 +25,8 @@ const SideNav: React.FC = () => {
         >
             <nav className="flex flex-col gap-3 p-3 mt-4">
                 {navItems.map((item) => {
+                    if (item.adminOnly && user?.role !== 'admin') return null;
+
                     const hasUnread = (item.view === 'messages' && hasUnreadMessages) || (item.view === 'discussions' && hasUnreadDiscussions);
                     const isActive = view === item.view;
 

@@ -20,6 +20,8 @@ export const mockUser: User = {
     courseCodes: ['BCCS2033'],
   },
   savedResourceIds: ['res-2', 'res-7'],
+  role: 'student',
+  status: 'active',
 };
 
 const mockUser2: User = {
@@ -37,6 +39,8 @@ const mockUser2: User = {
   currentSemester: 1,
   subscriptions: { users: [], lecturers: [], courseCodes: [] },
   savedResourceIds: [],
+  role: 'student',
+  status: 'active',
 };
 
 const mockUser3: User = {
@@ -54,6 +58,8 @@ const mockUser3: User = {
   currentSemester: 2,
   subscriptions: { users: [], lecturers: [], courseCodes: [] },
   savedResourceIds: [],
+  role: 'student',
+  status: 'active',
 };
 
 const mockUser4: User = {
@@ -71,6 +77,8 @@ const mockUser4: User = {
   currentSemester: 3,
   subscriptions: { users: [], lecturers: [], courseCodes: [] },
   savedResourceIds: [],
+  role: 'student',
+  status: 'active',
 };
 
 const mockUser5: User = {
@@ -88,6 +96,8 @@ const mockUser5: User = {
   currentSemester: 1,
   subscriptions: { users: [], lecturers: [], courseCodes: [] },
   savedResourceIds: [],
+  role: 'student',
+  status: 'active',
 };
 
 const mockUser6: User = {
@@ -105,6 +115,8 @@ const mockUser6: User = {
   currentSemester: 2,
   subscriptions: { users: [], lecturers: [], courseCodes: [] },
   savedResourceIds: [],
+  role: 'student',
+  status: 'active',
 };
 
 export const mockUsers: User[] = [mockUser, mockUser2, mockUser3, mockUser4, mockUser5, mockUser6];

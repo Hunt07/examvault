@@ -14,6 +14,8 @@ export interface User {
   currentSemester: number;
   subscriptions: UserSubscriptions;
   savedResourceIds: string[];
+  role: 'student' | 'admin';
+  status: 'active' | 'banned';
 }
 
 export interface UserSubscriptions {
@@ -192,4 +194,17 @@ export interface ResourceRequest {
     resourceId: string;
     timestamp: string;
   };
+}
+
+export interface Report {
+  id: string;
+  resourceId: string;
+  resourceTitle: string;
+  uploaderId: string;
+  uploaderName: string;
+  reporterId: string;
+  reporterName: string;
+  reason: string;
+  timestamp: string;
+  status: 'pending' | 'resolved' | 'dismissed';
 }

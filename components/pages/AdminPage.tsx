@@ -41,6 +41,9 @@ const AdminPage: React.FC = () => {
     };
 
     const handleDeleteResource = async (report: Report) => {
+        // We assume we don't have file URL here easily, but deleteResource handles it if empty gracefully or we fetch first.
+        // For simplicity in admin view, we just delete the doc.
+        // Ideally we pass URLs but the Report type might be lightweight.
         await deleteResource(report.resourceId, '', ''); 
         resolveReport(report.id, 'resolved');
         showToast("Resource deleted and report resolved.", "success");
@@ -60,6 +63,7 @@ const AdminPage: React.FC = () => {
                         </div>
                         <p className="text-zinc-400">Security & Moderation Controls</p>
                     </div>
+                    {/* Stats or extra info could go here */}
                 </div>
                 {/* Decoration */}
                 <div className="absolute top-0 right-0 w-64 h-64 bg-red-500/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>

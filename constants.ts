@@ -20,7 +20,7 @@ export const mockUser: User = {
     courseCodes: ['BCCS2033'],
   },
   savedResourceIds: ['res-2', 'res-7'],
-  role: 'student',
+  role: 'admin', // Make the main mock user an Admin for easy testing
   status: 'active',
 };
 

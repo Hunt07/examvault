@@ -7,13 +7,12 @@ const SideNav: React.FC = () => {
     const { view, setView, hasUnreadMessages, hasUnreadDiscussions, user } = useContext(AppContext);
     const [isHovered, setIsHovered] = useState(false);
 
-    const navItems: { name: string; icon: React.ElementType; view: View; id: string; adminOnly?: boolean }[] = [
+    const navItems: { name: string; icon: React.ElementType; view: View; id: string; }[] = [
         { name: 'Dashboard', icon: LayoutDashboard, view: 'dashboard', id: 'tour-dashboard' },
         { name: 'Discussions', icon: MessageSquare, view: 'discussions', id: 'tour-discussions' },
         { name: 'Requests', icon: ClipboardList, view: 'requests', id: 'tour-requests' },
         { name: 'Messages', icon: Send, view: 'messages', id: 'tour-messages' },
         { name: 'Leaderboard', icon: BarChart3, view: 'leaderboard', id: 'tour-leaderboard' },
-        { name: 'Admin Dashboard', icon: Shield, view: 'admin', id: 'admin-dashboard', adminOnly: true },
     ];
 
     return (
@@ -23,10 +22,8 @@ const SideNav: React.FC = () => {
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
         >
-            <nav className="flex flex-col gap-3 p-3 mt-4">
+            <nav className="flex flex-col gap-3 p-3 mt-4 flex-grow">
                 {navItems.map((item) => {
-                    if (item.adminOnly && user?.role !== 'admin') return null;
-
                     const hasUnread = (item.view === 'messages' && hasUnreadMessages) || (item.view === 'discussions' && hasUnreadDiscussions);
                     const isActive = view === item.view;
 
@@ -64,6 +61,35 @@ const SideNav: React.FC = () => {
                     );
                 })}
             </nav>
+
+            {user?.role === 'admin' && (
+                <div className="p-3 mb-2 border-t border-slate-100 dark:border-zinc-800">
+                     <button
+                        id="admin-dashboard"
+                        onClick={() => {
+                            setView('admin');
+                            setIsHovered(false);
+                        }}
+                        className={`relative group flex items-center px-4 py-3.5 rounded-2xl font-medium transition-all duration-300 w-full text-left overflow-hidden whitespace-nowrap ${
+                            view === 'admin'
+                                ? 'bg-gradient-to-r from-red-600 to-red-500 text-white shadow-lg shadow-red-500/25 translate-x-1'
+                                : 'text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 hover:text-red-600 hover:translate-x-1'
+                        }`}
+                        title={!isHovered ? "Admin Dashboard" : ''}
+                    >
+                        <div className="flex items-center justify-center min-w-[1.5rem]">
+                            <Shield 
+                                size={24} 
+                                className={`shrink-0 transition-colors duration-300 ${view === 'admin' ? 'text-white' : 'text-red-500 group-hover:text-red-600'}`} 
+                            />
+                        </div>
+                        
+                        <span className={`ml-4 transition-all duration-500 ease-out font-bold ${isHovered ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-8'}`}>
+                            Admin Dashboard
+                        </span>
+                    </button>
+                </div>
+            )}
         </aside>
     );
 };

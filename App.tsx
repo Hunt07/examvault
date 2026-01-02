@@ -83,6 +83,7 @@ interface AppContextType {
   goBack: () => void;
   deleteResource: (resourceId: string, fileUrl: string, previewUrl?: string) => Promise<void>;
   deactivateAccount: () => Promise<void>; // Added deactivateAccount
+  deleteAccount: () => Promise<void>; // Added Permanent Delete
   hasUnreadMessages: boolean;
   hasUnreadDiscussions: boolean;
   isLoading: boolean;
@@ -714,6 +715,97 @@ const App: React.FC = () => {
       } catch (error) {
           console.error("Failed to deactivate account", error);
           showToast("Failed to deactivate account.", "error");
+      }
+  };
+
+  const deleteAccount = async () => {
+      if (!user || !db) return;
+      
+      setIsLoading(true);
+      
+      try {
+          // 1. Delete Resources
+          // We must query them to get IDs and File URLs
+          const resQuery = query(collection(db, "resources"), where("author.id", "==", user.id));
+          const resSnap = await getDocs(resQuery);
+          
+          for (const docSnap of resSnap.docs) {
+              const res = docSnap.data() as Resource;
+              await deleteResource(docSnap.id, res.fileUrl, res.previewImageUrl);
+          }
+
+          // 2. Delete Forum Posts
+          const postQuery = query(collection(db, "forumPosts"), where("author.id", "==", user.id));
+          const postSnap = await getDocs(postQuery);
+          
+          for (const docSnap of postSnap.docs) {
+              const post = docSnap.data() as ForumPost;
+              await deleteDoc(doc(db, "forumPosts", docSnap.id));
+              if (post.attachment && storage) {
+                  try {
+                      // Attempt to delete attachment if exists
+                      // Note: We need a reliable way to get storage ref from URL, or assume path structure.
+                      // Since we store full URL, we can use ref(storage, url)
+                      const attRef = ref(storage, post.attachment.url);
+                      await deleteObject(attRef);
+                  } catch (e) {
+                      console.warn("Could not delete forum attachment", e);
+                  }
+              }
+          }
+
+          // 3. Delete Resource Requests
+          const reqQuery = query(collection(db, "resourceRequests"), where("requester.id", "==", user.id));
+          const reqSnap = await getDocs(reqQuery);
+          for (const docSnap of reqSnap.docs) {
+              const req = docSnap.data() as ResourceRequest;
+              await deleteDoc(doc(db, "resourceRequests", docSnap.id));
+              if (req.attachment && storage) {
+                  try {
+                      const attRef = ref(storage, req.attachment.url);
+                      await deleteObject(attRef);
+                  } catch (e) {
+                      console.warn("Could not delete request attachment", e);
+                  }
+              }
+          }
+
+          // 4. Delete Avatar
+          if (user.avatarUrl && user.avatarUrl.includes("firebasestorage") && storage) {
+              try {
+                  const avatarRef = ref(storage, user.avatarUrl);
+                  await deleteObject(avatarRef);
+              } catch (e) {
+                  console.warn("Could not delete avatar", e);
+              }
+          }
+
+          // 5. Delete User Document
+          await deleteDoc(doc(db, "users", user.id));
+
+          // 6. Reset Tour Guide LocalStorage so they are treated as new if they return
+          localStorage.removeItem(`examvault_tour_${user.id}`);
+
+          // 7. Delete Auth Account
+          if (auth.currentUser) {
+              await auth.currentUser.delete();
+          } else {
+              // Fallback if not authenticated properly for deletion
+              await logout();
+          }
+          
+          // Force refresh/redirect handled by auth state listener usually, but since we deleted user,
+          // the listener might trigger with null.
+          window.location.reload();
+
+      } catch (error: any) {
+          console.error("Failed to delete account", error);
+          if (error.code === 'auth/requires-recent-login') {
+              showToast("For security, please log out and log in again to delete your account.", "error");
+          } else {
+              showToast("Failed to delete account completely. Contact support.", "error");
+          }
+          setIsLoading(false);
       }
   };
 
@@ -1616,7 +1708,7 @@ const App: React.FC = () => {
       updateUserProfile, sendMessage, editMessage, deleteMessage, startConversation, sendDirectMessageToUser, markNotificationAsRead, markAllNotificationsAsRead, markMessagesAsRead,
       clearAllNotifications,
       goBack, hasUnreadMessages, hasUnreadDiscussions,
-      isLoading, deleteResource, deactivateAccount,
+      isLoading, deleteResource, deactivateAccount, deleteAccount,
       areResourcesLoading,
       scrollTargetId, setScrollTargetId,
       showToast,

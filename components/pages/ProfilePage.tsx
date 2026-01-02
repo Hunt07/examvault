@@ -28,7 +28,7 @@ const StatCard: React.FC<{ icon: React.ReactNode; label: string; value: string |
 );
 
 const ProfilePage: React.FC<ProfilePageProps> = ({ user, allResources, isCurrentUser }) => {
-    const { userRanks, setView, forumPosts, updateUserProfile, user: loggedInUser, goBack, toggleUserSubscription, startConversation, resourceRequests, deactivateAccount } = useContext(AppContext);
+    const { userRanks, setView, forumPosts, updateUserProfile, user: loggedInUser, goBack, toggleUserSubscription, startConversation, resourceRequests, deactivateAccount, deleteAccount } = useContext(AppContext);
 
     const [isEditing, setIsEditing] = useState(false);
     const [editedName, setEditedName] = useState(user.name);
@@ -142,6 +142,11 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, allResources, isCurrent
     const confirmDeactivate = () => {
         deactivateAccount();
         setShowDeactivateConfirm(false);
+    };
+
+    const confirmDelete = () => {
+        deleteAccount();
+        setShowDeleteConfirm(false);
     };
 
     // If viewing another user and they are deactivated, block access
@@ -486,11 +491,11 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, allResources, isCurrent
                         <p className="text-slate-600 dark:text-slate-300 mb-6">
                             This action is permanent and cannot be undone. All your data will be wiped. 
                             <br/><br/>
-                            <span className="text-sm italic text-slate-500">Feature currently disabled for safety demo.</span>
+                            <span className="text-sm italic text-slate-500">You will be logged out immediately.</span>
                         </p>
                         <div className="flex gap-3 justify-end">
                             <button onClick={() => setShowDeleteConfirm(false)} className="px-4 py-2 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-slate-200 font-bold rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-700 transition">Cancel</button>
-                            <button disabled className="px-4 py-2 bg-red-600/50 text-white font-bold rounded-lg cursor-not-allowed">Delete</button>
+                            <button onClick={confirmDelete} className="px-4 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition">Delete</button>
                         </div>
                     </div>
                 </div>

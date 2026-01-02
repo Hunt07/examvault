@@ -3,7 +3,7 @@ import React, { useContext, useMemo, useState, useEffect, useRef } from 'react';
 import { AppContext } from '../../App';
 import type { User } from '../../types';
 import { MessageStatus, ResourceType } from '../../types';
-import { Send, Check, CheckCheck, MessageCircle, ArrowLeft, FileText, Notebook, ClipboardList, Archive, ExternalLink, MoreVertical, Edit2, Trash2, X, Smile } from 'lucide-react';
+import { Send, Check, CheckCheck, MessageCircle, ArrowLeft, FileText, Notebook, ClipboardList, Archive, ExternalLink, MoreVertical, Edit2, Trash2, X, Smile, UserX } from 'lucide-react';
 import Avatar from '../Avatar';
 
 const formatTimestamp = (timestamp: string): string => {
@@ -261,6 +261,13 @@ const MessagesPage: React.FC<{ activeConversationId: string | null }> = ({ activ
 
     const usersMap = useMemo(() => new Map(users.map(u => [u.id, u])), [users]);
 
+    const DELETED_USER: Partial<User> = {
+        id: 'deleted',
+        name: 'Deleted Account',
+        avatarUrl: '', // Will fallback to default in Avatar component
+        course: 'User Removed'
+    };
+
     const emojis = ['😀', '😂', '😭', '😍', '🥰', '😎', '😊', '🤔', '😅', '🙌', '👍', '👎', '🎉', '🔥', '❤️', '💔'];
 
     const userConversations = useMemo(() => {
@@ -277,7 +284,10 @@ const MessagesPage: React.FC<{ activeConversationId: string | null }> = ({ activ
     const otherParticipant = useMemo(() => {
         if (!activeConversation || !user) return null;
         const otherParticipantId = activeConversation.participants.find(pId => pId !== user.id);
-        return otherParticipantId ? usersMap.get(otherParticipantId) : null;
+        if (!otherParticipantId) return null;
+        
+        // If user is not found in the users list (deleted), return placeholder
+        return usersMap.get(otherParticipantId) || (DELETED_USER as User);
     }, [activeConversation, user, usersMap]);
 
     const activeChatMessages = useMemo(() => {
@@ -307,6 +317,9 @@ const MessagesPage: React.FC<{ activeConversationId: string | null }> = ({ activ
 
     const handleSendMessage = (e: React.FormEvent) => {
         e.preventDefault();
+        // Prevent sending messages to deleted users
+        if (otherParticipant?.id === 'deleted') return;
+
         if (newMessage.trim() && activeConversationId) {
             sendMessage(activeConversationId, newMessage);
             setNewMessage('');
@@ -330,11 +343,10 @@ const MessagesPage: React.FC<{ activeConversationId: string | null }> = ({ activ
                 <div className="flex-grow overflow-y-auto">
                     {userConversations.map(convo => {
                         const otherParticipantId = convo.participants.find(pId => pId !== user.id);
-                        const otherParticipant = otherParticipantId ? usersMap.get(otherParticipantId) : null;
+                        // Safe access or fallback to DELETED_USER
+                        const otherParticipant = (otherParticipantId ? usersMap.get(otherParticipantId) : null) || (DELETED_USER as User);
                         const lastMessage = directMessages.filter(m => m.conversationId === convo.id).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
                         const unreadCount = directMessages.filter(m => m.conversationId === convo.id && m.recipientId === user.id && m.status !== MessageStatus.Read).length;
-
-                        if (!otherParticipant) return null;
 
                         return (
                             <button
@@ -370,8 +382,9 @@ const MessagesPage: React.FC<{ activeConversationId: string | null }> = ({ activ
                                 <ArrowLeft size={20} className="dark:text-white" />
                             </button>
                             <button 
-                                onClick={() => setView('publicProfile', otherParticipant.id)}
-                                className="flex items-center gap-4 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors rounded-md p-1 -m-1 flex-grow min-w-0"
+                                onClick={() => otherParticipant.id !== 'deleted' && setView('publicProfile', otherParticipant.id)}
+                                disabled={otherParticipant.id === 'deleted'}
+                                className={`flex items-center gap-4 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors rounded-md p-1 -m-1 flex-grow min-w-0 ${otherParticipant.id === 'deleted' ? 'cursor-default hover:bg-transparent' : ''}`}
                             >
                                 <Avatar src={otherParticipant.avatarUrl} alt="avatar" className="w-10 h-10" />
                                 <div className="min-w-0">
@@ -385,7 +398,7 @@ const MessagesPage: React.FC<{ activeConversationId: string | null }> = ({ activ
                             <div className="space-y-4">
                                 {activeChatMessages.map(msg => (
                                     <div key={msg.id} className={`flex items-end gap-2 ${msg.senderId === user.id ? 'justify-end' : ''}`}>
-                                        {msg.senderId !== user.id && <Avatar src={usersMap.get(msg.senderId)?.avatarUrl} alt="sender" className="w-8 h-8" />}
+                                        {msg.senderId !== user.id && <Avatar src={(usersMap.get(msg.senderId) || DELETED_USER as User).avatarUrl} alt="sender" className="w-8 h-8" />}
                                         <div className={`max-w-[85%] md:max-w-md p-3 rounded-2xl min-w-0 ${msg.senderId === user.id ? 'bg-primary-500 text-white rounded-br-none' : 'bg-white dark:bg-zinc-700 text-slate-800 dark:text-white rounded-bl-none shadow-sm'}`}>
                                             <MessageBubble 
                                                 message={{
@@ -409,29 +422,38 @@ const MessagesPage: React.FC<{ activeConversationId: string | null }> = ({ activ
                             </div>
                         </div>
                         <div className="p-4 bg-white dark:bg-dark-surface border-t border-slate-200 dark:border-zinc-700 w-full relative">
-                            {showEmojiPicker && (
-                                <div ref={emojiPickerRef} className="absolute bottom-20 right-4 bg-white dark:bg-zinc-800 shadow-xl rounded-lg p-2 border border-slate-200 dark:border-zinc-700 grid grid-cols-4 gap-2 z-20">
-                                    {emojis.map(emoji => (
-                                        <button key={emoji} onClick={() => addEmoji(emoji)} className="text-xl p-1 hover:bg-slate-100 dark:hover:bg-zinc-700 rounded transition">{emoji}</button>
-                                    ))}
+                            {otherParticipant.id === 'deleted' ? (
+                                <div className="text-center text-slate-500 dark:text-slate-400 text-sm py-3 bg-slate-50 dark:bg-zinc-800 rounded-lg flex items-center justify-center gap-2">
+                                    <UserX size={16} />
+                                    <span>Cannot reply. This account has been deleted.</span>
                                 </div>
+                            ) : (
+                                <>
+                                    {showEmojiPicker && (
+                                        <div ref={emojiPickerRef} className="absolute bottom-20 right-4 bg-white dark:bg-zinc-800 shadow-xl rounded-lg p-2 border border-slate-200 dark:border-zinc-700 grid grid-cols-4 gap-2 z-20">
+                                            {emojis.map(emoji => (
+                                                <button key={emoji} onClick={() => addEmoji(emoji)} className="text-xl p-1 hover:bg-slate-100 dark:hover:bg-zinc-700 rounded transition">{emoji}</button>
+                                            ))}
+                                        </div>
+                                    )}
+                                    <form onSubmit={handleSendMessage} className="flex items-center gap-2 w-full">
+                                        <input
+                                            type="text"
+                                            value={newMessage}
+                                            onChange={(e) => setNewMessage(e.target.value)}
+                                            placeholder="Type a message..."
+                                            className="flex-grow bg-slate-100 dark:bg-zinc-800 dark:text-white text-slate-900 placeholder:text-slate-500 dark:placeholder:text-slate-500 px-4 py-3 border border-slate-300 dark:border-zinc-700 rounded-full focus:ring-primary-500 focus:border-primary-500 transition min-w-0"
+                                            autoComplete="off"
+                                        />
+                                        <button type="button" onClick={() => setShowEmojiPicker(!showEmojiPicker)} className="p-2 text-slate-500 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 transition">
+                                            <Smile size={24} />
+                                        </button>
+                                        <button type="submit" className="bg-primary-600 text-white p-3 rounded-full hover:bg-primary-700 transition shrink-0">
+                                            <Send size={20} />
+                                        </button>
+                                    </form>
+                                </>
                             )}
-                            <form onSubmit={handleSendMessage} className="flex items-center gap-2 w-full">
-                                <input
-                                    type="text"
-                                    value={newMessage}
-                                    onChange={(e) => setNewMessage(e.target.value)}
-                                    placeholder="Type a message..."
-                                    className="flex-grow bg-slate-100 dark:bg-zinc-800 dark:text-white text-slate-900 placeholder:text-slate-500 dark:placeholder:text-slate-500 px-4 py-3 border border-slate-300 dark:border-zinc-700 rounded-full focus:ring-primary-500 focus:border-primary-500 transition min-w-0"
-                                    autoComplete="off"
-                                />
-                                <button type="button" onClick={() => setShowEmojiPicker(!showEmojiPicker)} className="p-2 text-slate-500 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 transition">
-                                    <Smile size={24} />
-                                </button>
-                                <button type="submit" className="bg-primary-600 text-white p-3 rounded-full hover:bg-primary-700 transition shrink-0">
-                                    <Send size={20} />
-                                </button>
-                            </form>
                         </div>
                     </>
                 ) : (

@@ -415,40 +415,17 @@ const App: React.FC = () => {
       // 1. Fetch raw data first to perform sorting
       let rawUsers = snapshot.docs.map(docSnap => ({ ...docSnap.data(), id: docSnap.id } as User));
 
-      // 2. Robust Deduplication and Sorting
-      // Sort users such that the "best" version of a user comes first.
+      // 2. Sort to prioritize the correct Master Admin account ("Osama") over duplicates
+      // This ensures "Osama" is processed first and kept, while duplicates are filtered out below.
       rawUsers.sort((a, b) => {
-          const emailA = a.email.toLowerCase().trim();
-          const emailB = b.email.toLowerCase().trim();
-
-          // Group by email so duplicates are checked against each other
-          if (emailA !== emailB) {
-             return 0; // Relative order of distinct emails doesn't strictly matter for dedupe, but helps stability
+          if (a.email === MASTER_ADMIN_EMAIL && b.email === MASTER_ADMIN_EMAIL) {
+              // Explicitly prefer "Osama"
+              if (a.name === 'Osama') return -1;
+              if (b.name === 'Osama') return 1;
+              // Fallback: Prefer shorter name (usually the clean one)
+              return a.name.length - b.name.length;
           }
-
-          // --- Tie-breaking for duplicates (Same Email) ---
-
-          // 1. Master Admin Preference (Explicit)
-          if (emailA === MASTER_ADMIN_EMAIL.toLowerCase()) {
-              const nameA = a.name.toLowerCase();
-              const nameB = b.name.toLowerCase();
-              
-              // Explicitly prefer the name 'osama' if present
-              if (nameA === 'osama' && nameB !== 'osama') return -1;
-              if (nameB === 'osama' && nameA !== 'osama') return 1;
-          }
-
-          // 2. Admin Role Priority
-          if (a.role === 'admin' && b.role !== 'admin') return -1;
-          if (b.role === 'admin' && a.role !== 'admin') return 1;
-
-          // 3. Name Length Priority (SHORTER is better - this fixes 'Osama' vs 'AHMED OSAMA...')
-          const lenA = a.name.trim().length;
-          const lenB = b.name.trim().length;
-          if (lenA !== lenB) return lenA - lenB; // Ascending length (shorter first)
-
-          // 4. Points (Fallback: Account with more history)
-          return b.points - a.points;
+          return 0;
       });
 
       const fetchedUsers: User[] = [];
@@ -459,13 +436,12 @@ const App: React.FC = () => {
 
       rawUsers.forEach((u) => {
         // DEDUPLICATION LOGIC:
-        // Because we sorted the array above, the "best" account for each email appears first.
-        // We add the first one we see to the Set, and skip subsequent duplicates.
-        const normalizedEmail = u.email.toLowerCase().trim();
-        if (seenEmails.has(normalizedEmail)) {
+        // If we have already seen this email in this sorted list, skip it.
+        // Since we sorted 'Osama' to be first, the other duplicates will be skipped here.
+        if (seenEmails.has(u.email)) {
             return;
         }
-        seenEmails.add(normalizedEmail);
+        seenEmails.add(u.email);
 
         // Ensure defaults for all users in view
         if (!u.role) u.role = 'student';
@@ -476,7 +452,7 @@ const App: React.FC = () => {
              const ref = doc(db!, "users", u.id);
              batch.update(ref, { role: 'admin' });
              needsCommit = true;
-             u.role = 'admin';
+             u.role = 'admin'; // Update local instance to reflect immediately in UI
         }
         
         // Automatic Lecturer Role & Bio Assignment
@@ -525,24 +501,17 @@ const App: React.FC = () => {
 
       setUsers(fetchedUsers);
       
-      // Update self if data changed remotely OR if we need to switch to a deduplicated "master" profile
-      if (auth.currentUser?.email) {
-          const myEmail = auth.currentUser.email.toLowerCase().trim();
-          // Find the "Winner" profile for my email from the filtered list
-          const bestProfileForMe = fetchedUsers.find(u => u.email.toLowerCase().trim() === myEmail);
-
-          if (bestProfileForMe) {
-              // If we are currently null, OR our ID doesn't match the best profile (we were using the duplicate),
-              // OR the data inside the profile has changed.
-              if (!user || user.id !== bestProfileForMe.id || JSON.stringify(user) !== JSON.stringify(bestProfileForMe)) {
-                   if (bestProfileForMe.status === 'banned') {
-                       logout();
-                       showToast("Your account has been restricted.", "error");
-                   } else {
-                       setUser(bestProfileForMe);
-                   }
-              }
-          }
+      // Update self if data changed remotely (e.g. role change)
+      if (user) {
+        const me = fetchedUsers.find(u => u.id === user.id);
+        if (me) {
+             if (me.status === 'banned') {
+                 logout(); // Force logout if banned live
+                 showToast("Your account has been restricted.", "error");
+             } else {
+                 setUser(me);
+             }
+        }
       }
     });
 
@@ -664,16 +633,14 @@ const App: React.FC = () => {
   }, [directMessages, user]);
 
   useEffect(() => {
-    // Only run this logic when the user ID changes (login/logout) or loading finishes.
-    // We avoid depending on the entire 'user' object to prevent resets when fields like 'lastActive' update.
-    if (user?.id && !isLoading) {
+    if (user && !isLoading) {
       const hasSeenTour = localStorage.getItem(`examvault_tour_${user.id}`);
       if (!hasSeenTour) {
         setRunTour(true);
         setTourStep(1);
       }
     }
-  }, [user?.id, isLoading]);
+  }, [user, isLoading]);
 
   const finishTour = () => {
     setRunTour(false);

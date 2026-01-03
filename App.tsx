@@ -415,15 +415,30 @@ const App: React.FC = () => {
       // 1. Fetch raw data first to perform sorting
       let rawUsers = snapshot.docs.map(docSnap => ({ ...docSnap.data(), id: docSnap.id } as User));
 
-      // 2. Sort to prioritize the correct Master Admin account ("Osama") over duplicates
-      // This ensures "Osama" is processed first and kept, while duplicates are filtered out below.
+      // 2. Robust Deduplication and Sorting
+      // Prioritize "Osama" master admin, then Active users (recent lastActive), then Admin role
       rawUsers.sort((a, b) => {
-          if (a.email === MASTER_ADMIN_EMAIL && b.email === MASTER_ADMIN_EMAIL) {
-              // Explicitly prefer "Osama"
-              if (a.name === 'Osama') return -1;
-              if (b.name === 'Osama') return 1;
-              // Fallback: Prefer shorter name (usually the clean one)
-              return a.name.length - b.name.length;
+          if (a.email === b.email) {
+              // 1. Prefer "Osama" for Master Admin email
+              if (a.email === MASTER_ADMIN_EMAIL) {
+                  if (a.name === 'Osama' && b.name !== 'Osama') return -1;
+                  if (b.name === 'Osama' && a.name !== 'Osama') return 1;
+              }
+
+              // 2. Prefer the currently active one (Recently updated lastActive timestamp)
+              // This is critical because the active session keeps updating its own timestamp
+              const aTime = a.lastActive ? new Date(a.lastActive).getTime() : 0;
+              const bTime = b.lastActive ? new Date(b.lastActive).getTime() : 0;
+              if (aTime !== bTime) {
+                  return bTime - aTime; // Descending: Newer timestamp wins
+              }
+
+              // 3. Prefer Admin role
+              if (a.role === 'admin' && b.role !== 'admin') return -1;
+              if (b.role === 'admin' && a.role !== 'admin') return 1;
+
+              // 4. Prefer higher points
+              return b.points - a.points;
           }
           return 0;
       });
@@ -436,8 +451,8 @@ const App: React.FC = () => {
 
       rawUsers.forEach((u) => {
         // DEDUPLICATION LOGIC:
-        // If we have already seen this email in this sorted list, skip it.
-        // Since we sorted 'Osama' to be first, the other duplicates will be skipped here.
+        // Because we sorted the array above, the "best" account for each email appears first.
+        // We add the first one we see to the Set, and skip subsequent duplicates.
         if (seenEmails.has(u.email)) {
             return;
         }
@@ -503,6 +518,7 @@ const App: React.FC = () => {
       
       // Update self if data changed remotely (e.g. role change)
       if (user) {
+        // Find self in the filtered unique list
         const me = fetchedUsers.find(u => u.id === user.id);
         if (me) {
              if (me.status === 'banned') {

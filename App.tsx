@@ -415,39 +415,15 @@ const App: React.FC = () => {
       // 1. Fetch raw data first to perform sorting
       let rawUsers = snapshot.docs.map(docSnap => ({ ...docSnap.data(), id: docSnap.id } as User));
 
-      // 2. Robust Deduplication and Sorting
-      // Prioritize "Osama" master admin by explicitly checking name and name length
+      // 2. Sort to prioritize the correct Master Admin account ("Osama") over duplicates
+      // This ensures "Osama" is processed first and kept, while duplicates are filtered out below.
       rawUsers.sort((a, b) => {
-          const emailA = a.email.toLowerCase();
-          const emailB = b.email.toLowerCase();
-          
-          if (emailA === emailB) {
-              const targetEmail = MASTER_ADMIN_EMAIL.toLowerCase();
-              
-              // 1. Specific Master Admin Logic - Prefer exact name match or shorter name
-              if (emailA === targetEmail) {
-                  const nameA = a.name.trim();
-                  const nameB = b.name.trim();
-                  
-                  // Explicitly prefer 'Osama' (case-insensitive)
-                  if (nameA.toLowerCase() === 'osama' && nameB.toLowerCase() !== 'osama') return -1;
-                  if (nameB.toLowerCase() === 'osama' && nameA.toLowerCase() !== 'osama') return 1;
-              }
-
-              // 2. Prefer Admin Role
-              if (a.role === 'admin' && b.role !== 'admin') return -1;
-              if (b.role === 'admin' && a.role !== 'admin') return 1;
-
-              // 3. Prefer higher points (assuming "real" account has history)
-              if (a.points !== b.points) return b.points - a.points;
-
-              // 4. Prefer Shorter Name (cleaner display names vs full SSO names)
-              if (a.name.length !== b.name.length) return a.name.length - b.name.length;
-
-              // 5. Fallback to recent activity
-              const aTime = a.lastActive ? new Date(a.lastActive).getTime() : 0;
-              const bTime = b.lastActive ? new Date(b.lastActive).getTime() : 0;
-              return bTime - aTime;
+          if (a.email === MASTER_ADMIN_EMAIL && b.email === MASTER_ADMIN_EMAIL) {
+              // Explicitly prefer "Osama"
+              if (a.name === 'Osama') return -1;
+              if (b.name === 'Osama') return 1;
+              // Fallback: Prefer shorter name (usually the clean one)
+              return a.name.length - b.name.length;
           }
           return 0;
       });
@@ -460,13 +436,12 @@ const App: React.FC = () => {
 
       rawUsers.forEach((u) => {
         // DEDUPLICATION LOGIC:
-        // Because we sorted the array above, the "best" account for each email appears first.
-        // We add the first one we see to the Set, and skip subsequent duplicates.
-        const normalizedEmail = u.email.toLowerCase();
-        if (seenEmails.has(normalizedEmail)) {
+        // If we have already seen this email in this sorted list, skip it.
+        // Since we sorted 'Osama' to be first, the other duplicates will be skipped here.
+        if (seenEmails.has(u.email)) {
             return;
         }
-        seenEmails.add(normalizedEmail);
+        seenEmails.add(u.email);
 
         // Ensure defaults for all users in view
         if (!u.role) u.role = 'student';
@@ -528,12 +503,7 @@ const App: React.FC = () => {
       
       // Update self if data changed remotely (e.g. role change)
       if (user) {
-        // Find self in the filtered unique list
         const me = fetchedUsers.find(u => u.id === user.id);
-        
-        // If 'me' is not found, it means the current user.id was filtered out as a duplicate.
-        // In that case, we should technically logout or switch context, but for now we just don't update local state
-        // to avoid jarring UI resets. However, the 'users' list passed to components will rely on the filtered list.
         if (me) {
              if (me.status === 'banned') {
                  logout(); // Force logout if banned live
@@ -663,16 +633,14 @@ const App: React.FC = () => {
   }, [directMessages, user]);
 
   useEffect(() => {
-    // Only run this logic when the user ID changes (login/logout) or loading finishes.
-    // We avoid depending on the entire 'user' object to prevent resets when fields like 'lastActive' update.
-    if (user?.id && !isLoading) {
+    if (user && !isLoading) {
       const hasSeenTour = localStorage.getItem(`examvault_tour_${user.id}`);
       if (!hasSeenTour) {
         setRunTour(true);
         setTourStep(1);
       }
     }
-  }, [user?.id, isLoading]);
+  }, [user, isLoading]);
 
   const finishTour = () => {
     setRunTour(false);

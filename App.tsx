@@ -633,14 +633,16 @@ const App: React.FC = () => {
   }, [directMessages, user]);
 
   useEffect(() => {
-    if (user && !isLoading) {
+    // Only run this logic when the user ID changes (login/logout) or loading finishes.
+    // We avoid depending on the entire 'user' object to prevent resets when fields like 'lastActive' update.
+    if (user?.id && !isLoading) {
       const hasSeenTour = localStorage.getItem(`examvault_tour_${user.id}`);
       if (!hasSeenTour) {
         setRunTour(true);
         setTourStep(1);
       }
     }
-  }, [user, isLoading]);
+  }, [user?.id, isLoading]);
 
   const finishTour = () => {
     setRunTour(false);

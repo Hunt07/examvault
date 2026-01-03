@@ -416,29 +416,38 @@ const App: React.FC = () => {
       let rawUsers = snapshot.docs.map(docSnap => ({ ...docSnap.data(), id: docSnap.id } as User));
 
       // 2. Robust Deduplication and Sorting
-      // Prioritize "Osama" master admin, then Active users (recent lastActive), then Admin role
+      // Prioritize "Osama" master admin by explicitly checking name and name length
       rawUsers.sort((a, b) => {
-          if (a.email === b.email) {
-              // 1. Prefer "Osama" for Master Admin email
-              if (a.email === MASTER_ADMIN_EMAIL) {
-                  if (a.name === 'Osama' && b.name !== 'Osama') return -1;
-                  if (b.name === 'Osama' && a.name !== 'Osama') return 1;
+          const emailA = a.email.toLowerCase();
+          const emailB = b.email.toLowerCase();
+          
+          if (emailA === emailB) {
+              const targetEmail = MASTER_ADMIN_EMAIL.toLowerCase();
+              
+              // 1. Specific Master Admin Logic - Prefer exact name match or shorter name
+              if (emailA === targetEmail) {
+                  const nameA = a.name.trim();
+                  const nameB = b.name.trim();
+                  
+                  // Explicitly prefer 'Osama' (case-insensitive)
+                  if (nameA.toLowerCase() === 'osama' && nameB.toLowerCase() !== 'osama') return -1;
+                  if (nameB.toLowerCase() === 'osama' && nameA.toLowerCase() !== 'osama') return 1;
               }
 
-              // 2. Prefer the currently active one (Recently updated lastActive timestamp)
-              // This is critical because the active session keeps updating its own timestamp
-              const aTime = a.lastActive ? new Date(a.lastActive).getTime() : 0;
-              const bTime = b.lastActive ? new Date(b.lastActive).getTime() : 0;
-              if (aTime !== bTime) {
-                  return bTime - aTime; // Descending: Newer timestamp wins
-              }
-
-              // 3. Prefer Admin role
+              // 2. Prefer Admin Role
               if (a.role === 'admin' && b.role !== 'admin') return -1;
               if (b.role === 'admin' && a.role !== 'admin') return 1;
 
-              // 4. Prefer higher points
-              return b.points - a.points;
+              // 3. Prefer higher points (assuming "real" account has history)
+              if (a.points !== b.points) return b.points - a.points;
+
+              // 4. Prefer Shorter Name (cleaner display names vs full SSO names)
+              if (a.name.length !== b.name.length) return a.name.length - b.name.length;
+
+              // 5. Fallback to recent activity
+              const aTime = a.lastActive ? new Date(a.lastActive).getTime() : 0;
+              const bTime = b.lastActive ? new Date(b.lastActive).getTime() : 0;
+              return bTime - aTime;
           }
           return 0;
       });
@@ -453,10 +462,11 @@ const App: React.FC = () => {
         // DEDUPLICATION LOGIC:
         // Because we sorted the array above, the "best" account for each email appears first.
         // We add the first one we see to the Set, and skip subsequent duplicates.
-        if (seenEmails.has(u.email)) {
+        const normalizedEmail = u.email.toLowerCase();
+        if (seenEmails.has(normalizedEmail)) {
             return;
         }
-        seenEmails.add(u.email);
+        seenEmails.add(normalizedEmail);
 
         // Ensure defaults for all users in view
         if (!u.role) u.role = 'student';
@@ -520,6 +530,10 @@ const App: React.FC = () => {
       if (user) {
         // Find self in the filtered unique list
         const me = fetchedUsers.find(u => u.id === user.id);
+        
+        // If 'me' is not found, it means the current user.id was filtered out as a duplicate.
+        // In that case, we should technically logout or switch context, but for now we just don't update local state
+        // to avoid jarring UI resets. However, the 'users' list passed to components will rely on the filtered list.
         if (me) {
              if (me.status === 'banned') {
                  logout(); // Force logout if banned live

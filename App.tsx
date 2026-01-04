@@ -229,6 +229,19 @@ const App: React.FC = () => {
 
   const lastUpdateRef = useRef<number>(0);
   
+  // Safety timeout to prevent infinite loading
+  useEffect(() => {
+      if (isLoading) {
+          const timeout = setTimeout(() => {
+              if (isLoading) {
+                  console.warn("Forcing loading state off after timeout");
+                  setIsLoading(false);
+              }
+          }, 8000); // 8 seconds max load time
+          return () => clearTimeout(timeout);
+      }
+  }, [isLoading]);
+
   useEffect(() => {
     if (!user?.id || !db) return;
 
@@ -702,10 +715,12 @@ const App: React.FC = () => {
   };
 
   const handleLogin = async (email: string) => {
-      // Force loading state immediately to unmount AuthPage
+      // Force loading state immediately to indicate process
       setIsLoading(true);
       
-      // Fallback: If onAuthStateChanged is sluggish, try manual fetch
+      // Wait briefly for Firebase Auth listener to update state
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       if (auth.currentUser) {
           try {
               const userRef = doc(db!, "users", auth.currentUser.uid);
@@ -720,6 +735,9 @@ const App: React.FC = () => {
               showToast("Login syncing...", "info");
           }
       }
+      
+      // CRITICAL FIX: Always disable loading after login attempt
+      setIsLoading(false);
   };
 
   const logout = async () => {

@@ -202,22 +202,25 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   const isUpvoted = resource.upvotedBy?.includes(user?.id || '');
   const isDownvoted = resource.downvotedBy?.includes(user?.id || '');
 
-  // ... useEffects and logic remain same ...
+  // Deep linking and Highlighting logic
   useEffect(() => {
       if (scrollTargetId) {
-          setTimeout(() => {
+          // Delay finding element to allow rendering
+          const timer = setTimeout(() => {
               const targetElement = document.getElementById(scrollTargetId);
               if (targetElement) {
                   targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                  targetElement.classList.add('bg-yellow-100', 'dark:bg-yellow-900/20', 'rounded-lg');
+                  // Highlight animation
+                  targetElement.classList.add('bg-yellow-100', 'dark:bg-yellow-900/40', 'ring-2', 'ring-yellow-400', 'dark:ring-yellow-600');
                   setTimeout(() => {
-                      targetElement.classList.remove('bg-yellow-100', 'dark:bg-yellow-900/20', 'rounded-lg');
+                      targetElement.classList.remove('bg-yellow-100', 'dark:bg-yellow-900/40', 'ring-2', 'ring-yellow-400', 'dark:ring-yellow-600');
                       setScrollTargetId(null);
-                  }, 2000);
+                  }, 3000);
               }
-          }, 500);
+          }, 600); // Increased delay slightly to ensure comments are mounted
+          return () => clearTimeout(timer);
       }
-  }, [scrollTargetId, resource.id]);
+  }, [scrollTargetId, resource.comments, setScrollTargetId]);
 
   useEffect(() => {
     setSummary('');

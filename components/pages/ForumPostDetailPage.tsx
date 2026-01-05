@@ -286,19 +286,20 @@ const ForumPostDetailPage: React.FC<{ post: ForumPost }> = ({ post }) => {
     // Handle Deep Linking / Scrolling for Replies
     useEffect(() => {
         if (scrollTargetId) {
-            setTimeout(() => {
+            const timer = setTimeout(() => {
                 const targetElement = document.getElementById(scrollTargetId);
                 if (targetElement) {
                     targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    targetElement.classList.add('bg-yellow-100', 'dark:bg-yellow-900/20', 'rounded-lg');
+                    targetElement.classList.add('bg-yellow-100', 'dark:bg-yellow-900/40', 'ring-2', 'ring-yellow-400', 'dark:ring-yellow-600');
                     setTimeout(() => {
-                        targetElement.classList.remove('bg-yellow-100', 'dark:bg-yellow-900/20', 'rounded-lg');
+                        targetElement.classList.remove('bg-yellow-100', 'dark:bg-yellow-900/40', 'ring-2', 'ring-yellow-400', 'dark:ring-yellow-600');
                         setScrollTargetId(null);
-                    }, 2000);
+                    }, 3000);
                 }
-            }, 500);
+            }, 600);
+            return () => clearTimeout(timer);
         }
-    }, [scrollTargetId, post.id]);
+    }, [scrollTargetId, post.replies, setScrollTargetId]);
 
     const handleUpvote = () => {
         if (isOwnPost || !user) return;

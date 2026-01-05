@@ -1121,6 +1121,17 @@ const App: React.FC = () => {
     { selector: '#tour-profile-menu', content: 'Profile settings.' },
   ];
 
+  // Logic to calculate unread states
+  const hasUnreadMessages = useMemo(() => {
+    if (!user) return false;
+    return directMessages.some(m => m.recipientId === user.id && m.status !== MessageStatus.Read);
+  }, [directMessages, user]);
+
+  const hasUnreadDiscussions = useMemo(() => {
+    if (!user) return false;
+    return notifications.some(n => !n.isRead && n.recipientId === user.id && (n.type === NotificationType.NewForumPost || n.type === NotificationType.NewReply));
+  }, [notifications, user]);
+
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg"><Loader2 size={48} className="animate-spin text-primary-600" /></div>;
   if (!auth) return <div>Auth Error</div>; // Simplified error view for brevity
   if (!user) return <AuthPage onLogin={() => {}} />;
@@ -1134,7 +1145,7 @@ const App: React.FC = () => {
       addResourceRequest, deleteResourceRequest, openUploadForRequest,
       toggleUserSubscription, toggleLecturerSubscription, toggleCourseCodeSubscription,
       updateUserProfile, sendMessage, editMessage, deleteMessage, startConversation, sendDirectMessageToUser, markNotificationAsRead, markAllNotificationsAsRead, markMessagesAsRead,
-      clearAllNotifications, goBack, hasUnreadMessages: false, hasUnreadDiscussions: false,
+      clearAllNotifications, goBack, hasUnreadMessages, hasUnreadDiscussions,
       isLoading, deleteResource, deactivateAccount, deleteAccount,
       areResourcesLoading, scrollTargetId, setScrollTargetId, showToast, toggleUserRole, toggleUserStatus, resolveReport
     }}>

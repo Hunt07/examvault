@@ -119,49 +119,42 @@ const Header: React.FC<{ onUploadClick: () => void }> = ({ onUploadClick }) => {
       markNotificationAsRead(notification.id);
     }
 
-    // Set scroll target if specific comment/reply link exists
-    if (notification.commentId) {
+    // Determine deep link target
+    if (notification.type === NotificationType.NewForumPost && notification.resourceId && notification.commentId) {
+        // This is a comment on a resource
+        setView('resourceDetail', notification.resourceId);
         setScrollTargetId(notification.commentId);
-    } else if (notification.replyId) {
-        setScrollTargetId(notification.replyId);
+    } 
+    else if (notification.type === NotificationType.NewForumPost && notification.forumPostId) {
+        // This is a new forum thread
+        setView('forumDetail', notification.forumPostId);
     }
-    
-    switch(notification.type) {
-        case NotificationType.Subscription:
-            if (notification.senderId) {
-                // Redirect to the new follower's profile
-                setView('publicProfile', notification.senderId);
-            } else if (notification.resourceId) {
-                // Fallback for course/lecturer notifications that link to a resource
-                setView('resourceDetail', notification.resourceId);
-            }
-            break;
-        case NotificationType.NewResource:
-        case NotificationType.RequestFulfilled:
-            if (notification.resourceId) {
-                setView('resourceDetail', notification.resourceId);
-            }
-            break;
-        case NotificationType.NewMessage:
-            if (notification.conversationId) {
-                setView('messages', notification.conversationId);
-            }
-            break;
-        case NotificationType.NewForumPost:
-            if (notification.forumPostId) {
-                setView('forumDetail', notification.forumPostId);
-            }
-            break;
-        case NotificationType.NewReply:
-            if (notification.forumPostId) {
-                setView('forumDetail', notification.forumPostId);
-            } else if (notification.resourceId) {
-                setView('resourceDetail', notification.resourceId);
-            }
-            break;
-        case NotificationType.NewRequest:
-            setView('requests');
-            break;
+    else if (notification.type === NotificationType.NewReply) {
+        if (notification.forumPostId && notification.replyId) {
+            setView('forumDetail', notification.forumPostId);
+            setScrollTargetId(notification.replyId);
+        } else if (notification.resourceId && notification.commentId) {
+             setView('resourceDetail', notification.resourceId);
+             setScrollTargetId(notification.commentId);
+        }
+    }
+    else if (notification.type === NotificationType.Subscription) {
+        if (notification.resourceId) {
+            // New upload by followed user
+            setView('resourceDetail', notification.resourceId);
+        } else if (notification.senderId) {
+            // Follow notification
+            setView('publicProfile', notification.senderId);
+        }
+    }
+    else if (notification.resourceId) {
+        setView('resourceDetail', notification.resourceId);
+    }
+    else if (notification.conversationId) {
+        setView('messages', notification.conversationId);
+    }
+    else if (notification.requestId) {
+        setView('requests');
     }
 
     setIsNotificationsOpen(false);

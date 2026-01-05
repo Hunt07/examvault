@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { BookOpen, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { signInWithPopup, signOut, setPersistence, browserLocalPersistence } from "firebase/auth";
 import { auth, microsoftProvider } from "../../services/firebase";
@@ -13,13 +13,6 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
   const [emailError, setEmailError] = useState('');
   const [isTouched, setIsTouched] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-
-  // Set persistence immediately on mount to avoid delaying the click handler later
-  useEffect(() => {
-    setPersistence(auth, browserLocalPersistence).catch(err => 
-      console.error("Failed to set persistence:", err)
-    );
-  }, []);
 
   // Validate university email
   const validateEmail = (value: string) => {
@@ -44,7 +37,10 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
     setEmailError('');
 
     try {
-      // Direct call to popup to satisfy browser "User Interaction" requirements
+      // 1. Ensure Persistence is set BEFORE popup opens
+      await setPersistence(auth, browserLocalPersistence);
+
+      // 2. Direct call to popup to satisfy browser "User Interaction" requirements
       const result = await signInWithPopup(auth, microsoftProvider);
       
       const loggedEmail = result.user?.email || "";
@@ -53,11 +49,14 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
 
       const isValid = validateEmail(loggedEmail);
       if (!isValid) {
+        console.warn("Invalid email domain logged in:", loggedEmail);
         await signOut(auth);
-        // We do not alert here, the UI shows the red error text via emailError
+        // UI will show the red error text via emailError set in validateEmail
+        setIsLoggingIn(false);
         return; 
       }
 
+      console.log("Microsoft Login Successful for:", loggedEmail);
       onLogin(loggedEmail);
     } catch (error: any) {
       console.error("Microsoft Login failed:", error);
@@ -69,10 +68,11 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
         // Multiple clicks. Ignore.
       } else if (error.code === 'auth/popup-blocked') {
         setEmailError('Popup blocked. Please allow popups for this site.');
+      } else if (error.code === 'auth/network-request-failed') {
+        setEmailError('Network error. Check your connection.');
       } else {
         setEmailError('Login failed. Please try again.');
       }
-    } finally {
       setIsLoggingIn(false);
     }
   };

@@ -496,15 +496,10 @@ const App: React.FC = () => {
   };
 
   const handleLogin = async (email: string) => {
-      setIsLoading(true);
-      // Wait for Auth Listener to naturally pick up the state change
-      // We do not manually fetch user here anymore to avoid race conditions.
-      // The onAuthStateChanged listener is the single source of truth.
-      
-      // Fallback if listener is extremely slow
-      setTimeout(() => {
-          setIsLoading(false);
-      }, 3000);
+      // Intentionally empty or just log.
+      // We rely solely on the onAuthStateChanged listener to handle the state transition 
+      // from 'loading' to 'authenticated' to avoid race conditions.
+      console.log("AuthPage completed login flow for:", email);
   };
 
   const logout = async () => {

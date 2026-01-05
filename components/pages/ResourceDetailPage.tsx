@@ -1,9 +1,9 @@
 
 import React, { useState, useContext, useRef, useMemo, useEffect } from 'react';
-import { ResourceType, type Resource, type Comment, type Flashcard, type QuizQuestion } from '../../types';
+import { ResourceType, type Resource, type Comment, type Flashcard, type QuizQuestion, type Attachment } from '../../types';
 import { AppContext } from '../../App';
 import { summarizeContent, generateStudySet } from '../../services/geminiService';
-import { ArrowLeft, ArrowRight, ThumbsUp, ThumbsDown, MessageSquare, Download, BrainCircuit, Loader2, FileText, Notebook, ClipboardList, Archive, Bell, BellOff, Flag, CheckCircle, MessageCircle, BookCopy, HelpCircle, Eye, X, AlertCircle, FileType, Bookmark, BookmarkCheck, Share2, Trash2, UserPlus, UserMinus, Clock } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ThumbsUp, ThumbsDown, MessageSquare, Download, BrainCircuit, Loader2, FileText, Notebook, ClipboardList, Archive, Bell, BellOff, Flag, CheckCircle, MessageCircle, BookCopy, HelpCircle, Eye, X, AlertCircle, FileType, Bookmark, BookmarkCheck, Share2, Trash2, UserPlus, UserMinus, Clock, Paperclip, Image as ImageIcon } from 'lucide-react';
 import MarkdownRenderer from '../MarkdownRenderer';
 import MarkdownToolbar from '../MarkdownToolbar';
 import UserRankBadge from '../UserRankBadge';
@@ -19,11 +19,14 @@ const CommentComponent: React.FC<{
   comment: Comment;
   resourceId: string;
   children: React.ReactNode;
-}> = ({ comment, resourceId, children }) => {
+  onPreview: (attachment: Attachment) => void;
+}> = ({ comment, resourceId, children, onPreview }) => {
   const { user, userRanks, setView, handleCommentVote, addCommentToResource, deleteCommentFromResource } = useContext(AppContext);
   const [isReplying, setIsReplying] = useState(false);
   const [replyText, setReplyText] = useState('');
+  const [replyFile, setReplyFile] = useState<File | undefined>(undefined);
   const replyTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   
   const authorRank = userRanks.get(comment.author.id);
@@ -44,11 +47,24 @@ const CommentComponent: React.FC<{
     handleCommentVote(resourceId, comment.id);
   };
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+          setReplyFile(file);
+      }
+  };
+
+  const removeAttachment = () => {
+      setReplyFile(undefined);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   const handleReplySubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (replyText.trim() && user) {
-      addCommentToResource(resourceId, replyText, comment.id);
+    if ((replyText.trim() || replyFile) && user) {
+      addCommentToResource(resourceId, replyText, comment.id, replyFile);
       setReplyText('');
+      setReplyFile(undefined);
       setIsReplying(false);
     }
   };
@@ -82,6 +98,42 @@ const CommentComponent: React.FC<{
           <div className="mt-2 dark:text-slate-200">
             <MarkdownRenderer content={comment.text} />
           </div>
+
+          {/* Comment Attachment */}
+          {comment.attachment && (
+              <div className="mt-3">
+                  {comment.attachment.type === 'image' ? (
+                      <button onClick={() => onPreview(comment.attachment!)} className="block cursor-zoom-in">
+                          <img src={comment.attachment.url} alt="Attachment" className="max-h-40 rounded-lg border border-slate-200 dark:border-zinc-700 hover:opacity-90 transition" />
+                      </button>
+                  ) : (
+                      <div className="flex items-center gap-2">
+                          <button 
+                              onClick={() => onPreview(comment.attachment!)}
+                              className="flex items-center gap-3 p-2 bg-slate-100 dark:bg-zinc-800 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-200 dark:hover:bg-zinc-700 transition w-fit group text-left"
+                          >
+                              <div className="p-1.5 bg-white dark:bg-zinc-900 rounded-md">
+                                  <FileText size={20} className="text-primary-500" />
+                              </div>
+                              <div className="flex flex-col">
+                                  <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition">{comment.attachment.name}</span>
+                                  <span className="text-[10px] text-slate-500 dark:text-slate-400">{comment.attachment.size || 'File'}</span>
+                              </div>
+                              <Eye size={14} className="text-slate-400 group-hover:text-primary-500 ml-2" />
+                          </button>
+                          <a 
+                              href={comment.attachment.url} 
+                              download={comment.attachment.name}
+                              className="p-2.5 bg-slate-100 dark:bg-zinc-800 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-200 dark:hover:bg-zinc-700 transition text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                              title="Download"
+                          >
+                              <Download size={18} />
+                          </a>
+                      </div>
+                  )}
+              </div>
+          )}
+
           <div className="flex items-center gap-3 mt-3">
             <button
               onClick={handleVoteForComment}
@@ -141,20 +193,40 @@ const CommentComponent: React.FC<{
                 value={replyText}
                 onValueChange={setReplyText}
               />
+              {replyFile && (
+                  <div className="bg-slate-100 dark:bg-zinc-900 border-x border-slate-300 dark:border-zinc-700 px-4 py-2 flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                          {replyFile.type.startsWith('image/') ? <ImageIcon size={16}/> : <FileText size={16}/>}
+                          <span className="truncate max-w-xs">{replyFile.name}</span>
+                        </div>
+                        <button type="button" onClick={removeAttachment} className="text-slate-500 hover:text-red-500">
+                          <X size={16} />
+                        </button>
+                  </div>
+              )}
               <textarea
                 ref={replyTextareaRef}
                 value={replyText}
                 onChange={(e) => setReplyText(e.target.value)}
                 placeholder={`Replying to ${comment.author.name}...`}
-                className="w-full bg-slate-100 dark:bg-zinc-800 dark:text-white text-slate-900 placeholder:text-slate-500 dark:placeholder:text-slate-500 px-4 py-2 border border-slate-300 dark:border-zinc-700 rounded-b-lg focus:ring-primary-500 focus:border-primary-500 transition focus:outline-none"
+                className={`w-full bg-slate-100 dark:bg-zinc-800 dark:text-white text-slate-900 placeholder:text-slate-500 dark:placeholder:text-slate-500 px-4 py-2 border border-slate-300 dark:border-zinc-700 ${replyFile ? 'border-t-0' : ''} rounded-b-lg focus:ring-primary-500 focus:border-primary-500 transition focus:outline-none`}
                 rows={2}
                 autoFocus
               />
-              <div className="flex gap-2 mt-2">
+              <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  className="hidden" 
+                  onChange={handleFileSelect}
+              />
+              <div className="flex gap-2 mt-2 items-center">
                 <button type="submit" className="bg-primary-600 text-white font-semibold py-1 px-3 rounded-lg hover:bg-primary-700 transition text-sm">
                   Post Reply
                 </button>
-                <button type="button" onClick={() => setIsReplying(false)} className="bg-slate-200 dark:bg-zinc-700 text-slate-700 dark:text-slate-300 font-semibold py-1 px-3 rounded-lg hover:bg-slate-300 dark:hover:bg-zinc-600 transition text-sm">
+                <button type="button" onClick={() => fileInputRef.current?.click()} className="bg-slate-200 dark:bg-zinc-700 text-slate-700 dark:text-slate-300 p-1.5 rounded-lg hover:bg-slate-300 dark:hover:bg-zinc-600 transition" title="Attach file">
+                    <Paperclip size={16} />
+                </button>
+                <button type="button" onClick={() => setIsReplying(false)} className="ml-auto bg-slate-200 dark:bg-zinc-700 text-slate-700 dark:text-slate-300 font-semibold py-1 px-3 rounded-lg hover:bg-slate-300 dark:hover:bg-zinc-600 transition text-sm">
                   Cancel
                 </button>
               </div>
@@ -177,6 +249,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   const [summary, setSummary] = useState('');
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [newComment, setNewComment] = useState('');
+  const [newCommentFile, setNewCommentFile] = useState<File | undefined>(undefined);
   const [isReporting, setIsReporting] = useState(false);
   const [reportReason, setReportReason] = useState('');
   const [hasReported, setHasReported] = useState(false);
@@ -188,9 +261,11 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   const [aiGeneratedPreview, setAiGeneratedPreview] = useState('');
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
   const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const commentFileInputRef = useRef<HTMLInputElement>(null);
   const [studySet, setStudySet] = useState<(Flashcard[] | QuizQuestion[]) | null>(null);
   const [studySetType, setStudySetType] = useState<'flashcards' | 'quiz' | null>(null);
   const [isGeneratingStudySet, setIsGeneratingStudySet] = useState(false);
+  const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null);
 
   const authorRank = userRanks.get(resource.author.id);
   const isFollowingLecturer = user?.subscriptions.lecturers.includes(resource.lecturer || '');
@@ -238,6 +313,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     setStudySetType(null);
     setIsGeneratingStudySet(false);
     setNewComment('');
+    setNewCommentFile(undefined);
     setIsReporting(false);
     setReportReason('');
     setHasReported(false);
@@ -371,11 +447,25 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
       setStudySetType(null);
   };
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+          setNewCommentFile(file);
+      }
+  };
+
+  const removeAttachment = () => {
+      setNewCommentFile(undefined);
+      if (commentFileInputRef.current) commentFileInputRef.current.value = '';
+  };
+
   const handlePostComment = (e: React.FormEvent) => {
     e.preventDefault();
-    if (newComment.trim() && user) {
-      addCommentToResource(resource.id, newComment, null);
+    if ((newComment.trim() || newCommentFile) && user) {
+      addCommentToResource(resource.id, newComment, null, newCommentFile);
       setNewComment('');
+      setNewCommentFile(undefined);
+      if (commentFileInputRef.current) commentFileInputRef.current.value = '';
     }
   };
 
@@ -421,7 +511,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   const renderComments = (parentId: string | null) => {
     const comments = commentsByParentId[parentId || 'root'] || [];
     return comments.map(comment => (
-        <CommentComponent key={comment.id} comment={comment} resourceId={resource.id}>
+        <CommentComponent key={comment.id} comment={comment} resourceId={resource.id} onPreview={setPreviewAttachment}>
             {renderComments(comment.id)}
         </CommentComponent>
     ));
@@ -443,9 +533,15 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     </div>
   );
 
-  const renderPreviewContent = () => {
-    const isMock = resource.fileUrl === '#';
-    const ext = resource.fileName.split('.').pop()?.toLowerCase();
+  const renderPreviewContent = (source: Resource | Attachment, isAttachment: boolean = false) => {
+    // If it's an attachment, use attachment structure, otherwise resource structure
+    const fileName = 'fileName' in source ? source.fileName : source.name;
+    const fileUrl = 'fileUrl' in source ? source.fileUrl : source.url;
+    
+    // For mocked resources
+    const isMock = !isAttachment && fileUrl === '#';
+    
+    const ext = fileName.split('.').pop()?.toLowerCase();
     const isPdf = ext === 'pdf';
     const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext || '');
     const isOfficeDoc = ['ppt', 'pptx', 'doc', 'docx', 'xls', 'xlsx'].includes(ext || '');
@@ -460,14 +556,27 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
                     Below is the extracted text content associated with this resource.
                 </p>
                 <div className="w-full max-w-3xl bg-white rounded-lg border border-slate-200 p-6 text-left h-96 overflow-y-auto shadow-inner">
-                    <MarkdownRenderer content={resource.contentForAI} />
+                    <MarkdownRenderer content={(source as Resource).contentForAI} />
                 </div>
             </div>
         );
     }
-    if (isImage) return <img src={resource.fileUrl} alt="Preview" className="max-w-full max-h-full object-contain" />;
-    if (isPdf) return <iframe src={resource.fileUrl} className="w-full h-full border-none" title="PDF Preview"></iframe>;
-    if (isOfficeDoc) return (<iframe src={`https://docs.google.com/gview?url=${encodeURIComponent(resource.fileUrl)}&embedded=true`} className="w-full h-full border-none" title="Office Document Preview" />);
+    if (isImage) return <img src={fileUrl} alt="Preview" className="max-w-full max-h-full object-contain" />;
+    if (isPdf) return <iframe src={fileUrl} className="w-full h-full border-none" title="PDF Preview"></iframe>;
+    if (isOfficeDoc) return (<iframe src={`https://docs.google.com/gview?url=${encodeURIComponent(fileUrl)}&embedded=true`} className="w-full h-full border-none" title="Office Document Preview" />);
+
+    // Fallback for non-previewable files (if not mock resource)
+    if (isAttachment) {
+        return (
+            <div className="flex flex-col items-center justify-center h-full text-slate-500 dark:text-slate-400">
+                <FileText size={48} className="mb-4 text-slate-400" />
+                <p>Preview not available for this file type.</p>
+                <a href={fileUrl} download={fileName} className="mt-4 text-primary-600 dark:text-primary-400 hover:underline flex items-center gap-2">
+                    <Download size={16} /> Download File
+                </a>
+            </div>
+        );
+    }
 
     const contentToDisplay = aiGeneratedPreview || null;
     return (
@@ -661,12 +770,48 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
           {/* Discussion */}
           <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md mt-8 transition-colors duration-300 border border-transparent dark:border-zinc-700">
             <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2"><MessageSquare size={22}/> Discussion ({resource.comments.length})</h3>
+            
+            {/* Top-Level Comment Form */}
             <form onSubmit={handlePostComment} className="flex gap-4 items-start pb-6 mb-6 border-b border-slate-200 dark:border-zinc-700">
               <Avatar src={user?.avatarUrl} alt={user?.name} className="w-10 h-10 rounded-full shrink-0" />
               <div className="w-full">
                 <MarkdownToolbar textareaRef={commentTextareaRef} value={newComment} onValueChange={setNewComment} />
-                <textarea ref={commentTextareaRef} value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="Add a comment..." className="w-full bg-slate-100 dark:bg-zinc-800 dark:text-white text-slate-900 placeholder:text-slate-500 dark:placeholder:text-slate-500 px-4 py-2 border border-slate-300 dark:border-zinc-700 rounded-b-lg focus:ring-primary-500 focus:border-primary-500 transition focus:outline-none" rows={3} />
-                 <div className="flex justify-end mt-2"><button type="submit" className="bg-primary-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-primary-700 transition">Post</button></div>
+                {newCommentFile && (
+                    <div className="bg-slate-100 dark:bg-zinc-900 border-x border-slate-300 dark:border-zinc-700 px-4 py-2 flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                            {newCommentFile.type.startsWith('image/') ? <ImageIcon size={16}/> : <FileText size={16}/>}
+                            <span className="truncate max-w-xs">{newCommentFile.name}</span>
+                        </div>
+                        <button type="button" onClick={removeAttachment} className="text-slate-500 hover:text-red-500">
+                            <X size={16} />
+                        </button>
+                    </div>
+                )}
+                <textarea 
+                    ref={commentTextareaRef} 
+                    value={newComment} 
+                    onChange={(e) => setNewComment(e.target.value)} 
+                    placeholder="Add a comment..." 
+                    className={`w-full bg-slate-100 dark:bg-zinc-800 dark:text-white text-slate-900 placeholder:text-slate-500 dark:placeholder:text-slate-500 px-4 py-2 border border-slate-300 dark:border-zinc-700 ${newCommentFile ? 'border-t-0' : ''} rounded-b-lg focus:ring-primary-500 focus:border-primary-500 transition focus:outline-none`} 
+                    rows={3} 
+                />
+                <input 
+                    type="file" 
+                    ref={commentFileInputRef} 
+                    className="hidden" 
+                    onChange={handleFileSelect}
+                />
+                 <div className="flex justify-between items-center mt-2">
+                    <button 
+                        type="button" 
+                        onClick={() => commentFileInputRef.current?.click()}
+                        className="bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-slate-300 p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-700 transition"
+                        title="Attach file"
+                    >
+                        <Paperclip size={18} />
+                    </button>
+                    <button type="submit" className="bg-primary-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-primary-700 transition">Post</button>
+                 </div>
               </div>
             </form>
             <div className="mt-6">{renderComments(null)}</div>
@@ -776,10 +921,45 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
                         <button onClick={() => setIsPreviewOpen(false)} className="p-2 rounded-full hover:bg-red-100 text-slate-500 hover:text-red-600 transition"><X size={24} /></button>
                     </div>
                 </div>
-                <div className="flex-grow bg-slate-200 overflow-hidden flex items-center justify-center rounded-b-xl relative">{renderPreviewContent()}</div>
+                <div className="flex-grow bg-slate-200 overflow-hidden flex items-center justify-center rounded-b-xl relative">{renderPreviewContent(resource)}</div>
             </div>
         </div>
     )}
+
+    {previewAttachment && (
+        <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-white dark:bg-dark-surface rounded-xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col relative animate-in zoom-in-95 duration-200 border border-transparent dark:border-zinc-700">
+                <div className="p-4 border-b dark:border-zinc-700 flex justify-between items-center bg-slate-50 dark:bg-zinc-800/50 rounded-t-xl">
+                    <div className="flex items-center gap-3 overflow-hidden">
+                        <div className="p-2 rounded-lg bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400">
+                            <FileText size={20} />
+                        </div>
+                        <div className="overflow-hidden">
+                            <h3 className="font-bold text-slate-800 dark:text-white truncate text-lg leading-tight">{previewAttachment.name}</h3>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{previewAttachment.size || 'File'}</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                        <a 
+                            href={previewAttachment.url} 
+                            download={previewAttachment.name}
+                            className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-600 dark:text-slate-300 transition"
+                            title="Download"
+                        >
+                            <Download size={20} />
+                        </a>
+                        <button onClick={() => setPreviewAttachment(null)} className="p-2 rounded-full hover:bg-red-100 dark:hover:bg-red-900/20 text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 transition">
+                            <X size={24} />
+                        </button>
+                    </div>
+                </div>
+                <div className="flex-grow bg-slate-200 dark:bg-zinc-900 overflow-hidden flex items-center justify-center rounded-b-xl relative">
+                    {renderPreviewContent(previewAttachment, true)}
+                </div>
+            </div>
+        </div>
+    )}
+
     <ShareModal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} resource={resource} />
     </div>
   );

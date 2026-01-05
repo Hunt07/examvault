@@ -54,7 +54,7 @@ interface AppContextType {
   toggleSavePost: (postId: string) => void;
   toggleSaveRequest: (requestId: string) => void;
   handleVote: (resourceId: string, action: 'up' | 'down') => void;
-  addCommentToResource: (resourceId: string, text: string, parentId: string | null) => void;
+  addCommentToResource: (resourceId: string, text: string, parentId: string | null, file?: File) => void;
   handleCommentVote: (resourceId: string, commentId: string) => void;
   deleteCommentFromResource: (resourceId: string, comment: Comment) => Promise<void>;
   addForumPost: (post: { title: string; courseCode: string; body: string; tags: string[] }, file?: File) => void;
@@ -927,9 +927,27 @@ const App: React.FC = () => {
       await batch.commit();
   };
 
-  const addCommentToResource = async (resourceId: string, text: string, parentId: string | null) => {
+  const addCommentToResource = async (resourceId: string, text: string, parentId: string | null, file?: File) => {
       if (!user || !db) return;
-      const newComment = { id: `c-${Date.now()}`, author: sanitizeForFirestore(user), text, timestamp: new Date().toISOString(), parentId, upvotes: 0, upvotedBy: [] };
+      
+      let attachment = undefined;
+      if (file) {
+          const storageRef = ref(storage, `attachments/${Date.now()}_${file.name}`);
+          await uploadBytes(storageRef, file);
+          const url = await getDownloadURL(storageRef);
+          attachment = { type: file.type.startsWith('image/') ? 'image' : 'file', url, name: file.name, size: (file.size / 1024).toFixed(0) + ' KB' };
+      }
+
+      const newComment = { 
+          id: `c-${Date.now()}`, 
+          author: sanitizeForFirestore(user), 
+          text, 
+          timestamp: new Date().toISOString(), 
+          parentId, 
+          upvotes: 0, 
+          upvotedBy: [],
+          attachment 
+      };
       await updateDoc(doc(db, "resources", resourceId), { comments: arrayUnion(sanitizeForFirestore(newComment)) });
       
       const res = resources.find(r => r.id === resourceId);

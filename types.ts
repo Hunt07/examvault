@@ -59,6 +59,7 @@ export interface Comment {
   parentId: string | null;
   upvotes: number;
   upvotedBy: string[];
+  attachment?: Attachment;
 }
 
 export interface Resource {

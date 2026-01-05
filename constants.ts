@@ -407,7 +407,7 @@ export const mockForumPosts: ForumPost[] = [
     upvotedBy: [],
     downvotedBy: [],
     replies: [
-      { id: 'reply-1-1', author: mockUser2, text: 'If the heuristic overestimates, A* might find a path that it thinks is cheaper but is actually longer than the optimal path. Admissibility guarantees optimality!', timestamp: '2024-05-10T14:30:00Z', upvotes: 15, upvotedBy: [], isVerified: true },
+      { id: 'reply-1-1', author: mockUser2, text: 'If the heuristic overestimates, A* might find a path that it thinks is cheaper but is actually longer than the optimal path. Admissibility guarantees optimality!', timestamp: '2024-05-10T14:30:00Z', upvotes: 15, upvotedBy: [], isVerified: true, parentId: null },
     ]
   },
   {
@@ -437,7 +437,7 @@ export const mockForumPosts: ForumPost[] = [
     upvotedBy: [],
     downvotedBy: [],
     replies: [
-        { id: 'reply-3-1', author: mockUser6, text: 'Make sure your break-even analysis is solid. He loves detailed cost structures.', timestamp: '2024-05-14T10:00:00Z', upvotes: 10, upvotedBy: [], isVerified: false }
+        { id: 'reply-3-1', author: mockUser6, text: 'Make sure your break-even analysis is solid. He loves detailed cost structures.', timestamp: '2024-05-14T10:00:00Z', upvotes: 10, upvotedBy: [], isVerified: false, parentId: null }
     ]
   }
 ];
@@ -557,6 +557,7 @@ export const mockDirectMessages: DirectMessage[] = [
     text: 'Hey! Did you see the new AI notes?',
     timestamp: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
     status: MessageStatus.Read,
+    isDeleted: false
   },
   {
     id: 'msg-2',
@@ -566,6 +567,7 @@ export const mockDirectMessages: DirectMessage[] = [
     text: 'Yeah, I just downloaded them. Thanks!',
     timestamp: new Date(Date.now() - 1000 * 60 * 4).toISOString(),
     status: MessageStatus.Read,
+    isDeleted: false
   },
   {
     id: 'msg-3',
@@ -575,6 +577,7 @@ export const mockDirectMessages: DirectMessage[] = [
     text: 'No problem!',
     timestamp: new Date(Date.now() - 1000 * 60 * 3).toISOString(),
     status: MessageStatus.Delivered,
+    isDeleted: false
   },
   {
     id: 'msg-4',
@@ -584,5 +587,6 @@ export const mockDirectMessages: DirectMessage[] = [
     text: 'Do you have the slides for Professional Communication?',
     timestamp: new Date(Date.now() - 1000 * 60 * 60 * 25).toISOString(),
     status: MessageStatus.Read,
+    isDeleted: false
   },
 ];

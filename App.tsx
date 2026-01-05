@@ -397,6 +397,18 @@ const App: React.FC = () => {
                 userData.status = 'active';
                 hasUpdates = true;
                 showToast("Welcome back! Your account has been reactivated.", "success");
+                
+                // Log Reactivation
+                try {
+                    await addDoc(collection(db, "logs"), {
+                        actorId: userData.id,
+                        actorName: userData.name,
+                        actorAvatar: userData.avatarUrl,
+                        actionType: 'account',
+                        description: 'Account Reactivated',
+                        timestamp: new Date().toISOString()
+                    });
+                } catch(e) { console.error("Log error", e); }
             }
 
             if (hasUpdates) {
@@ -446,6 +458,19 @@ const App: React.FC = () => {
             };
             
             await setDoc(userRef, newUser);
+            
+            // Log New Registration / Re-registration
+            try {
+                await addDoc(collection(db, "logs"), {
+                    actorId: newUser.id,
+                    actorName: newUser.name,
+                    actorAvatar: newUser.avatarUrl,
+                    actionType: 'account',
+                    description: 'User Registered',
+                    timestamp: new Date().toISOString()
+                });
+            } catch(e) { console.error("Log error", e); }
+
             setUser(newUser);
             setRunTour(true); // Always run for new users
           }

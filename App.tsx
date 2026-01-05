@@ -736,9 +736,23 @@ const App: React.FC = () => {
 
   const deleteResource = async (resourceId: string, fileUrl: string, previewUrl?: string) => {
       if (!user || !db) return;
-      if (view === 'resourceDetail' && selectedId === resourceId) { setViewState('dashboard'); setSelectedId(undefined); }
+      
       try {
-          await deleteDoc(doc(db, "resources", resourceId));
+          // 1. Get the resource first to identify the author and calculate point reduction
+          const resRef = doc(db, "resources", resourceId);
+          const resSnap = await getDoc(resRef);
+          
+          if (!resSnap.exists()) {
+             throw new Error("Resource not found");
+          }
+          
+          const resourceData = resSnap.data() as Resource;
+          const authorId = resourceData.author.id;
+
+          // 2. Delete the document
+          await deleteDoc(resRef);
+          
+          // 3. Delete files from Storage
           if (fileUrl.includes('firebasestorage')) {
              try {
                 const fileRef = ref(storage, fileUrl);
@@ -751,8 +765,29 @@ const App: React.FC = () => {
                 await deleteObject(prevRef);
              } catch(e) { console.warn("Could not delete preview", e); }
           }
-          showToast("Resource deleted.", "success");
-      } catch (error) { console.error(error); setToast({ message: "Failed to delete resource.", type: 'error' }); }
+
+          // 4. Deduct Points & Update Stats
+          // Standard upload points = 25. Decrement upload count.
+          const userRef = doc(db, "users", authorId);
+          await updateDoc(userRef, {
+              points: increment(-25),
+              weeklyPoints: increment(-25),
+              uploadCount: increment(-1)
+          });
+
+          // 5. Navigate away if on detail view
+          if (view === 'resourceDetail' && selectedId === resourceId) { 
+              setViewState('dashboard'); 
+              setSelectedId(undefined); 
+          }
+          
+          // 6. Show notification
+          showToast("Resource deleted.", "info", -25);
+
+      } catch (error) { 
+          console.error(error); 
+          setToast({ message: "Failed to delete resource.", type: 'error' }); 
+      }
   };
 
   const handleVote = async (resourceId: string, action: 'up' | 'down') => {

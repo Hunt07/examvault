@@ -59,7 +59,7 @@ const CommentComponent: React.FC<{
   };
 
   return (
-    <div id={comment.id} className="mt-4 scroll-mt-24 transition-colors duration-1000 p-2 rounded-lg">
+    <div id={comment.id} className="mt-4 scroll-mt-24 transition-colors duration-[2000ms] p-2 rounded-lg">
       <div className="flex gap-4 items-start">
         <button onClick={() => handleUserClick(comment.author.id)} className="shrink-0">
           <Avatar src={comment.author.avatarUrl} alt={comment.author.name} className="w-10 h-10" />
@@ -210,8 +210,10 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
               const targetElement = document.getElementById(scrollTargetId);
               if (targetElement) {
                   targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                  // Highlight animation
+                  // Add highlight class
                   targetElement.classList.add('bg-yellow-100', 'dark:bg-yellow-900/40', 'ring-2', 'ring-yellow-400', 'dark:ring-yellow-600');
+                  
+                  // Remove highlight class after a delay - duration-[2000ms] handles the fade out
                   setTimeout(() => {
                       targetElement.classList.remove('bg-yellow-100', 'dark:bg-yellow-900/40', 'ring-2', 'ring-yellow-400', 'dark:ring-yellow-600');
                       setScrollTargetId(null);

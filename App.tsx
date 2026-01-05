@@ -27,7 +27,7 @@ import {
   onSnapshot, query, orderBy, serverTimestamp, arrayUnion, increment, where, arrayRemove, deleteField, writeBatch 
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { Loader2, AlertCircle, RefreshCw, LogOut, ShieldAlert, Copy } from 'lucide-react';
+import { Loader2, AlertCircle, RefreshCw, LogOut, ShieldAlert, Copy, Settings, ChevronRight, Save } from 'lucide-react';
 
 export type View = 'dashboard' | 'resourceDetail' | 'discussions' | 'forumDetail' | 'profile' | 'publicProfile' | 'messages' | 'leaderboard' | 'requests' | 'admin';
 
@@ -138,6 +138,109 @@ const propagateUserUpdates = async (userId: string, updateData: any) => {
 };
 
 const MASTER_ADMIN_EMAIL = 'b09220024@student.unimy.edu.my';
+
+// -----------------------------------------------------------------------------
+// CONFIGURATION SETUP COMPONENT
+// -----------------------------------------------------------------------------
+const FirebaseSetup: React.FC = () => {
+    const [config, setConfig] = useState({
+        apiKey: localStorage.getItem('examvault_config_VITE_FIREBASE_API_KEY') || '',
+        projectId: localStorage.getItem('examvault_config_VITE_FIREBASE_PROJECT_ID') || '',
+        authDomain: localStorage.getItem('examvault_config_VITE_FIREBASE_AUTH_DOMAIN') || '',
+        storageBucket: localStorage.getItem('examvault_config_VITE_FIREBASE_STORAGE_BUCKET') || '',
+        messagingSenderId: localStorage.getItem('examvault_config_VITE_FIREBASE_MESSAGING_SENDER_ID') || '',
+        appId: localStorage.getItem('examvault_config_VITE_FIREBASE_APP_ID') || '',
+    });
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setConfig(prev => ({ ...prev, [e.target.name]: e.target.value }));
+    };
+
+    const handleSave = () => {
+        if (!config.apiKey || !config.projectId) {
+            alert("API Key and Project ID are required.");
+            return;
+        }
+        
+        // Save to localStorage
+        Object.entries(config).forEach(([key, value]) => {
+            const envKey = `VITE_FIREBASE_${key.replace(/[A-Z]/g, letter => `_${letter}`).toUpperCase()}`;
+            if (value.trim()) {
+                localStorage.setItem(`examvault_config_${envKey}`, value.trim());
+            } else {
+                localStorage.removeItem(`examvault_config_${envKey}`);
+            }
+        });
+
+        window.location.reload();
+    };
+
+    return (
+        <div className="min-h-screen bg-slate-50 dark:bg-zinc-900 flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-zinc-800 p-8 rounded-xl shadow-2xl max-w-2xl w-full border border-slate-200 dark:border-zinc-700">
+                <div className="flex items-center gap-3 mb-6">
+                    <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400">
+                        <Settings size={24} />
+                    </div>
+                    <div>
+                        <h1 className="text-2xl font-bold text-slate-800 dark:text-white">ExamVault Setup</h1>
+                        <p className="text-slate-500 dark:text-slate-400">Connect your Firebase project to get started</p>
+                    </div>
+                </div>
+
+                <div className="bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500 p-4 mb-8">
+                    <p className="text-sm text-amber-800 dark:text-amber-200">
+                        <strong>Configuration Missing:</strong> We couldn't find your API keys in the environment variables. 
+                        Please enter them below to run the app.
+                    </p>
+                </div>
+
+                <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">API Key <span className="text-red-500">*</span></label>
+                            <input name="apiKey" value={config.apiKey} onChange={handleChange} className="w-full bg-slate-50 dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" placeholder="AIzaSy..." />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Project ID <span className="text-red-500">*</span></label>
+                            <input name="projectId" value={config.projectId} onChange={handleChange} className="w-full bg-slate-50 dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" placeholder="examvault-123" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Auth Domain</label>
+                            <input name="authDomain" value={config.authDomain} onChange={handleChange} className="w-full bg-slate-50 dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" placeholder="project-id.firebaseapp.com" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Storage Bucket</label>
+                            <input name="storageBucket" value={config.storageBucket} onChange={handleChange} className="w-full bg-slate-50 dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" placeholder="project-id.firebasestorage.app" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Messaging Sender ID</label>
+                            <input name="messagingSenderId" value={config.messagingSenderId} onChange={handleChange} className="w-full bg-slate-50 dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" placeholder="123456789" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">App ID</label>
+                            <input name="appId" value={config.appId} onChange={handleChange} className="w-full bg-slate-50 dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" placeholder="1:123456:web:..." />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="mt-8 flex justify-between items-center">
+                    <a href="https://console.firebase.google.com/" target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-sm flex items-center gap-1">
+                        Open Firebase Console <ChevronRight size={14} />
+                    </a>
+                    <button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-lg transition flex items-center gap-2 shadow-lg">
+                        <Save size={18} />
+                        Save & Reload
+                    </button>
+                </div>
+                
+                <p className="text-center text-xs text-slate-400 mt-6">
+                    These settings are saved to your browser's Local Storage for development purposes.
+                </p>
+            </div>
+        </div>
+    );
+};
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -567,6 +670,21 @@ service cloud.firestore {
                     >
                         <RefreshCw size={18} /> Retry Connection
                     </button>
+                    
+                    <button 
+                        onClick={() => {
+                            // Clear stored config if any to allow reset
+                            const keys = Object.keys(localStorage);
+                            keys.forEach(k => {
+                                if(k.startsWith('examvault_config_')) localStorage.removeItem(k);
+                            });
+                            window.location.reload();
+                        }}
+                        className="w-full text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 py-2"
+                    >
+                        Reset Configuration
+                    </button>
+
                     <button 
                         onClick={logout}
                         className="w-full text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 text-sm flex items-center justify-center gap-2"
@@ -579,21 +697,9 @@ service cloud.firestore {
       );
   }
 
-  // 🔴 Configuration Check
+  // 🔴 Configuration Check - Show Wizard
   if (!auth) {
-      return (
-          <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg p-4">
-              <div className="bg-white dark:bg-dark-surface p-8 rounded-xl shadow-lg border border-red-200 dark:border-red-900 max-w-md text-center">
-                  <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <AlertCircle size={32} />
-                  </div>
-                  <h1 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Configuration Error</h1>
-                  <p className="text-slate-600 dark:text-slate-300 mb-6">
-                      Firebase API keys are missing. Please check your .env file or Vercel Environment Variables.
-                  </p>
-              </div>
-          </div>
-      );
+      return <FirebaseSetup />;
   }
 
   if (!user) {

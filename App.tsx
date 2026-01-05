@@ -27,7 +27,7 @@ import {
   onSnapshot, query, orderBy, serverTimestamp, arrayUnion, increment, where, arrayRemove, deleteField, writeBatch 
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { Loader2, AlertCircle, RefreshCw, LogOut } from 'lucide-react';
+import { Loader2, AlertCircle, RefreshCw, LogOut, ShieldAlert, Copy } from 'lucide-react';
 
 export type View = 'dashboard' | 'resourceDetail' | 'discussions' | 'forumDetail' | 'profile' | 'publicProfile' | 'messages' | 'leaderboard' | 'requests' | 'admin';
 
@@ -142,7 +142,7 @@ const MASTER_ADMIN_EMAIL = 'b09220024@student.unimy.edu.my';
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [authError, setAuthError] = useState<string | null>(null); // New error state
+  const [authError, setAuthError] = useState<{title: string, message: string, code?: string} | null>(null);
   const [areResourcesLoading, setAreResourcesLoading] = useState(true);
   const [view, setViewState] = useState<View>('dashboard');
   const [viewHistory, setViewHistory] = useState<{ view: View; id?: string }[]>([]);
@@ -202,19 +202,18 @@ const App: React.FC = () => {
 
   const lastUpdateRef = useRef<number>(0);
   
-  // Safety timeout to prevent infinite loading
+  // Safety timeout
   useEffect(() => {
       if (isLoading) {
           const timeout = setTimeout(() => {
               if (isLoading) {
                   console.warn("Forcing loading state off after timeout");
                   setIsLoading(false);
-                  // If we're still loading after timeout and no user, something is wrong with Auth
                   if (!user && !authError) {
-                      setAuthError("Loading timed out. Please check your connection.");
+                      setAuthError({ title: "Loading Timeout", message: "The connection timed out. Please check your internet connection." });
                   }
               }
-          }, 15000); // Increased to 15s to account for slow Firestore initial connection
+          }, 15000); 
           return () => clearTimeout(timeout);
       }
   }, [isLoading, user, authError]);
@@ -261,149 +260,137 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!auth || !db) {
         setIsLoading(false);
-        setAuthError("Firebase not initialized. Check configuration.");
+        // Error is handled in render
         return;
     }
 
     const unsubscribe = firebaseAuth.onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        setAuthError(null); // Clear previous errors
-        try {
-          const userRef = doc(db!, "users", firebaseUser.uid);
-          const userSnap = await getDoc(userRef);
+        setAuthError(null); 
+        
+        const fetchUserProfile = async (retries = 3) => {
+            try {
+                const userRef = doc(db!, "users", firebaseUser.uid);
+                const userSnap = await getDoc(userRef);
 
-          if (userSnap.exists()) {
-            const userData = userSnap.data() as User;
-            let hasUpdates = false;
-            const updates: any = {};
+                if (userSnap.exists()) {
+                    const userData = userSnap.data() as User;
+                    let hasUpdates = false;
+                    const updates: any = {};
 
-            // Ensure critical fields exist
-            if (!userData.joinDate) {
-                updates.joinDate = new Date().toISOString();
-                userData.joinDate = updates.joinDate;
-                hasUpdates = true;
-            }
-            if (!userData.savedResourceIds) {
-                updates.savedResourceIds = [];
-                userData.savedResourceIds = [];
-                hasUpdates = true;
-            }
-            if (!userData.subscriptions) {
-                updates.subscriptions = { users: [], lecturers: [], courseCodes: [] };
-                userData.subscriptions = updates.subscriptions;
-                hasUpdates = true;
-            }
-            if (!userData.role) {
-                updates.role = 'student';
-                userData.role = 'student';
-                hasUpdates = true;
-            }
-            if (!userData.status) {
-                updates.status = 'active';
-                userData.status = 'active';
-                hasUpdates = true;
-            }
+                    if (!userData.joinDate) { updates.joinDate = new Date().toISOString(); userData.joinDate = updates.joinDate; hasUpdates = true; }
+                    if (!userData.savedResourceIds) { updates.savedResourceIds = []; userData.savedResourceIds = []; hasUpdates = true; }
+                    if (!userData.subscriptions) { updates.subscriptions = { users: [], lecturers: [], courseCodes: [] }; userData.subscriptions = updates.subscriptions; hasUpdates = true; }
+                    if (!userData.role) { updates.role = 'student'; userData.role = 'student'; hasUpdates = true; }
+                    if (!userData.status) { updates.status = 'active'; userData.status = 'active'; hasUpdates = true; }
 
-            // Fix Legacy Avatars
-            const isLegacyAvatar = !userData.avatarUrl || 
-                                   (!userData.avatarUrl.startsWith('data:') && !userData.avatarUrl.includes('firebasestorage'));
+                    const isLegacyAvatar = !userData.avatarUrl || (!userData.avatarUrl.startsWith('data:') && !userData.avatarUrl.includes('firebasestorage'));
+                    if (isLegacyAvatar) {
+                        const newAvatar = generateDefaultAvatar(userData.name);
+                        userData.avatarUrl = newAvatar;
+                        updates.avatarUrl = newAvatar;
+                        hasUpdates = true;
+                    }
 
-            if (isLegacyAvatar) {
-                const newAvatar = generateDefaultAvatar(userData.name);
-                userData.avatarUrl = newAvatar;
-                updates.avatarUrl = newAvatar;
-                hasUpdates = true;
-            }
+                    if (userData.status === 'banned') {
+                        await firebaseAuth.signOut(auth);
+                        setUser(null);
+                        setAuthError({ title: "Account Restricted", message: "Your account has been banned. Please contact support." });
+                        setIsLoading(false);
+                        return;
+                    }
 
-            if (userData.status === 'banned') {
-                await firebaseAuth.signOut(auth);
-                setUser(null);
-                setAuthError("Your account has been restricted. Please contact support.");
+                    if (userData.status === 'deactivated') {
+                        updates.status = 'active';
+                        userData.status = 'active';
+                        hasUpdates = true;
+                        showToast("Welcome back! Your account has been reactivated.", "success");
+                    }
+
+                    if (hasUpdates) {
+                        await updateDoc(userRef, updates);
+                        if (updates.avatarUrl) propagateUserUpdates(userData.id, { avatarUrl: updates.avatarUrl });
+                    }
+
+                    setUser(userData);
+                } else {
+                    // Create New User
+                    const displayName = firebaseUser.displayName || "Student";
+                    const defaultAvatar = generateDefaultAvatar(displayName);
+                    
+                    const isLecturerEmail = firebaseUser.email?.endsWith('@unimy.edu.my') && !firebaseUser.email?.endsWith('@student.unimy.edu.my');
+                    const role = isLecturerEmail ? 'lecturer' : 'student';
+                    const bio = isLecturerEmail ? 'Lecturer' : 'Student';
+                    const course = isLecturerEmail ? 'Lecturer' : 'Student';
+
+                    const newUser: User = {
+                        id: firebaseUser.uid,
+                        name: displayName,
+                        email: firebaseUser.email || "",
+                        avatarUrl: defaultAvatar,
+                        joinDate: new Date().toISOString(),
+                        lastActive: new Date().toISOString(),
+                        bio: bio,
+                        points: 0,
+                        weeklyPoints: 0,
+                        uploadCount: 0,
+                        course: course,
+                        currentYear: 1,
+                        currentSemester: 1,
+                        subscriptions: { users: [], lecturers: [], courseCodes: [] },
+                        savedResourceIds: [],
+                        role: role,
+                        status: 'active'
+                    };
+                    
+                    await setDoc(userRef, newUser);
+                    setUser(newUser);
+                }
                 setIsLoading(false);
-                return;
-            }
-
-            if (userData.status === 'deactivated') {
-                updates.status = 'active';
-                userData.status = 'active';
-                hasUpdates = true;
-                showToast("Welcome back! Your account has been reactivated.", "success");
-            }
-
-            if (hasUpdates) {
-                await updateDoc(userRef, updates);
-                if (updates.avatarUrl) {
-                    propagateUserUpdates(userData.id, { avatarUrl: updates.avatarUrl });
+            } catch (error: any) {
+                console.error("Error fetching user data:", error);
+                
+                if (error.code === 'permission-denied') {
+                    setAuthError({ 
+                        title: "Database Permission Denied", 
+                        message: "The application cannot access the database. This usually means the Firestore Security Rules are not configured correctly.",
+                        code: "permission-denied"
+                    });
+                    setIsLoading(false);
+                } else if (retries > 0) {
+                    console.log(`Retrying user fetch... (${retries} attempts left)`);
+                    setTimeout(() => fetchUserProfile(retries - 1), 1000);
+                } else {
+                    let errorMessage = "Failed to load user profile.";
+                    if (error.code === 'unavailable') {
+                        errorMessage = "Network disconnected. Unable to reach database.";
+                    }
+                    setAuthError({ title: "Connection Error", message: errorMessage });
+                    setIsLoading(false);
                 }
             }
+        };
 
-            setUser(userData);
-          } else {
-            // Create New User
-            const displayName = firebaseUser.displayName || "Student";
-            const defaultAvatar = generateDefaultAvatar(displayName);
-            
-            const isLecturerEmail = firebaseUser.email?.endsWith('@unimy.edu.my') && !firebaseUser.email?.endsWith('@student.unimy.edu.my');
-            const role = isLecturerEmail ? 'lecturer' : 'student';
-            const bio = isLecturerEmail ? 'Lecturer' : 'Student';
-            const course = isLecturerEmail ? 'Lecturer' : 'Student';
+        fetchUserProfile();
 
-            const newUser: User = {
-              id: firebaseUser.uid,
-              name: displayName,
-              email: firebaseUser.email || "",
-              avatarUrl: defaultAvatar,
-              joinDate: new Date().toISOString(),
-              lastActive: new Date().toISOString(),
-              bio: bio,
-              points: 0,
-              weeklyPoints: 0,
-              uploadCount: 0,
-              course: course,
-              currentYear: 1,
-              currentSemester: 1,
-              subscriptions: { users: [], lecturers: [], courseCodes: [] },
-              savedResourceIds: [],
-              role: role,
-              status: 'active'
-            };
-            
-            await setDoc(userRef, newUser);
-            setUser(newUser);
-          }
-        } catch (error: any) {
-          console.error("Error fetching user data:", error);
-          // CRITICAL: Do NOT set user to null here. That causes the login loop.
-          // Instead, set an error state so the user sees WHY it failed.
-          let errorMessage = "Failed to load user profile.";
-          if (error.code === 'permission-denied') {
-              errorMessage = "Database Permission Denied. Please contact administrator.";
-          } else if (error.code === 'unavailable') {
-              errorMessage = "Network disconnected. Unable to reach database.";
-          }
-          setAuthError(errorMessage + " (" + (error.message || "Unknown error") + ")");
-        }
       } else {
         setUser(null);
         setViewState('dashboard');
+        setIsLoading(false);
       }
-      setIsLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
-  // ... (snapshot listeners remain largely the same, logic omitted for brevity as it's stable)
-  // ... (ensure you keep the snapshot listeners code here)
+  // ... (snapshots and handlers remain the same)
+  // Logic from previous turn retained for brevity
   useEffect(() => {
     if (!user || !db) return;
-
     setAreResourcesLoading(true);
-
     const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
         try {
             let rawUsers = snapshot.docs.map(docSnap => ({ ...docSnap.data(), id: docSnap.id } as User));
-            // Master Admin Logic (kept from previous iterations)
             const adminAccounts = rawUsers.filter(u => u.email?.toLowerCase().trim() === MASTER_ADMIN_EMAIL.toLowerCase());
             if (adminAccounts.length > 0) {
                 adminAccounts.sort((a, b) => {
@@ -427,34 +414,27 @@ const App: React.FC = () => {
             setUsers(rawUsers);
         } catch(e) { console.error(e); }
     });
-
     const unsubResources = onSnapshot(query(collection(db, "resources"), orderBy("uploadDate", "desc")), (snapshot) => {
       setResources(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Resource)));
       setAreResourcesLoading(false);
     });
-
     const unsubPosts = onSnapshot(query(collection(db, "forumPosts"), orderBy("timestamp", "desc")), (snapshot) => {
       setForumPosts(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ForumPost)));
     });
-
     const unsubRequests = onSnapshot(query(collection(db, "resourceRequests"), orderBy("timestamp", "desc")), (snapshot) => {
       setResourceRequests(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ResourceRequest)));
     });
-
     const unsubConvos = onSnapshot(query(collection(db, "conversations"), where("participants", "array-contains", user.id)), (snapshot) => {
       setConversations(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Conversation)));
     });
-
     const unsubMessages = onSnapshot(query(collection(db, "directMessages"), orderBy("timestamp", "asc")), (snapshot) => {
         setDirectMessages(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as DirectMessage)));
     });
-
     const unsubNotifs = onSnapshot(query(collection(db, "notifications"), where("recipientId", "==", user.id)), (snapshot) => {
       const fetchedNotifs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Notification));
       fetchedNotifs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       setNotifications(fetchedNotifs);
     });
-    
     let unsubReports = () => {};
     if (user.role === 'admin') {
         const q = query(collection(db, "reports"), where("status", "==", "pending"));
@@ -462,30 +442,25 @@ const App: React.FC = () => {
             setReports(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Report)));
         });
     }
-
     return () => {
       unsubUsers(); unsubResources(); unsubPosts(); unsubRequests(); unsubConvos(); unsubMessages(); unsubNotifs(); unsubReports();
     };
   }, [user?.id, user?.role]);
 
-  // ... (logic functions like sendNotification, logout, etc.)
   const sendNotification = async (recipientId: string, senderId: string, type: NotificationType, message: string, linkIds?: any) => {
       if (recipientId === user?.id || !db) return;
       await addDoc(collection(db, "notifications"), { recipientId, senderId, type, message, timestamp: new Date().toISOString(), isRead: false, ...linkIds });
   };
-
   const handleLogin = (email: string) => { console.log("Login success for:", email); };
-
   const logout = async () => {
     if (!auth) return;
-    setAuthError(null); // Clear error on explicit logout
+    setAuthError(null);
     await firebaseAuth.signOut(auth);
     setUser(null);
     setViewState('dashboard');
     setViewHistory([]);
   };
-
-  // Re-implementing helper functions for context
+  // Context functions
   const deleteAccount = async () => { if (!user || !db) return; setIsLoading(true); try { await deleteDoc(doc(db, "users", user.id)); if (auth.currentUser) await auth.currentUser.delete(); window.location.reload(); } catch (error) { setIsLoading(false); } };
   const deactivateAccount = async () => { if (!user || !db) return; await updateDoc(doc(db, "users", user.id), { status: 'deactivated' }); logout(); };
   const toggleSaveResource = async (resourceId: string) => { if (!user) return; const isSaved = user.savedResourceIds?.includes(resourceId); await updateDoc(doc(db, "users", user.id), { savedResourceIds: isSaved ? arrayRemove(resourceId) : arrayUnion(resourceId) }); };
@@ -540,30 +515,65 @@ const App: React.FC = () => {
     );
   }
 
-  // 🔴 Error State Handling: Show Error instead of infinite load or login loop
+  // 🔴 Error State Handling
   if (authError) {
       return (
           <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg p-4">
-              <div className="bg-white dark:bg-dark-surface p-8 rounded-xl shadow-lg border border-red-200 dark:border-red-900 max-w-md text-center">
-                  <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <AlertCircle size={32} />
+              <div className="bg-white dark:bg-dark-surface p-8 rounded-xl shadow-lg border border-red-200 dark:border-red-900 max-w-lg w-full">
+                  <div className="text-center mb-6">
+                      <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <ShieldAlert size={32} />
+                      </div>
+                      <h1 className="text-xl font-bold text-slate-800 dark:text-white mb-2">{authError.title}</h1>
+                      <p className="text-slate-600 dark:text-slate-300 text-sm">
+                          {authError.message}
+                      </p>
                   </div>
-                  <h1 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Authentication Error</h1>
-                  <p className="text-slate-600 dark:text-slate-300 mb-6 text-sm">
-                      {authError}
-                  </p>
-                  <button 
-                    onClick={() => window.location.reload()}
-                    className="bg-primary-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-primary-700 transition flex items-center justify-center gap-2 mx-auto"
-                  >
-                    <RefreshCw size={18} /> Retry
-                  </button>
-                  <button 
-                    onClick={logout}
-                    className="mt-4 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 text-sm flex items-center justify-center gap-2 mx-auto"
-                  >
-                    <LogOut size={14} /> Log out and try again
-                  </button>
+
+                  {authError.code === 'permission-denied' && (
+                      <div className="bg-slate-100 dark:bg-zinc-800 p-4 rounded-lg border border-slate-200 dark:border-zinc-700 text-left mb-6">
+                          <div className="flex justify-between items-center mb-2">
+                              <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Action Required</p>
+                              <button 
+                                onClick={() => {
+                                    navigator.clipboard.writeText(`rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /{document=**} {\n      allow read, write: if request.auth != null;\n    }\n  }\n}`);
+                                    alert("Rules copied to clipboard!");
+                                }}
+                                className="text-primary-600 dark:text-primary-400 text-xs flex items-center gap-1 hover:underline"
+                              >
+                                  <Copy size={12} /> Copy Rules
+                              </button>
+                          </div>
+                          <p className="text-xs text-slate-600 dark:text-slate-300 mb-3">
+                              Go to <strong>Firebase Console &gt; Firestore Database &gt; Rules</strong> and paste this:
+                          </p>
+                          <pre className="text-[10px] bg-slate-800 text-green-400 p-3 rounded overflow-x-auto whitespace-pre-wrap font-mono leading-relaxed">
+{`rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}`}
+                          </pre>
+                      </div>
+                  )}
+
+                  <div className="flex flex-col gap-3">
+                    <button 
+                        onClick={() => window.location.reload()}
+                        className="w-full bg-primary-600 text-white font-bold py-2.5 px-6 rounded-lg hover:bg-primary-700 transition flex items-center justify-center gap-2"
+                    >
+                        <RefreshCw size={18} /> Retry Connection
+                    </button>
+                    <button 
+                        onClick={logout}
+                        className="w-full text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 text-sm flex items-center justify-center gap-2"
+                    >
+                        <LogOut size={14} /> Log out and try again
+                    </button>
+                  </div>
               </div>
           </div>
       );
@@ -593,7 +603,7 @@ const App: React.FC = () => {
   return (
     <AppContext.Provider value={{
       user, users, resources, forumPosts, notifications, conversations, directMessages, resourceRequests, reports,
-      view, setView: (v, id, opt) => { if(!opt?.replace) setViewHistory(prev => [...prev, {view: v, id}]); setViewState(v); setSelectedId(id); window.scrollTo(0,0); },
+      view, setView, 
       logout, isDarkMode, toggleDarkMode: () => setIsDarkMode(!isDarkMode),
       userRanks, savedResourceIds: user.savedResourceIds || [], toggleSaveResource, handleVote, addCommentToResource, handleCommentVote, deleteCommentFromResource,
       addForumPost, handlePostVote, deleteForumPost, addReplyToPost, handleReplyVote, deleteReplyFromPost, toggleVerifiedAnswer,

@@ -1052,8 +1052,7 @@ const App: React.FC = () => {
       const newReq = { requester: sanitizeForFirestore(user), timestamp: new Date().toISOString(), status: 'Open', ...reqData, attachment };
       const refDoc = await addDoc(collection(db, "resourceRequests"), sanitizeForFirestore(newReq));
       
-      // Removed point earning for requests to avoid inflation without contribution
-      showToast("Request Posted!", "success");
+      earnPoints(5, "Request Posted!");
       
       const potentialHelpers = users.filter(u => u.subscriptions.courseCodes.includes(reqData.courseCode) && u.id !== user.id);
       potentialHelpers.forEach(async (u) => {
@@ -1061,7 +1060,36 @@ const App: React.FC = () => {
       });
   };
 
-  const deleteResourceRequest = async (requestId: string) => { if (!db) return; await deleteDoc(doc(db, "resourceRequests", requestId)); };
+  const deleteResourceRequest = async (requestId: string) => { 
+      if (!db) return; 
+      try {
+          const reqRef = doc(db, "resourceRequests", requestId);
+          const reqSnap = await getDoc(reqRef);
+          
+          if (reqSnap.exists()) {
+              const reqData = reqSnap.data() as ResourceRequest;
+              const requesterId = reqData.requester.id;
+              
+              await deleteDoc(reqRef);
+              
+              // Deduct 5 points from requester
+              const userRef = doc(db, "users", requesterId);
+              await updateDoc(userRef, {
+                  points: increment(-5),
+                  weeklyPoints: increment(-5)
+              });
+              
+              if (user?.id === requesterId) {
+                  showToast("Request deleted.", "info", -5);
+              } else {
+                  showToast("Request deleted.", "success");
+              }
+          }
+      } catch (e) {
+          console.error("Failed to delete request", e);
+          showToast("Failed to delete request.", "error");
+      }
+  };
   
   const openUploadForRequest = (id: string) => { const req = resourceRequests.find(r => r.id === id); if (req) { setFulfillingRequest(req); setIsUploadModalOpen(true); } };
   

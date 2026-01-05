@@ -84,6 +84,10 @@ const LeaderboardPage: React.FC = () => {
                                 <span className="font-medium text-slate-700 dark:text-slate-300">Create Discussion</span>
                                 <span className="font-bold text-green-600 dark:text-green-400">+10 pts</span>
                             </div>
+                             <div className="flex justify-between items-center p-3 bg-slate-50 dark:bg-zinc-800 rounded-lg border border-slate-100 dark:border-zinc-700">
+                                <span className="font-medium text-slate-700 dark:text-slate-300">Make a Request</span>
+                                <span className="font-bold text-green-600 dark:text-green-400">+5 pts</span>
+                            </div>
                         </div>
                     </div>
                 </div>

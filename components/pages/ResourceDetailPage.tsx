@@ -379,8 +379,8 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     }
   };
 
-  const handleUpvoteClick = () => { if (!user) return; handleVote(resource.id, 'up'); };
-  const handleDownvoteClick = () => { if (!user) return; handleVote(resource.id, 'down'); };
+  const handleUpvoteClick = () => { if (!user || isAuthor) return; handleVote(resource.id, 'up'); };
+  const handleDownvoteClick = () => { if (!user || isAuthor) return; handleVote(resource.id, 'down'); };
   
   const handleSubmitReport = async () => {
     if (reportReason.trim() !== "") {
@@ -585,27 +585,29 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
                     </a>
                 </div>
                 {/* Reporting */}
-                {hasReported ? (
-                     <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800 text-center flex flex-col items-center gap-2">
-                        <CheckCircle className="text-green-600 dark:text-green-400" size={24}/>
-                        <div><h4 className="font-bold text-green-800 dark:text-green-200">Report Submitted</h4><p className="text-sm text-green-700 dark:text-green-300 mt-1">Thank you. Our moderators will review this shortly.</p></div>
-                    </div>
-                ) : !isReporting ? (
-                    <div className="flex flex-col gap-2">
-                         <button onClick={() => setIsReporting(true)} className="w-full flex items-center justify-center gap-2 text-slate-500 dark:text-slate-400 font-semibold py-2 px-4 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 hover:text-slate-700 dark:hover:text-slate-200 transition text-sm">
-                            <Flag size={16} className="text-red-500"/> Report this resource
-                        </button>
-                    </div>
-                ) : (
-                    <div className="p-4 bg-slate-50 dark:bg-zinc-800/50 rounded-lg border border-slate-200 dark:border-zinc-700">
-                        <h4 className="font-bold text-slate-700 dark:text-slate-200 mb-2">Report Resource</h4>
-                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Please provide a reason for reporting this content. Your report is anonymous.</p>
-                        <textarea value={reportReason} onChange={(e) => setReportReason(e.target.value)} placeholder="e.g., Incorrect information, offensive content, spam..." className="w-full bg-white dark:bg-zinc-900 text-slate-900 dark:text-white placeholder:text-slate-500 dark:placeholder:text-slate-500 px-4 py-2 border border-slate-300 dark:border-zinc-700 rounded-lg focus:ring-primary-500 focus:border-primary-500 transition focus:outline-none" rows={3} autoFocus />
-                        <div className="flex justify-end gap-2 mt-4">
-                            <button onClick={() => setIsReporting(false)} className="bg-slate-200 dark:bg-zinc-700 text-slate-700 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-zinc-600 transition">Cancel</button>
-                            <button onClick={handleSubmitReport} className="bg-red-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-red-700 transition">Submit Report</button>
+                {!isAuthor && (
+                    hasReported ? (
+                        <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800 text-center flex flex-col items-center gap-2">
+                            <CheckCircle className="text-green-600 dark:text-green-400" size={24}/>
+                            <div><h4 className="font-bold text-green-800 dark:text-green-200">Report Submitted</h4><p className="text-sm text-green-700 dark:text-green-300 mt-1">Thank you. Our moderators will review this shortly.</p></div>
                         </div>
-                    </div>
+                    ) : !isReporting ? (
+                        <div className="flex flex-col gap-2">
+                            <button onClick={() => setIsReporting(true)} className="w-full flex items-center justify-center gap-2 text-slate-500 dark:text-slate-400 font-semibold py-2 px-4 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 hover:text-slate-700 dark:hover:text-slate-200 transition text-sm">
+                                <Flag size={16} className="text-red-500"/> Report this resource
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="p-4 bg-slate-50 dark:bg-zinc-800/50 rounded-lg border border-slate-200 dark:border-zinc-700">
+                            <h4 className="font-bold text-slate-700 dark:text-slate-200 mb-2">Report Resource</h4>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Please provide a reason for reporting this content. Your report is anonymous.</p>
+                            <textarea value={reportReason} onChange={(e) => setReportReason(e.target.value)} placeholder="e.g., Incorrect information, offensive content, spam..." className="w-full bg-white dark:bg-zinc-900 text-slate-900 dark:text-white placeholder:text-slate-500 dark:placeholder:text-slate-500 px-4 py-2 border border-slate-300 dark:border-zinc-700 rounded-lg focus:ring-primary-500 focus:border-primary-500 transition focus:outline-none" rows={3} autoFocus />
+                            <div className="flex justify-end gap-2 mt-4">
+                                <button onClick={() => setIsReporting(false)} className="bg-slate-200 dark:bg-zinc-700 text-slate-700 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-zinc-600 transition">Cancel</button>
+                                <button onClick={handleSubmitReport} className="bg-red-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-red-700 transition">Submit Report</button>
+                            </div>
+                        </div>
+                    )
                 )}
             </div>
           </div>
@@ -676,10 +678,30 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
             <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md lg:sticky top-24 transition-colors duration-300 border border-transparent dark:border-zinc-700">
                 <img src={resource.previewImageUrl} alt={resource.title} className="w-full h-80 object-cover rounded-lg mb-6" />
                 <div className="flex items-center gap-2">
-                    <button onClick={handleUpvoteClick} className={`flex items-center gap-2 p-3 rounded-lg transition font-medium ${isUpvoted ? 'bg-green-600 text-white' : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50'}`}>
+                    <button 
+                        onClick={handleUpvoteClick} 
+                        disabled={isAuthor}
+                        className={`flex items-center gap-2 p-3 rounded-lg transition font-medium ${
+                            isUpvoted 
+                                ? 'bg-green-600 text-white' 
+                                : isAuthor
+                                    ? 'bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                                    : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50'
+                        }`}
+                    >
                         <ThumbsUp size={18} /> {resource.upvotes > 0 && <span>{resource.upvotes}</span>}
                     </button>
-                    <button onClick={handleDownvoteClick} className={`flex items-center gap-2 p-3 rounded-lg transition font-medium ${isDownvoted ? 'bg-red-600 text-white' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50'}`}>
+                    <button 
+                        onClick={handleDownvoteClick} 
+                        disabled={isAuthor}
+                        className={`flex items-center gap-2 p-3 rounded-lg transition font-medium ${
+                            isDownvoted 
+                                ? 'bg-red-600 text-white' 
+                                : isAuthor
+                                    ? 'bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                                    : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50'
+                        }`}
+                    >
                         <ThumbsDown size={18} /> {resource.downvotes > 0 && <span>{resource.downvotes}</span>}
                     </button>
                     <button onClick={() => toggleSaveResource(resource.id)} title={isSaved ? "Unsave" : "Save for later"} className={`p-3 rounded-lg transition font-medium ${isSaved ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-zinc-700'}`}>

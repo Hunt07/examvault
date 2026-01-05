@@ -412,20 +412,64 @@ const App: React.FC = () => {
     setAreResourcesLoading(true);
 
     const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
-      // 1. Fetch raw data first to perform sorting
+      // 1. Fetch raw data
       let rawUsers = snapshot.docs.map(docSnap => ({ ...docSnap.data(), id: docSnap.id } as User));
 
-      // 2. Sort to prioritize the correct Master Admin account ("Osama") over duplicates
-      // This ensures "Osama" is processed first and kept, while duplicates are filtered out below.
-      rawUsers.sort((a, b) => {
-          if (a.email === MASTER_ADMIN_EMAIL && b.email === MASTER_ADMIN_EMAIL) {
-              // Explicitly prefer "Osama"
-              if (a.name === 'Osama') return -1;
+      // 2. MASTER ADMIN CLEANUP: Identify duplicate admin accounts
+      // Filter for all accounts with the Master Admin email (case-insensitive)
+      const adminAccounts = rawUsers.filter(u => u.email.toLowerCase().trim() === MASTER_ADMIN_EMAIL.toLowerCase());
+
+      if (adminAccounts.length > 0) {
+          // Sort to determine the "Winner" (Desired Account)
+          // Priority: 1. Name is "Osama"
+          //           2. Shorter Name length (to prefer "Osama" over "AHMED...")
+          //           3. Points/Activity
+          adminAccounts.sort((a, b) => {
+              if (a.name === 'Osama') return -1; // 'Osama' always wins
               if (b.name === 'Osama') return 1;
-              // Fallback: Prefer shorter name (usually the clean one)
-              return a.name.length - b.name.length;
+              return a.name.length - b.name.length; // Shorter name wins
+          });
+
+          const winner = adminAccounts[0];
+
+          // 2a. Force Rename if Winner is not named 'Osama' (This fixes the single account case)
+          if (winner.name !== 'Osama') {
+              const userRef = doc(db, "users", winner.id);
+              updateDoc(userRef, { name: 'Osama' });
+              // Update local instance immediately for UI stability
+              winner.name = 'Osama';
+              // If we are currently logged in as this user, update local state
+              if (user.id === winner.id) {
+                  setUser({ ...user, name: 'Osama' });
+              }
           }
-          return 0;
+
+          // 2b. Delete Duplicates (The "Losers")
+          // If there are multiple accounts, delete the ones that are NOT the winner
+          for (let i = 1; i < adminAccounts.length; i++) {
+              const loser = adminAccounts[i];
+              console.log("Auto-deleting duplicate admin account:", loser.id, loser.name);
+              
+              // Perform Delete
+              deleteDoc(doc(db, "users", loser.id));
+              
+              // Remove from the rawUsers array so they don't appear in the app list
+              const idx = rawUsers.findIndex(u => u.id === loser.id);
+              if (idx > -1) rawUsers.splice(idx, 1);
+          }
+      }
+
+      // 3. Continue with Standard Sort & Deduplication for other users
+      rawUsers.sort((a, b) => {
+          const emailA = a.email.toLowerCase().trim();
+          const emailB = b.email.toLowerCase().trim();
+          
+          if (emailA !== emailB) return 0;
+
+          // Tie-breakers for general duplicates
+          if (a.role === 'admin' && b.role !== 'admin') return -1;
+          if (b.role === 'admin' && a.role !== 'admin') return 1;
+          return b.points - a.points;
       });
 
       const fetchedUsers: User[] = [];
@@ -435,24 +479,21 @@ const App: React.FC = () => {
       const seenEmails = new Set<string>();
 
       rawUsers.forEach((u) => {
-        // DEDUPLICATION LOGIC:
-        // If we have already seen this email in this sorted list, skip it.
-        // Since we sorted 'Osama' to be first, the other duplicates will be skipped here.
-        if (seenEmails.has(u.email)) {
+        const normalizedEmail = u.email.toLowerCase().trim();
+        if (seenEmails.has(normalizedEmail)) {
             return;
         }
-        seenEmails.add(u.email);
+        seenEmails.add(normalizedEmail);
 
-        // Ensure defaults for all users in view
         if (!u.role) u.role = 'student';
         if (!u.status) u.status = 'active';
 
-        // Master Admin Hardcode Logic
+        // Master Admin Hardcode Role
         if (u.email === MASTER_ADMIN_EMAIL && u.role !== 'admin') {
              const ref = doc(db!, "users", u.id);
              batch.update(ref, { role: 'admin' });
              needsCommit = true;
-             u.role = 'admin'; // Update local instance to reflect immediately in UI
+             u.role = 'admin';
         }
         
         // Automatic Lecturer Role & Bio Assignment
@@ -466,7 +507,6 @@ const App: React.FC = () => {
                 u.course = 'Lecturer';
             }
             
-            // Fix Bio if it defaults to Student text
             if (u.bio === 'Student' || u.bio === 'student' || u.bio === 'I am a student at UNIMY.') {
                 updates.bio = 'Lecturer';
                 u.bio = 'Lecturer';
@@ -501,28 +541,30 @@ const App: React.FC = () => {
 
       setUsers(fetchedUsers);
       
-      // Update self if data changed remotely (e.g. role change)
-      if (user) {
-        const me = fetchedUsers.find(u => u.id === user.id);
-        if (me) {
-             if (me.status === 'banned') {
-                 logout(); // Force logout if banned live
-                 showToast("Your account has been restricted.", "error");
-             } else {
-                 setUser(me);
-             }
-        }
+      // Update self if data changed remotely
+      if (auth.currentUser?.email) {
+          const myEmail = auth.currentUser.email.toLowerCase().trim();
+          const bestProfileForMe = fetchedUsers.find(u => u.email.toLowerCase().trim() === myEmail);
+
+          if (bestProfileForMe) {
+              if (!user || user.id !== bestProfileForMe.id || JSON.stringify(user) !== JSON.stringify(bestProfileForMe)) {
+                   if (bestProfileForMe.status === 'banned') {
+                       logout();
+                       showToast("Your account has been restricted.", "error");
+                   } else {
+                       setUser(bestProfileForMe);
+                   }
+              }
+          }
       }
     });
 
     // Admin: Subscribe to Reports
     let unsubReports = () => {};
     if (user.role === 'admin') {
-        // Query only by status to avoid compound index requirements on Firebase
         const q = query(collection(db, "reports"), where("status", "==", "pending"));
         unsubReports = onSnapshot(q, (snapshot) => {
             const fetchedReports = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Report));
-            // Client-side sort
             fetchedReports.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
             setReports(fetchedReports);
         });
@@ -633,14 +675,16 @@ const App: React.FC = () => {
   }, [directMessages, user]);
 
   useEffect(() => {
-    if (user && !isLoading) {
+    // Only run this logic when the user ID changes (login/logout) or loading finishes.
+    // We avoid depending on the entire 'user' object to prevent resets when fields like 'lastActive' update.
+    if (user?.id && !isLoading) {
       const hasSeenTour = localStorage.getItem(`examvault_tour_${user.id}`);
       if (!hasSeenTour) {
         setRunTour(true);
         setTourStep(1);
       }
     }
-  }, [user, isLoading]);
+  }, [user?.id, isLoading]);
 
   const finishTour = () => {
     setRunTour(false);

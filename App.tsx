@@ -1283,7 +1283,7 @@ const App: React.FC = () => {
           if (view === 'messages' && selectedId === conversationId) {
               setView('messages', undefined);
           }
-          showToast("Conversation hidden.", "info");
+          showToast("Conversation removed from list.", "info");
       } catch (e) {
           console.error("Failed to hide conversation", e);
           showToast("Failed to hide conversation", "error");

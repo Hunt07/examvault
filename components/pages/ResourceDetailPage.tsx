@@ -202,25 +202,32 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   const isUpvoted = resource.upvotedBy?.includes(user?.id || '');
   const isDownvoted = resource.downvotedBy?.includes(user?.id || '');
 
-  // Deep linking and Highlighting logic
+  // Enhanced Deep Linking with Retry Logic
   useEffect(() => {
       if (scrollTargetId) {
-          // Delay finding element to allow rendering
-          const timer = setTimeout(() => {
+          const tryScroll = (attempts: number) => {
               const targetElement = document.getElementById(scrollTargetId);
               if (targetElement) {
-                  targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                  // Add highlight class
-                  targetElement.classList.add('bg-yellow-100', 'dark:bg-yellow-900/40', 'ring-2', 'ring-yellow-400', 'dark:ring-yellow-600');
-                  
-                  // Remove highlight class after a delay - duration-[2000ms] handles the fade out
+                  // Element found, wait a tick for layout stability
                   setTimeout(() => {
-                      targetElement.classList.remove('bg-yellow-100', 'dark:bg-yellow-900/40', 'ring-2', 'ring-yellow-400', 'dark:ring-yellow-600');
-                      setScrollTargetId(null);
-                  }, 3000);
+                      targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      
+                      // Add highlight class immediately
+                      targetElement.classList.add('bg-yellow-100', 'dark:bg-yellow-900/40', 'ring-2', 'ring-yellow-400', 'dark:ring-yellow-600');
+                      
+                      // Trigger fade out after 2.5 seconds
+                      setTimeout(() => {
+                          targetElement.classList.remove('bg-yellow-100', 'dark:bg-yellow-900/40', 'ring-2', 'ring-yellow-400', 'dark:ring-yellow-600');
+                          setScrollTargetId(null);
+                      }, 2500);
+                  }, 100);
+              } else if (attempts > 0) {
+                  // Retry if element not found (e.g. comments loading)
+                  setTimeout(() => tryScroll(attempts - 1), 500);
               }
-          }, 600); // Increased delay slightly to ensure comments are mounted
-          return () => clearTimeout(timer);
+          };
+          
+          tryScroll(5); // Try 5 times over ~2.5 seconds
       }
   }, [scrollTargetId, resource.comments, setScrollTargetId]);
 

@@ -283,24 +283,32 @@ const ForumPostDetailPage: React.FC<{ post: ForumPost }> = ({ post }) => {
         return group;
     }, [post.replies]);
 
-    // Handle Deep Linking / Scrolling for Replies
+    // Enhanced Deep Linking with Retry Logic
     useEffect(() => {
         if (scrollTargetId) {
-            const timer = setTimeout(() => {
+            const tryScroll = (attempts: number) => {
                 const targetElement = document.getElementById(scrollTargetId);
                 if (targetElement) {
-                    targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    // Add highlight
-                    targetElement.classList.add('bg-yellow-100', 'dark:bg-yellow-900/40', 'ring-2', 'ring-yellow-400', 'dark:ring-yellow-600');
-                    
-                    // Remove with fade
+                    // Wait for layout stability
                     setTimeout(() => {
-                        targetElement.classList.remove('bg-yellow-100', 'dark:bg-yellow-900/40', 'ring-2', 'ring-yellow-400', 'dark:ring-yellow-600');
-                        setScrollTargetId(null);
-                    }, 3000);
+                        targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        
+                        // Add highlight
+                        targetElement.classList.add('bg-yellow-100', 'dark:bg-yellow-900/40', 'ring-2', 'ring-yellow-400', 'dark:ring-yellow-600');
+                        
+                        // Trigger fade out after 2.5 seconds
+                        setTimeout(() => {
+                            targetElement.classList.remove('bg-yellow-100', 'dark:bg-yellow-900/40', 'ring-2', 'ring-yellow-400', 'dark:ring-yellow-600');
+                            setScrollTargetId(null);
+                        }, 2500);
+                    }, 100);
+                } else if (attempts > 0) {
+                    // Retry slightly later
+                    setTimeout(() => tryScroll(attempts - 1), 500);
                 }
-            }, 600);
-            return () => clearTimeout(timer);
+            };
+            
+            tryScroll(5); // Try 5 times
         }
     }, [scrollTargetId, post.replies, setScrollTargetId]);
 

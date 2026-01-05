@@ -781,7 +781,7 @@ const App: React.FC = () => {
               setSelectedId(undefined); 
           }
           
-          // 6. Show notification
+          // 6. Show notification with negative points
           showToast("Resource deleted.", "info", -25);
 
       } catch (error) { 
@@ -825,8 +825,19 @@ const App: React.FC = () => {
       await updateDoc(doc(db, "resources", resourceId), { comments: arrayUnion(sanitizeForFirestore(newComment)) });
       
       const res = resources.find(r => r.id === resourceId);
-      if (res && res.author.id !== user.id) {
-          await sendNotification(res.author.id, user.id, NotificationType.NewForumPost, `${user.name} commented on your resource '${res.title}'`, { resourceId: res.id, commentId: newComment.id });
+      if (res) {
+          // 1. Notify Resource Author (if they didn't write the comment)
+          if (res.author.id !== user.id) {
+              await sendNotification(res.author.id, user.id, NotificationType.NewForumPost, `${user.name} commented on your resource '${res.title}'`, { resourceId: res.id, commentId: newComment.id });
+          }
+
+          // 2. Notify Parent Comment Author (if reply and not self, and distinct from resource author)
+          if (parentId) {
+              const parentComment = res.comments.find(c => c.id === parentId);
+              if (parentComment && parentComment.author.id !== user.id && parentComment.author.id !== res.author.id) {
+                   await sendNotification(parentComment.author.id, user.id, NotificationType.NewReply, `${user.name} replied to your comment on '${res.title}'`, { resourceId: res.id, commentId: newComment.id });
+              }
+          }
       }
   };
 

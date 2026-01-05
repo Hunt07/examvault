@@ -220,3 +220,4 @@ export interface QuizQuestion {
   options: string[];
   correctAnswer: string;
 }
+ 

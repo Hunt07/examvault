@@ -5,7 +5,7 @@ export interface User {
   email: string;
   avatarUrl: string;
   joinDate: string;
-  lastActive?: string; // Timestamp for online status
+  lastActive?: string;
   bio: string;
   points: number;
   weeklyPoints: number;
@@ -13,18 +13,16 @@ export interface User {
   course: string;
   currentYear: number;
   currentSemester: number;
-  subscriptions: UserSubscriptions;
+  subscriptions: {
+    users: string[];
+    lecturers: string[];
+    courseCodes: string[];
+  };
   savedResourceIds: string[];
-  savedPostIds: string[]; // Added
-  savedRequestIds: string[]; // Added
-  role: 'student' | 'admin' | 'lecturer';
+  savedPostIds: string[];
+  savedRequestIds: string[];
+  role: 'student' | 'lecturer' | 'admin';
   status: 'active' | 'banned' | 'deactivated';
-}
-
-export interface UserSubscriptions {
-  users: string[]; // array of user IDs
-  lecturers: string[]; // array of lecturer names
-  courseCodes: string[]; // array of course codes
 }
 
 export enum ResourceType {
@@ -35,15 +33,22 @@ export enum ResourceType {
 }
 
 export enum ExamType {
-    Midterm = 'Midterm',
-    Final = 'Final',
-    Quiz = 'Quiz',
+  Midterm = 'Midterm',
+  Final = 'Final',
+  Quiz = 'Quiz',
 }
 
 export enum SemesterIntake {
-    Feb = 'Feb',
-    May = 'May',
-    Sep = 'Sep',
+  Feb = 'Feb',
+  May = 'May',
+  Sep = 'Sep',
+}
+
+export interface Attachment {
+  type: 'image' | 'file';
+  url: string;
+  name: string;
+  size: string;
 }
 
 export interface Comment {
@@ -51,7 +56,7 @@ export interface Comment {
   author: User;
   text: string;
   timestamp: string;
-  parentId?: string | null;
+  parentId: string | null;
   upvotes: number;
   upvotedBy: string[];
 }
@@ -67,11 +72,9 @@ export interface Resource {
   semester: SemesterIntake;
   examType?: ExamType;
   description: string;
-  fileUrl: string; // URL to PDF/image
-  fileName: string; // Original name of the uploaded file
-  fileBase64?: string; // Base64 data for AI analysis
-  mimeType?: string; // Mime type for AI analysis
-  previewImageUrl: string; // URL for a thumbnail
+  fileUrl: string;
+  fileName: string;
+  previewImageUrl: string;
   author: User;
   uploadDate: string;
   upvotes: number;
@@ -79,14 +82,9 @@ export interface Resource {
   upvotedBy: string[];
   downvotedBy: string[];
   comments: Comment[];
-  contentForAI: string; // Mock text content for Gemini (fallback)
-}
-
-export interface Attachment {
-  type: 'image' | 'file';
-  url: string;
-  name: string;
-  size?: string;
+  contentForAI: string;
+  fileBase64?: string;
+  mimeType?: string;
 }
 
 export interface ForumReply {
@@ -96,13 +94,13 @@ export interface ForumReply {
   timestamp: string;
   upvotes: number;
   upvotedBy: string[];
+  parentId: string | null;
   isVerified: boolean;
-  parentId?: string | null;
   attachment?: Attachment;
 }
 
 export interface ForumPost {
-  id:string;
+  id: string;
   title: string;
   author: User;
   timestamp: string;
@@ -118,8 +116,8 @@ export interface ForumPost {
 }
 
 export enum NotificationType {
-  NewResource = 'new_resource',
   Subscription = 'subscription',
+  NewResource = 'new_resource',
   NewMessage = 'new_message',
   NewForumPost = 'new_forum_post',
   NewReply = 'new_reply',
@@ -133,20 +131,26 @@ export interface Notification {
   senderId?: string;
   type: NotificationType;
   message: string;
-  resourceId?: string;
-  conversationId?: string;
-  forumPostId?: string;
-  commentId?: string;
-  replyId?: string;
-  requestId?: string;
   timestamp: string;
   isRead: boolean;
+  resourceId?: string;
+  forumPostId?: string;
+  replyId?: string;
+  commentId?: string;
+  conversationId?: string;
+  requestId?: string;
 }
 
 export enum MessageStatus {
   Sent = 'sent',
   Delivered = 'delivered',
   Read = 'read',
+}
+
+export interface Conversation {
+  id: string;
+  participants: string[];
+  lastMessageTimestamp: string;
 }
 
 export interface DirectMessage {
@@ -157,25 +161,8 @@ export interface DirectMessage {
   text: string;
   timestamp: string;
   status: MessageStatus;
-  isDeleted?: boolean;
+  isDeleted: boolean;
   editedAt?: string;
-}
-
-export interface Conversation {
-  id: string;
-  participants: [string, string]; // Array of two user IDs
-  lastMessageTimestamp: string;
-}
-
-export interface Flashcard {
-  term: string;
-  definition: string;
-}
-
-export interface QuizQuestion {
-  question: string;
-  options: string[];
-  correctAnswer: string;
 }
 
 export enum ResourceRequestStatus {
@@ -210,4 +197,26 @@ export interface Report {
   reason: string;
   timestamp: string;
   status: 'pending' | 'resolved' | 'dismissed';
+}
+
+export interface LogEntry {
+  id: string;
+  actorId: string;
+  actorName: string;
+  actorAvatar?: string;
+  actionType: 'upload' | 'delete' | 'social' | 'admin' | 'account' | 'auth';
+  description: string;
+  targetId?: string;
+  timestamp: string;
+}
+
+export interface Flashcard {
+  term: string;
+  definition: string;
+}
+
+export interface QuizQuestion {
+  question: string;
+  options: string[];
+  correctAnswer: string;
 }

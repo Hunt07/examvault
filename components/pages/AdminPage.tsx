@@ -1,18 +1,19 @@
 
 import React, { useContext, useState, useMemo } from 'react';
 import { AppContext } from '../../App';
-import { Shield, User, UserX, UserCheck, AlertTriangle, Trash2, CheckCircle, Search, Ban, RotateCcw, Eye, Check, X, GraduationCap, Lock, Clock } from 'lucide-react';
+import { Shield, User, UserX, UserCheck, AlertTriangle, Trash2, CheckCircle, Search, Ban, RotateCcw, Eye, Check, X, GraduationCap, Lock, Clock, FileText, UploadCloud, MessageSquare, Activity } from 'lucide-react';
 import Avatar from '../Avatar';
-import type { User as UserType, Report } from '../../types';
+import type { User as UserType, Report, LogEntry } from '../../types';
 
-type AdminTab = 'reports' | 'users';
+type AdminTab = 'reports' | 'users' | 'logs';
 
 const MASTER_ADMIN_EMAIL = 'b09220024@student.unimy.edu.my';
 
 const AdminPage: React.FC = () => {
-    const { users, reports, toggleUserRole, toggleUserStatus, resolveReport, setView, showToast, deleteResource } = useContext(AppContext);
+    const { users, reports, logs, toggleUserRole, toggleUserStatus, resolveReport, setView, showToast, deleteResource } = useContext(AppContext);
     const [activeTab, setActiveTab] = useState<AdminTab>('users');
     const [searchTerm, setSearchTerm] = useState('');
+    const [logFilter, setLogFilter] = useState<'all' | LogEntry['actionType']>('all');
 
     // User Management Logic
     const filteredUsers = useMemo(() => {
@@ -61,6 +62,33 @@ const AdminPage: React.FC = () => {
         return (now - lastActivity) < threshold;
     };
 
+    // Logs Logic
+    const filteredLogs = useMemo(() => {
+        let result = logs;
+        if (logFilter !== 'all') {
+            result = result.filter(log => log.actionType === logFilter);
+        }
+        if (searchTerm) {
+            const lower = searchTerm.toLowerCase();
+            result = result.filter(log => 
+                log.actorName.toLowerCase().includes(lower) || 
+                log.description.toLowerCase().includes(lower)
+            );
+        }
+        return result;
+    }, [logs, logFilter, searchTerm]);
+
+    const getLogIcon = (type: LogEntry['actionType']) => {
+        switch (type) {
+            case 'upload': return <UploadCloud size={16} className="text-green-500" />;
+            case 'delete': return <Trash2 size={16} className="text-red-500" />;
+            case 'admin': return <Shield size={16} className="text-purple-500" />;
+            case 'social': return <UserCheck size={16} className="text-blue-500" />;
+            case 'account': return <UserX size={16} className="text-amber-500" />;
+            default: return <Activity size={16} className="text-slate-500" />;
+        }
+    };
+
     return (
         <div className="space-y-6">
             {/* Header Card */}
@@ -80,10 +108,10 @@ const AdminPage: React.FC = () => {
                 <div className="absolute top-0 right-0 w-64 h-64 bg-red-500/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
                 
                 {/* Tabs */}
-                <div className="flex gap-6 mt-8 border-b border-slate-200 dark:border-zinc-700">
+                <div className="flex gap-6 mt-8 border-b border-slate-200 dark:border-zinc-700 overflow-x-auto">
                     <button 
                         onClick={() => setActiveTab('reports')}
-                        className={`pb-3 text-sm font-semibold transition-colors relative ${activeTab === 'reports' ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300'}`}
+                        className={`pb-3 text-sm font-semibold transition-colors relative whitespace-nowrap ${activeTab === 'reports' ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300'}`}
                     >
                         Reports Queue
                         {reports.length > 0 && <span className="ml-2 bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">{reports.length}</span>}
@@ -91,10 +119,17 @@ const AdminPage: React.FC = () => {
                     </button>
                     <button 
                         onClick={() => setActiveTab('users')}
-                        className={`pb-3 text-sm font-semibold transition-colors relative ${activeTab === 'users' ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300'}`}
+                        className={`pb-3 text-sm font-semibold transition-colors relative whitespace-nowrap ${activeTab === 'users' ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300'}`}
                     >
                         User Management
                         {activeTab === 'users' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-red-500 rounded-t-full" />}
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('logs')}
+                        className={`pb-3 text-sm font-semibold transition-colors relative whitespace-nowrap ${activeTab === 'logs' ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300'}`}
+                    >
+                        System Logs
+                        {activeTab === 'logs' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-red-500 rounded-t-full" />}
                     </button>
                 </div>
             </div>
@@ -288,6 +323,85 @@ const AdminPage: React.FC = () => {
                             </div>
                         ))
                     )}
+                </div>
+            )}
+
+            {activeTab === 'logs' && (
+                <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-lg border border-slate-200 dark:border-zinc-700 overflow-hidden">
+                    <div className="p-4 border-b border-slate-200 dark:border-zinc-700 flex flex-col sm:flex-row gap-4 justify-between items-center">
+                        <div className="relative w-full sm:w-64">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-zinc-500" size={18} />
+                            <input 
+                                type="text" 
+                                placeholder="Search logs..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full bg-slate-50 dark:bg-zinc-800 text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-zinc-500 pl-10 pr-4 py-2 rounded-lg border border-slate-300 dark:border-zinc-700 focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 transition text-sm"
+                            />
+                        </div>
+                        <div className="flex gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+                            {['all', 'upload', 'delete', 'social', 'admin', 'account'].map(filter => (
+                                <button
+                                    key={filter}
+                                    onClick={() => setLogFilter(filter as any)}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize whitespace-nowrap transition ${
+                                        logFilter === filter 
+                                        ? 'bg-slate-800 dark:bg-white text-white dark:text-slate-900' 
+                                        : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-zinc-700'
+                                    }`}
+                                >
+                                    {filter}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    
+                    <div className="max-h-[600px] overflow-y-auto">
+                        <table className="w-full text-left">
+                            <thead className="sticky top-0 bg-slate-50 dark:bg-zinc-800/90 backdrop-blur-sm z-10">
+                                <tr className="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-500 font-semibold border-b border-slate-200 dark:border-zinc-700">
+                                    <th className="px-6 py-3 w-1/4">Actor</th>
+                                    <th className="px-6 py-3 w-1/6">Action</th>
+                                    <th className="px-6 py-3 w-1/3">Description</th>
+                                    <th className="px-6 py-3 w-1/4 text-right">Time</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200 dark:divide-zinc-700">
+                                {filteredLogs.length > 0 ? (
+                                    filteredLogs.map(log => (
+                                        <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-zinc-800/50 transition">
+                                            <td className="px-6 py-3">
+                                                <div className="flex items-center gap-3">
+                                                    <Avatar src={log.actorAvatar} alt={log.actorName} className="w-8 h-8" />
+                                                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">{log.actorName}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-3">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="p-1.5 bg-slate-100 dark:bg-zinc-800 rounded-md">
+                                                        {getLogIcon(log.actionType)}
+                                                    </div>
+                                                    <span className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400">{log.actionType}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-3 text-sm text-slate-600 dark:text-slate-300">
+                                                {log.description}
+                                            </td>
+                                            <td className="px-6 py-3 text-right text-xs text-slate-500 dark:text-slate-400">
+                                                {new Date(log.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan={4} className="p-8 text-center text-slate-500 dark:text-zinc-500">
+                                            No logs found matching criteria.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             )}
         </div>

@@ -1051,7 +1051,9 @@ const App: React.FC = () => {
       }
       const newReq = { requester: sanitizeForFirestore(user), timestamp: new Date().toISOString(), status: 'Open', ...reqData, attachment };
       const refDoc = await addDoc(collection(db, "resourceRequests"), sanitizeForFirestore(newReq));
-      earnPoints(5, "Request Posted!");
+      
+      // Removed point earning for requests to avoid inflation without contribution
+      showToast("Request Posted!", "success");
       
       const potentialHelpers = users.filter(u => u.subscriptions.courseCodes.includes(reqData.courseCode) && u.id !== user.id);
       potentialHelpers.forEach(async (u) => {

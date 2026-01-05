@@ -137,10 +137,7 @@ const LeaderboardPage: React.FC = () => {
                         <li key={user.id} className={`p-3 sm:p-4 flex items-center justify-between transition-colors ${index < 3 ? 'bg-primary-50/50 dark:bg-primary-900/10' : 'hover:bg-slate-50 dark:hover:bg-zinc-800'}`}>
                            <button onClick={() => handleUserClick(user.id)} className="flex items-center gap-4 w-full text-left">
                                 <div className="flex items-center justify-center w-8">
-                                    <UserRankBadge rank={index} size={24} />
-                                    {index > 2 && (
-                                        <span className="w-6 text-center text-slate-500 dark:text-slate-400 font-bold">{index + 1}</span>
-                                    )}
+                                    <UserRankBadge rank={index} size={28} />
                                 </div>
                                 <img src={user.avatarUrl} alt={user.name} className="w-12 h-12 rounded-full" />
                                 <div>
@@ -162,3 +159,4 @@ const LeaderboardPage: React.FC = () => {
 };
 
 export default LeaderboardPage;
+        

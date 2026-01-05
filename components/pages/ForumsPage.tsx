@@ -13,23 +13,8 @@ const ForumPostCard: React.FC<{ post: ForumPost, onSelect: () => void, onAuthorC
 
     return (
         <div onClick={onSelect} className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md hover:shadow-lg transition-all duration-300 cursor-pointer border border-transparent dark:border-zinc-700 relative group">
-            <button 
-                onClick={(e) => {
-                    e.stopPropagation();
-                    toggleSavePost(post.id);
-                }}
-                className={`absolute top-4 right-4 p-2 rounded-full transition z-10 ${
-                    isSaved 
-                        ? 'text-amber-500 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-400' 
-                        : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-zinc-700 hover:text-slate-600 dark:hover:text-slate-200'
-                }`}
-                title={isSaved ? "Unsave Post" : "Save Post"}
-            >
-                {isSaved ? <BookmarkCheck size={20} /> : <Bookmark size={20} />}
-            </button>
-
             <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
-                <div className="flex-grow min-w-0 w-full pr-10">
+                <div className="flex-grow min-w-0 w-full pr-2">
                     <div className="flex items-center gap-2 mb-2">
                          <span className="text-sm font-bold text-slate-800 dark:text-white px-3 py-1 bg-slate-100 dark:bg-zinc-800 rounded-full">{post.courseCode}</span>
                          {post.attachment && (
@@ -65,7 +50,7 @@ const ForumPostCard: React.FC<{ post: ForumPost, onSelect: () => void, onAuthorC
                         <span key={tag} className="text-xs font-medium text-primary-700 dark:text-primary-300 bg-primary-100 dark:bg-primary-900/30 px-2 py-1 rounded-full">{tag}</span>
                     ))}
                 </div>
-                <div className="flex items-center gap-6 text-slate-500 dark:text-slate-400 text-sm font-medium">
+                <div className="flex items-center gap-4 text-slate-500 dark:text-slate-400 text-sm font-medium">
                     <span className="flex items-center">
                         <ThumbsUp size={16} />
                         {post.upvotes > 0 && <span className="ml-1.5">{post.upvotes}</span>}
@@ -74,6 +59,20 @@ const ForumPostCard: React.FC<{ post: ForumPost, onSelect: () => void, onAuthorC
                         <MessageSquare size={16} />
                         {post.replies.length > 0 && <span className="ml-1.5">{post.replies.length}</span>}
                     </span>
+                    <button 
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            toggleSavePost(post.id);
+                        }}
+                        className={`flex items-center gap-1.5 transition-colors ${
+                            isSaved 
+                                ? 'text-amber-500 dark:text-amber-400' 
+                                : 'hover:text-slate-800 dark:hover:text-slate-200'
+                        }`}
+                        title={isSaved ? "Unsave Post" : "Save Post"}
+                    >
+                        {isSaved ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
+                    </button>
                 </div>
             </div>
         </div>
@@ -130,3 +129,4 @@ const DiscussionsPage: React.FC = () => {
 };
 
 export default DiscussionsPage;
+        

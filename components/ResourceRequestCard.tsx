@@ -17,6 +17,7 @@ const ResourceRequestCard: React.FC<ResourceRequestCardProps> = ({ request }) =>
 
     const requesterRank = userRanks.get(request.requester.id);
     const isOwnRequest = user?.id === request.requester.id;
+    const canDelete = isOwnRequest || user?.role === 'admin'; // Allow Admin to delete
 
     const handleUserClick = (userId: string) => {
         if (userId === user?.id) {
@@ -36,21 +37,9 @@ const ResourceRequestCard: React.FC<ResourceRequestCardProps> = ({ request }) =>
         const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext || '');
         const isOfficeDoc = ['ppt', 'pptx', 'doc', 'docx', 'xls', 'xlsx'].includes(ext || '');
 
-        if (isImage) {
-            return <img src={attachment.url} alt="Preview" className="max-w-full max-h-full object-contain" />;
-        }
-        if (isPdf) {
-            return <iframe src={attachment.url} className="w-full h-full border-none" title="PDF Preview"></iframe>;
-        }
-        if (isOfficeDoc) {
-            return (
-                <iframe 
-                    src={`https://docs.google.com/gview?url=${encodeURIComponent(attachment.url)}&embedded=true`} 
-                    className="w-full h-full border-none" 
-                    title="Office Document Preview" 
-                />
-            );
-        }
+        if (isImage) return <img src={attachment.url} alt="Preview" className="max-w-full max-h-full object-contain" />;
+        if (isPdf) return <iframe src={attachment.url} className="w-full h-full border-none" title="PDF Preview"></iframe>;
+        if (isOfficeDoc) return (<iframe src={`https://docs.google.com/gview?url=${encodeURIComponent(attachment.url)}&embedded=true`} className="w-full h-full border-none" title="Office Document Preview" />);
         return (
             <div className="flex flex-col items-center justify-center h-full text-slate-500 dark:text-slate-400">
                 <FileText size={48} className="mb-4 text-slate-400" />
@@ -92,7 +81,7 @@ const ResourceRequestCard: React.FC<ResourceRequestCardProps> = ({ request }) =>
                 </button>
             </div>
             
-            {isOwnRequest && (
+            {canDelete && (
                 <div className="absolute top-4 right-4 sm:static sm:mt-0 sm:ml-auto">
                      <button 
                         onClick={() => setIsDeleteConfirmOpen(true)}
@@ -145,7 +134,7 @@ const ResourceRequestCard: React.FC<ResourceRequestCardProps> = ({ request }) =>
                             <Clock size={16} />
                             <span>Request is open</span>
                         </div>
-                        {!isOwnRequest && (
+                        {user?.id !== request.requester.id && (
                              <button
                                 onClick={() => openUploadForRequest(request.id)}
                                 className="w-full sm:w-auto bg-primary-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-primary-700 transition"
@@ -178,7 +167,6 @@ const ResourceRequestCard: React.FC<ResourceRequestCardProps> = ({ request }) =>
                 )}
             </div>
 
-            {/* Preview Modal */}
             {previewAttachment && (
                 <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200 cursor-default" onClick={(e) => e.stopPropagation()}>
                     <div className="bg-white dark:bg-dark-surface rounded-xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col relative animate-in zoom-in-95 duration-200 border border-transparent dark:border-zinc-700">

@@ -25,6 +25,7 @@ const ReplyComponent: React.FC<{
     const isPostAuthor = user?.id === post.author.id;
     const isUpvoted = reply.upvotedBy?.includes(user?.id || '');
     const isOwnReply = user?.id === reply.author.id;
+    const canDelete = isOwnReply || user?.role === 'admin'; // Allow Admin to delete
 
     const handleUserClick = (userId: string) => {
         if (userId === user?.id) {
@@ -159,7 +160,7 @@ const ReplyComponent: React.FC<{
                                 {reply.isVerified ? 'Unverify' : 'Mark as Verified'}
                             </button>
                         )}
-                        {isOwnReply && (
+                        {canDelete && (
                             <>
                                 <button 
                                     onClick={() => setIsDeleteConfirmOpen(true)}
@@ -259,6 +260,7 @@ const ForumPostDetailPage: React.FC<{ post: ForumPost }> = ({ post }) => {
     const isOwnPost = user?.id === post.author.id;
     const isUpvoted = post.upvotedBy?.includes(user?.id || '');
     const isDownvoted = post.downvotedBy?.includes(user?.id || '');
+    const canDelete = isOwnPost || user?.role === 'admin'; // Allow Admin to delete
     
     const authorRank = userRanks.get(post.author.id);
     const repliesByParentId = useMemo(() => {
@@ -350,21 +352,9 @@ const ForumPostDetailPage: React.FC<{ post: ForumPost }> = ({ post }) => {
         const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext || '');
         const isOfficeDoc = ['ppt', 'pptx', 'doc', 'docx', 'xls', 'xlsx'].includes(ext || '');
 
-        if (isImage) {
-            return <img src={attachment.url} alt="Preview" className="max-w-full max-h-full object-contain" />;
-        }
-        if (isPdf) {
-            return <iframe src={attachment.url} className="w-full h-full border-none" title="PDF Preview"></iframe>;
-        }
-        if (isOfficeDoc) {
-            return (
-                <iframe 
-                    src={`https://docs.google.com/gview?url=${encodeURIComponent(attachment.url)}&embedded=true`} 
-                    className="w-full h-full border-none" 
-                    title="Office Document Preview" 
-                />
-            );
-        }
+        if (isImage) return <img src={attachment.url} alt="Preview" className="max-w-full max-h-full object-contain" />;
+        if (isPdf) return <iframe src={attachment.url} className="w-full h-full border-none" title="PDF Preview"></iframe>;
+        if (isOfficeDoc) return (<iframe src={`https://docs.google.com/gview?url=${encodeURIComponent(attachment.url)}&embedded=true`} className="w-full h-full border-none" title="Office Document Preview" />);
         return (
             <div className="flex flex-col items-center justify-center h-full text-slate-500 dark:text-slate-400">
                 <FileText size={48} className="mb-4 text-slate-400" />
@@ -383,7 +373,7 @@ const ForumPostDetailPage: React.FC<{ post: ForumPost }> = ({ post }) => {
                     <ArrowLeft size={20} />
                     Back to all posts
                 </button>
-                {isOwnPost && (
+                {canDelete && (
                     <>
                         <button 
                             onClick={() => setIsDeleteConfirmOpen(true)}
@@ -570,7 +560,6 @@ const ForumPostDetailPage: React.FC<{ post: ForumPost }> = ({ post }) => {
                 </div>
             </div>
 
-            {/* Preview Modal */}
             {previewAttachment && (
                 <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
                     <div className="bg-white dark:bg-dark-surface rounded-xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col relative animate-in zoom-in-95 duration-200 border border-transparent dark:border-zinc-700">

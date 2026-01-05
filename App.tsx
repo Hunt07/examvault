@@ -692,9 +692,10 @@ const App: React.FC = () => {
 
   const earnPoints = async (amount: number, message: string) => { if (!user) return; await updateDoc(doc(db, "users", user.id), { points: increment(amount), weeklyPoints: increment(amount) }); setToast({ message, points: amount, type: amount > 0 ? 'success' : 'info' }); };
   
-  // Rank calculation based strictly on points
+  // Rank calculation based strictly on points and then ID for determinism
   const userRanks = useMemo(() => {
-      const sortedByPoints = [...users].sort((a, b) => b.points - a.points);
+      // Sort primarily by points (desc), secondarily by ID (asc) to prevent jitter on equal scores
+      const sortedByPoints = [...users].sort((a, b) => b.points - a.points || a.id.localeCompare(b.id));
       const r = new Map();
       sortedByPoints.forEach((u, i) => r.set(u.id, i));
       return r;

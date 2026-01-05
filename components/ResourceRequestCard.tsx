@@ -54,19 +54,6 @@ const ResourceRequestCard: React.FC<ResourceRequestCardProps> = ({ request }) =>
     
     return (
         <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md transition-colors duration-300 border border-transparent dark:border-zinc-700 relative group">
-            
-            {canDelete && (
-                <div className="absolute top-4 right-4">
-                     <button 
-                        onClick={() => setIsDeleteConfirmOpen(true)}
-                        className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition"
-                        title="Delete Request"
-                    >
-                        <Trash2 size={18} />
-                    </button>
-                </div>
-            )}
-
             <div className="flex flex-col sm:flex-row items-start justify-between gap-4 mt-2 sm:mt-0">
                 <div className="flex-grow min-w-0 w-full pr-12">
                     <div className="flex items-center gap-2 mb-2">
@@ -161,6 +148,15 @@ const ResourceRequestCard: React.FC<ResourceRequestCardProps> = ({ request }) =>
                                 className="text-sm bg-primary-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-primary-700 transition"
                             >
                                 Fulfill Request
+                            </button>
+                        )}
+                        {canDelete && !isDeleteConfirmOpen && (
+                            <button 
+                                onClick={() => setIsDeleteConfirmOpen(true)}
+                                className="p-2 text-red-500 hover:text-red-700 bg-red-50 dark:bg-red-900/10 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition"
+                                title="Delete Request"
+                            >
+                                <Trash2 size={18} />
                             </button>
                         )}
                         <button 

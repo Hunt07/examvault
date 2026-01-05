@@ -16,10 +16,11 @@ const LeaderboardPage: React.FC = () => {
         const usersCopy = [...users];
         switch (activeTab) {
             case 'weekly':
-                return usersCopy.sort((a, b) => b.weeklyPoints - a.weeklyPoints);
+                return usersCopy.sort((a, b) => b.weeklyPoints - a.weeklyPoints || a.id.localeCompare(b.id));
             case 'all':
             default:
-                return usersCopy.sort((a, b) => b.points - a.points);
+                // Deterministic sort: Points Descending -> ID Ascending
+                return usersCopy.sort((a, b) => b.points - a.points || a.id.localeCompare(b.id));
         }
     }, [users, activeTab]);
     
@@ -140,7 +141,7 @@ const LeaderboardPage: React.FC = () => {
                                     {index < 3 ? (
                                         <UserRankBadge rank={index} size={28} />
                                     ) : (
-                                        <span className="text-slate-500 dark:text-slate-400 font-bold text-sm w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-zinc-700 rounded-full border border-slate-200 dark:border-zinc-600">
+                                        <span className="text-slate-500 dark:text-slate-400 font-bold text-sm w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-zinc-700 rounded-full border border-slate-200 dark:border-zinc-600 shadow-sm">
                                             {index + 1}
                                         </span>
                                     )}

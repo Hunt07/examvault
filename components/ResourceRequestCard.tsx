@@ -4,20 +4,21 @@ import type { ResourceRequest, Attachment } from '../types';
 import { ResourceRequestStatus } from '../types';
 import { AppContext } from '../App';
 import UserRankBadge from './UserRankBadge';
-import { CheckCircle, Clock, Trash2, Paperclip, Download, Eye, X, FileText } from 'lucide-react';
+import { CheckCircle, Clock, Trash2, Paperclip, Download, Eye, X, FileText, Bookmark, BookmarkCheck } from 'lucide-react';
 
 interface ResourceRequestCardProps {
   request: ResourceRequest;
 }
 
 const ResourceRequestCard: React.FC<ResourceRequestCardProps> = ({ request }) => {
-    const { user, userRanks, setView, openUploadForRequest, deleteResourceRequest } = useContext(AppContext);
+    const { user, userRanks, setView, openUploadForRequest, deleteResourceRequest, savedRequestIds, toggleSaveRequest } = useContext(AppContext);
     const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
     const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null);
 
     const requesterRank = userRanks.get(request.requester.id);
     const isOwnRequest = user?.id === request.requester.id;
     const canDelete = isOwnRequest || user?.role === 'admin'; // Allow Admin to delete
+    const isSaved = savedRequestIds.includes(request.id);
 
     const handleUserClick = (userId: string) => {
         if (userId === user?.id) {
@@ -52,8 +53,36 @@ const ResourceRequestCard: React.FC<ResourceRequestCardProps> = ({ request }) =>
     };
     
     return (
-        <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md transition-colors duration-300 border border-transparent dark:border-zinc-700 relative">
-            <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
+        <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md transition-colors duration-300 border border-transparent dark:border-zinc-700 relative group">
+            
+            <button 
+                onClick={(e) => {
+                    e.stopPropagation();
+                    toggleSaveRequest(request.id);
+                }}
+                className={`absolute top-4 right-4 p-2 rounded-full transition z-10 ${
+                    isSaved 
+                        ? 'text-amber-500 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-400' 
+                        : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-zinc-700 hover:text-slate-600 dark:hover:text-slate-200'
+                } ${canDelete ? 'mr-10' : ''}`}
+                title={isSaved ? "Unsave Request" : "Save Request"}
+            >
+                {isSaved ? <BookmarkCheck size={20} /> : <Bookmark size={20} />}
+            </button>
+
+            {canDelete && (
+                <div className="absolute top-4 right-4 sm:static sm:mt-0 sm:ml-auto">
+                     <button 
+                        onClick={() => setIsDeleteConfirmOpen(true)}
+                        className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition"
+                        title="Delete Request"
+                    >
+                        <Trash2 size={18} />
+                    </button>
+                </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row items-start justify-between gap-4 mt-2 sm:mt-0">
                 <div className="flex-grow min-w-0 w-full pr-12">
                     <div className="flex items-center gap-2 mb-2">
                          <span className="text-sm font-bold text-slate-800 dark:text-white px-3 py-1 bg-slate-100 dark:bg-zinc-800 rounded-full">{request.courseCode}</span>
@@ -80,18 +109,6 @@ const ResourceRequestCard: React.FC<ResourceRequestCardProps> = ({ request }) =>
                     </div>
                 </button>
             </div>
-            
-            {canDelete && (
-                <div className="absolute top-4 right-4 sm:static sm:mt-0 sm:ml-auto">
-                     <button 
-                        onClick={() => setIsDeleteConfirmOpen(true)}
-                        className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition"
-                        title="Delete Request"
-                    >
-                        <Trash2 size={18} />
-                    </button>
-                </div>
-            )}
 
             <p title={request.details} className="text-slate-600 dark:text-slate-200 mt-2">{request.details}</p>
             

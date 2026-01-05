@@ -1,6 +1,6 @@
 
 import React, { useContext, useState, useMemo, useRef, useEffect } from 'react';
-import { AppContext } from '../App';
+import { AppContext, View } from '../App';
 import { BookOpen, PlusCircle, Bell, User as UserIcon, LogOut, FileText, Mail, MessageSquare, Gift, Bookmark, Sun, Moon, HelpCircle } from 'lucide-react';
 import type { Notification } from '../types';
 import UserRankBadge from './UserRankBadge';
@@ -43,7 +43,7 @@ function timeAgo(dateString: string): string {
 }
 
 const Header: React.FC<{ onUploadClick: () => void }> = ({ onUploadClick }) => {
-  const { user, userRanks, logout, setView, notifications, markNotificationAsRead, markAllNotificationsAsRead, clearAllNotifications, savedResourceIds, resources, isDarkMode, toggleDarkMode, setScrollTargetId } = useContext(AppContext);
+  const { user, userRanks, logout, setView, notifications, markNotificationAsRead, markAllNotificationsAsRead, clearAllNotifications, savedResourceIds, savedPostIds, savedRequestIds, resources, forumPosts, resourceRequests, isDarkMode, toggleDarkMode, setScrollTargetId } = useContext(AppContext);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const notificationsRef = useRef<HTMLDivElement>(null);
   const [isConfirmingClear, setIsConfirmingClear] = useState(false);
@@ -61,9 +61,34 @@ const Header: React.FC<{ onUploadClick: () => void }> = ({ onUploadClick }) => {
 
   const unreadCount = useMemo(() => userNotifications.filter(n => !n.isRead).length, [userNotifications]);
 
-  const savedItems = useMemo(() => 
-    resources.filter(r => savedResourceIds.includes(r.id)), 
-  [resources, savedResourceIds]);
+  const allSavedItems = useMemo(() => {
+      const savedResources = resources.filter(r => savedResourceIds.includes(r.id)).map(r => ({
+          id: r.id,
+          title: r.title,
+          subtitle: `${r.courseCode} • ${r.type}`,
+          type: 'resource' as const,
+          view: 'resourceDetail' as View
+      }));
+      
+      const savedPosts = forumPosts.filter(p => savedPostIds.includes(p.id)).map(p => ({
+          id: p.id,
+          title: p.title,
+          subtitle: `${p.courseCode} • Discussion`,
+          type: 'post' as const,
+          view: 'forumDetail' as View
+      }));
+
+      const savedRequests = resourceRequests.filter(r => savedRequestIds.includes(r.id)).map(r => ({
+          id: r.id,
+          title: r.title,
+          subtitle: `${r.courseCode} • Request`,
+          type: 'request' as const,
+          view: 'requests' as View
+      }));
+
+      // Combine and sort roughly by ID (or potentially fetch timestamps if available, but ID is okay for simple mix)
+      return [...savedResources, ...savedPosts, ...savedRequests];
+  }, [resources, forumPosts, resourceRequests, savedResourceIds, savedPostIds, savedRequestIds]);
 
   // Logic for saved dot notification
   const [lastViewedCount, setLastViewedCount] = useState(0);
@@ -75,7 +100,7 @@ const Header: React.FC<{ onUploadClick: () => void }> = ({ onUploadClick }) => {
     }
   }, [user]);
 
-  const savedCount = savedResourceIds.length;
+  const savedCount = allSavedItems.length;
     
   // Auto-sync downwards
   useEffect(() => {
@@ -193,6 +218,14 @@ const Header: React.FC<{ onUploadClick: () => void }> = ({ onUploadClick }) => {
     }
   };
 
+  const getSavedItemIcon = (type: 'resource' | 'post' | 'request') => {
+      switch (type) {
+          case 'resource': return <FileText size={16} className="text-blue-500" />;
+          case 'post': return <MessageSquare size={16} className="text-purple-500" />;
+          case 'request': return <HelpCircle size={16} className="text-amber-500" />;
+      }
+  };
+
 
   return (
     <header className="bg-white dark:bg-dark-surface shadow-sm dark:border-b dark:border-dark-border sticky top-0 z-20 transition-colors duration-300">
@@ -228,21 +261,26 @@ const Header: React.FC<{ onUploadClick: () => void }> = ({ onUploadClick }) => {
                 {isSavedOpen && (
                     <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-dark-surface rounded-lg shadow-xl z-30 border border-slate-200 dark:border-dark-border">
                         <div className="p-3 border-b dark:border-dark-border flex justify-between items-center">
-                            <h3 className="font-bold text-slate-800 dark:text-white">Saved Resources</h3>
+                            <h3 className="font-bold text-slate-800 dark:text-white">Saved Items</h3>
                         </div>
                         <div className="max-h-96 overflow-y-auto">
-                            {savedItems.length > 0 ? (
-                                savedItems.map(res => (
+                            {allSavedItems.length > 0 ? (
+                                allSavedItems.map((item, index) => (
                                     <button
-                                        key={res.id}
+                                        key={`${item.type}-${item.id}-${index}`}
                                         onClick={() => {
-                                            setView('resourceDetail', res.id);
+                                            setView(item.view, item.id);
                                             setIsSavedOpen(false);
                                         }}
-                                        className="w-full text-left p-3 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors border-b border-slate-50 dark:border-zinc-800 last:border-0"
+                                        className="w-full text-left p-3 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors border-b border-slate-50 dark:border-zinc-800 last:border-0 flex gap-3 items-start"
                                     >
-                                        <p className="text-sm font-semibold text-slate-800 dark:text-white truncate">{res.title}</p>
-                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{res.courseCode} • {res.type}</p>
+                                        <div className="mt-0.5 shrink-0 bg-slate-100 dark:bg-zinc-700 p-1.5 rounded-md">
+                                            {getSavedItemIcon(item.type)}
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-semibold text-slate-800 dark:text-white truncate">{item.title}</p>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{item.subtitle}</p>
+                                        </div>
                                     </button>
                                 ))
                             ) : (

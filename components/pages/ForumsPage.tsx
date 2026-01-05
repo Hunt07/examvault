@@ -2,17 +2,34 @@
 import React, { useContext, useState } from 'react';
 import { AppContext } from '../../App';
 import type { ForumPost } from '../../types';
-import { ThumbsUp, MessageSquare, PlusCircle, Paperclip } from 'lucide-react';
+import { ThumbsUp, MessageSquare, PlusCircle, Paperclip, Bookmark, BookmarkCheck } from 'lucide-react';
 import CreatePostModal from '../CreatePostModal';
 import UserRankBadge from '../UserRankBadge';
 
 const ForumPostCard: React.FC<{ post: ForumPost, onSelect: () => void, onAuthorClick: (authorId: string) => void }> = ({ post, onSelect, onAuthorClick }) => {
-    const { userRanks } = useContext(AppContext);
+    const { userRanks, savedPostIds, toggleSavePost } = useContext(AppContext);
     const authorRank = userRanks.get(post.author.id);
+    const isSaved = savedPostIds.includes(post.id);
+
     return (
-        <div onClick={onSelect} className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md hover:shadow-lg transition-all duration-300 cursor-pointer border border-transparent dark:border-zinc-700">
+        <div onClick={onSelect} className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md hover:shadow-lg transition-all duration-300 cursor-pointer border border-transparent dark:border-zinc-700 relative group">
+            <button 
+                onClick={(e) => {
+                    e.stopPropagation();
+                    toggleSavePost(post.id);
+                }}
+                className={`absolute top-4 right-4 p-2 rounded-full transition z-10 ${
+                    isSaved 
+                        ? 'text-amber-500 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-400' 
+                        : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-zinc-700 hover:text-slate-600 dark:hover:text-slate-200'
+                }`}
+                title={isSaved ? "Unsave Post" : "Save Post"}
+            >
+                {isSaved ? <BookmarkCheck size={20} /> : <Bookmark size={20} />}
+            </button>
+
             <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
-                <div className="flex-grow min-w-0 w-full">
+                <div className="flex-grow min-w-0 w-full pr-10">
                     <div className="flex items-center gap-2 mb-2">
                          <span className="text-sm font-bold text-slate-800 dark:text-white px-3 py-1 bg-slate-100 dark:bg-zinc-800 rounded-full">{post.courseCode}</span>
                          {post.attachment && (

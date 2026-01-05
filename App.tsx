@@ -47,7 +47,11 @@ interface AppContextType {
   toggleDarkMode: () => void;
   userRanks: Map<string, number>;
   savedResourceIds: string[];
+  savedPostIds: string[];
+  savedRequestIds: string[];
   toggleSaveResource: (resourceId: string) => void;
+  toggleSavePost: (postId: string) => void;
+  toggleSaveRequest: (requestId: string) => void;
   handleVote: (resourceId: string, action: 'up' | 'down') => void;
   addCommentToResource: (resourceId: string, text: string, parentId: string | null) => void;
   handleCommentVote: (resourceId: string, commentId: string) => void;
@@ -339,6 +343,16 @@ const App: React.FC = () => {
                 updates.savedResourceIds = [];
                 hasUpdates = true;
             }
+            if (!userData.savedPostIds) {
+                userData.savedPostIds = [];
+                updates.savedPostIds = [];
+                hasUpdates = true;
+            }
+            if (!userData.savedRequestIds) {
+                userData.savedRequestIds = [];
+                updates.savedRequestIds = [];
+                hasUpdates = true;
+            }
             if (!userData.subscriptions) {
                 userData.subscriptions = { users: [], lecturers: [], courseCodes: [] };
                 updates.subscriptions = { users: [], lecturers: [], courseCodes: [] };
@@ -423,6 +437,8 @@ const App: React.FC = () => {
               currentSemester: 1,
               subscriptions: { users: [], lecturers: [], courseCodes: [] },
               savedResourceIds: [],
+              savedPostIds: [],
+              savedRequestIds: [],
               role: role,
               status: 'active'
             };
@@ -670,6 +686,9 @@ const App: React.FC = () => {
   };
 
   const toggleSaveResource = async (resourceId: string) => { if (!user) return; const isSaved = user.savedResourceIds?.includes(resourceId); await updateDoc(doc(db, "users", user.id), { savedResourceIds: isSaved ? arrayRemove(resourceId) : arrayUnion(resourceId) }); };
+  const toggleSavePost = async (postId: string) => { if (!user) return; const isSaved = user.savedPostIds?.includes(postId); await updateDoc(doc(db, "users", user.id), { savedPostIds: isSaved ? arrayRemove(postId) : arrayUnion(postId) }); };
+  const toggleSaveRequest = async (requestId: string) => { if (!user) return; const isSaved = user.savedRequestIds?.includes(requestId); await updateDoc(doc(db, "users", user.id), { savedRequestIds: isSaved ? arrayRemove(requestId) : arrayUnion(requestId) }); };
+
   const earnPoints = async (amount: number, message: string) => { if (!user) return; await updateDoc(doc(db, "users", user.id), { points: increment(amount), weeklyPoints: increment(amount) }); setToast({ message, points: amount, type: amount > 0 ? 'success' : 'info' }); };
   const userRanks = useMemo(() => { const r = new Map(); users.forEach((u, i) => r.set(u.id, i)); return r; }, [users]);
   const toggleUserRole = async (uid: string, role: any) => { if (user?.role === 'admin') await updateDoc(doc(db!, "users", uid), { role }); };
@@ -1186,7 +1205,12 @@ const App: React.FC = () => {
     <AppContext.Provider value={{
       user, users, resources, forumPosts, notifications, conversations, directMessages, resourceRequests, reports,
       view, setView, logout, isDarkMode, toggleDarkMode: () => setIsDarkMode(!isDarkMode),
-      userRanks, savedResourceIds: user.savedResourceIds || [], toggleSaveResource, handleVote, addCommentToResource, handleCommentVote, deleteCommentFromResource,
+      userRanks, 
+      savedResourceIds: user.savedResourceIds || [],
+      savedPostIds: user.savedPostIds || [],
+      savedRequestIds: user.savedRequestIds || [],
+      toggleSaveResource, toggleSavePost, toggleSaveRequest,
+      handleVote, addCommentToResource, handleCommentVote, deleteCommentFromResource,
       addForumPost, handlePostVote, deleteForumPost, addReplyToPost, handleReplyVote, deleteReplyFromPost, toggleVerifiedAnswer,
       addResourceRequest, deleteResourceRequest, openUploadForRequest,
       toggleUserSubscription, toggleLecturerSubscription, toggleCourseCodeSubscription,

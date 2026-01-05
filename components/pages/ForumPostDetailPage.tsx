@@ -2,7 +2,7 @@
 import React, { useContext, useState, useMemo, useRef, useEffect } from 'react';
 import type { ForumPost, ForumReply, Attachment } from '../../types';
 import { AppContext } from '../../App';
-import { ArrowLeft, ThumbsUp, ThumbsDown, CheckCircle, MessageCircle, Paperclip, Image as ImageIcon, X, FileText, Download, Trash2, Eye } from 'lucide-react';
+import { ArrowLeft, ThumbsUp, ThumbsDown, CheckCircle, MessageCircle, Paperclip, Image as ImageIcon, X, FileText, Download, Trash2, Eye, Bookmark, BookmarkCheck } from 'lucide-react';
 import MarkdownRenderer from '../MarkdownRenderer';
 import MarkdownToolbar from '../MarkdownToolbar';
 import UserRankBadge from '../UserRankBadge';
@@ -247,7 +247,7 @@ const ReplyComponent: React.FC<{
 
 
 const ForumPostDetailPage: React.FC<{ post: ForumPost }> = ({ post }) => {
-    const { user, userRanks, setView, handlePostVote, addReplyToPost, goBack, deleteForumPost, scrollTargetId, setScrollTargetId } = useContext(AppContext);
+    const { user, userRanks, setView, handlePostVote, addReplyToPost, goBack, deleteForumPost, scrollTargetId, setScrollTargetId, savedPostIds, toggleSavePost } = useContext(AppContext);
     
     const [newReplyText, setNewReplyText] = useState('');
     const [newReplyFile, setNewReplyFile] = useState<File | undefined>(undefined);
@@ -261,6 +261,7 @@ const ForumPostDetailPage: React.FC<{ post: ForumPost }> = ({ post }) => {
     const isUpvoted = post.upvotedBy?.includes(user?.id || '');
     const isDownvoted = post.downvotedBy?.includes(user?.id || '');
     const canDelete = isOwnPost || user?.role === 'admin'; // Allow Admin to delete
+    const isSaved = savedPostIds.includes(post.id);
     
     const authorRank = userRanks.get(post.author.id);
     const repliesByParentId = useMemo(() => {
@@ -504,6 +505,9 @@ const ForumPostDetailPage: React.FC<{ post: ForumPost }> = ({ post }) => {
                     >
                         <ThumbsDown size={18} />
                         {post.downvotes > 0 && <span>{post.downvotes}</span>}
+                    </button>
+                    <button onClick={() => toggleSavePost(post.id)} title={isSaved ? "Unsave" : "Save for later"} className={`p-3 rounded-lg transition font-medium ${isSaved ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-zinc-700'}`}>
+                        {isSaved ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
                     </button>
                     <div className="flex items-center gap-2 ml-auto">
                         {post.tags.map(tag => (

@@ -20,6 +20,8 @@ export const mockUser: User = {
     courseCodes: ['BCCS2033'],
   },
   savedResourceIds: ['res-2', 'res-7'],
+  savedPostIds: [],
+  savedRequestIds: [],
   role: 'admin', // Make the main mock user an Admin for easy testing
   status: 'active',
 };
@@ -39,6 +41,8 @@ const mockUser2: User = {
   currentSemester: 1,
   subscriptions: { users: [], lecturers: [], courseCodes: [] },
   savedResourceIds: [],
+  savedPostIds: [],
+  savedRequestIds: [],
   role: 'student',
   status: 'active',
 };
@@ -58,6 +62,8 @@ const mockUser3: User = {
   currentSemester: 2,
   subscriptions: { users: [], lecturers: [], courseCodes: [] },
   savedResourceIds: [],
+  savedPostIds: [],
+  savedRequestIds: [],
   role: 'student',
   status: 'active',
 };
@@ -77,6 +83,8 @@ const mockUser4: User = {
   currentSemester: 3,
   subscriptions: { users: [], lecturers: [], courseCodes: [] },
   savedResourceIds: [],
+  savedPostIds: [],
+  savedRequestIds: [],
   role: 'student',
   status: 'active',
 };
@@ -96,6 +104,8 @@ const mockUser5: User = {
   currentSemester: 1,
   subscriptions: { users: [], lecturers: [], courseCodes: [] },
   savedResourceIds: [],
+  savedPostIds: [],
+  savedRequestIds: [],
   role: 'student',
   status: 'active',
 };
@@ -115,6 +125,8 @@ const mockUser6: User = {
   currentSemester: 2,
   subscriptions: { users: [], lecturers: [], courseCodes: [] },
   savedResourceIds: [],
+  savedPostIds: [],
+  savedRequestIds: [],
   role: 'student',
   status: 'active',
 };

@@ -464,8 +464,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, allResources, isCurrent
 
             {/* Deactivation Confirmation Modal */}
             {showDeactivateConfirm && (
-                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-in fade-in">
-                    <div className="bg-white dark:bg-zinc-900 p-6 rounded-xl shadow-2xl max-w-md w-full border border-slate-200 dark:border-zinc-700">
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-fade-in">
+                    <div className="bg-white dark:bg-zinc-900 p-6 rounded-xl shadow-2xl max-w-md w-full border border-slate-200 dark:border-zinc-700 animate-zoom-in">
                         <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Deactivate Account?</h3>
                         <p className="text-slate-600 dark:text-slate-300 mb-6">
                             Are you sure you want to deactivate your account? You will be logged out immediately. 
@@ -480,10 +480,10 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, allResources, isCurrent
                 </div>
             )}
 
-            {/* Delete Confirmation Modal (Placeholder) */}
+            {/* Delete Confirmation Modal */}
             {showDeleteConfirm && (
-                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-in fade-in">
-                    <div className="bg-white dark:bg-zinc-900 p-6 rounded-xl shadow-2xl max-w-md w-full border border-red-200 dark:border-red-900">
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-fade-in">
+                    <div className="bg-white dark:bg-zinc-900 p-6 rounded-xl shadow-2xl max-w-md w-full border border-red-200 dark:border-red-900 animate-zoom-in">
                         <div className="flex items-center gap-2 mb-2 text-red-600">
                             <AlertTriangle size={24} />
                             <h3 className="text-xl font-bold">Delete Account?</h3>

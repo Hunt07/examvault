@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import type { User, Resource, ForumPost, Comment, ForumReply, Notification, Conversation, DirectMessage, ResourceRequest, Attachment, Report } from './types';
 import { NotificationType, MessageStatus, ResourceRequestStatus } from './types';
@@ -195,9 +196,29 @@ const propagateUserUpdates = async (userId: string, updateData: any) => {
 
 const MASTER_ADMIN_EMAIL = 'b09220024@student.unimy.edu.my';
 
+const FirebaseSetup = () => (
+  <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+    <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-lg border border-red-100">
+      <div className="flex items-center gap-3 text-red-600 mb-4">
+        <AlertCircle size={32} />
+        <h2 className="text-xl font-bold">Firebase Configuration Error</h2>
+      </div>
+      <p className="text-slate-600 mb-4">
+        The application could not connect to Firebase services. This is likely due to missing environment variables.
+      </p>
+      <div className="bg-slate-100 p-4 rounded-lg overflow-x-auto">
+        <code className="text-xs text-slate-700">
+          Check your .env file or Vercel/Netlify configuration.
+        </code>
+      </div>
+    </div>
+  </div>
+);
+
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [authError, setAuthError] = useState<{title: string, message: string, code?: string, details?: string} | null>(null);
   const [areResourcesLoading, setAreResourcesLoading] = useState(true);
   const [view, setViewState] = useState<View>('dashboard');
   const [viewHistory, setViewHistory] = useState<{ view: View; id?: string }[]>([]);
@@ -233,6 +254,17 @@ const App: React.FC = () => {
 
   const [runTour, setRunTour] = useState(false);
   const [tourStep, setTourStep] = useState(0);
+
+  // Apply Dark Mode Class
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('examvault_theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('examvault_theme', 'light');
+    }
+  }, [isDarkMode]);
 
   // Presence Heartbeat
   const lastUpdateRef = useRef<number>(0);
@@ -359,6 +391,12 @@ const App: React.FC = () => {
             }
 
             setUser(userData);
+            
+            // Trigger tour if not done
+            if (!localStorage.getItem(`examvault_tour_${userData.id}`)) {
+                setRunTour(true);
+            }
+
           } else {
             const displayName = firebaseUser.displayName || "Student";
             const defaultAvatar = generateDefaultAvatar(displayName);
@@ -391,6 +429,7 @@ const App: React.FC = () => {
             
             await setDoc(userRef, newUser);
             setUser(newUser);
+            setRunTour(true); // Always run for new users
           }
         } catch (error) {
           console.error("Error fetching user data:", error);
@@ -405,6 +444,7 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
+  // ... (useEffect for data fetching snapshots remains the same) ...
   useEffect(() => {
     if (!user || !db) return;
 

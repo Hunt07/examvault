@@ -259,8 +259,8 @@ const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, fulfilling
   const displayPreviewUrl = coverImagePreviewUrl || filePreviewUrl;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-dark-surface rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200 border border-transparent dark:border-zinc-700">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-fade-in">
+      <div className="bg-white dark:bg-dark-surface rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-zoom-in border border-transparent dark:border-zinc-700">
         <div className="p-6 border-b border-slate-200 dark:border-zinc-700 flex justify-between items-center">
           <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Upload a New Resource</h2>
           <button 
@@ -377,7 +377,7 @@ const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, fulfilling
             </div>
 
             {file && (
-                <div className="col-span-2 animate-in fade-in slide-in-from-top-2">
+                <div className="col-span-2 animate-slide-in">
                     <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">Cover Image (Optional)</label>
                     <div
                       onDragOver={handleCoverDragOver}

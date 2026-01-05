@@ -138,8 +138,8 @@ const TooltipGuide: React.FC<TooltipGuideProps> = ({
     const isLastStep = currentStep === totalSteps;
     return (
       <>
-        <div className="fixed inset-0 bg-black bg-opacity-70 z-[10000] animate-in fade-in duration-300" />
-        <div ref={tooltipRef} className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white dark:bg-dark-surface rounded-xl shadow-2xl w-full max-w-md p-8 z-[10002] animate-in zoom-in-95 duration-300 text-center border border-transparent dark:border-zinc-700">
+        <div className="fixed inset-0 bg-black bg-opacity-70 z-[10000] animate-fade-in" />
+        <div ref={tooltipRef} className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white dark:bg-dark-surface rounded-xl shadow-2xl w-full max-w-md p-8 z-[10002] animate-zoom-in text-center border border-transparent dark:border-zinc-700">
             <h3 className="text-2xl font-bold text-slate-800 dark:text-white mb-3">
                 {currentStep === 1 ? 'Welcome to ExamVault!' : (isLastStep ? "Happy Studying!" : "You're all set!")}
             </h3>

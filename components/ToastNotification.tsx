@@ -23,7 +23,7 @@ const ToastNotification: React.FC<ToastNotificationProps> = ({ message, points, 
   const textColor = type === 'error' ? 'text-red-800 dark:text-red-200' : (type === 'info' ? 'text-blue-800 dark:text-blue-200' : 'text-slate-800 dark:text-white');
 
   return (
-    <div className="fixed top-24 right-4 md:right-8 z-50 animate-in slide-in-from-right-10 fade-in duration-300">
+    <div className="fixed top-24 right-4 md:right-8 z-50 animate-slide-in">
       <div className={`${bgColor} border-l-4 ${borderColor} shadow-lg rounded-lg p-4 flex items-center gap-4 pr-12 relative min-w-[300px]`}>
         <div className={`p-2 rounded-full ${type === 'error' ? 'bg-red-100 text-red-600' : (type === 'info' ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400' : 'bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400')}`}>
             {points ? <Award size={24} /> : (type === 'error' ? <Info size={24}/> : (type === 'info' ? <Info size={24}/> : <CheckCircle size={24} />))}

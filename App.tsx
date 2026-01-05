@@ -499,6 +499,7 @@ const App: React.FC = () => {
           }
       }
 
+      // Sort users for display list (admin priority)
       rawUsers.sort((a, b) => {
           const emailA = a.email.toLowerCase().trim();
           const emailB = b.email.toLowerCase().trim();
@@ -690,7 +691,15 @@ const App: React.FC = () => {
   const toggleSaveRequest = async (requestId: string) => { if (!user) return; const isSaved = user.savedRequestIds?.includes(requestId); await updateDoc(doc(db, "users", user.id), { savedRequestIds: isSaved ? arrayRemove(requestId) : arrayUnion(requestId) }); };
 
   const earnPoints = async (amount: number, message: string) => { if (!user) return; await updateDoc(doc(db, "users", user.id), { points: increment(amount), weeklyPoints: increment(amount) }); setToast({ message, points: amount, type: amount > 0 ? 'success' : 'info' }); };
-  const userRanks = useMemo(() => { const r = new Map(); users.forEach((u, i) => r.set(u.id, i)); return r; }, [users]);
+  
+  // Rank calculation based strictly on points
+  const userRanks = useMemo(() => {
+      const sortedByPoints = [...users].sort((a, b) => b.points - a.points);
+      const r = new Map();
+      sortedByPoints.forEach((u, i) => r.set(u.id, i));
+      return r;
+  }, [users]);
+
   const toggleUserRole = async (uid: string, role: any) => { if (user?.role === 'admin') await updateDoc(doc(db!, "users", uid), { role }); };
   const toggleUserStatus = async (uid: string, status: any) => { if (user?.role === 'admin') await updateDoc(doc(db!, "users", uid), { status }); };
   const resolveReport = async (rid: string, status: any) => { if (user?.role === 'admin') await updateDoc(doc(db!, "reports", rid), { status }); };

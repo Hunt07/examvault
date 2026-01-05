@@ -55,23 +55,8 @@ const ResourceRequestCard: React.FC<ResourceRequestCardProps> = ({ request }) =>
     return (
         <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md transition-colors duration-300 border border-transparent dark:border-zinc-700 relative group">
             
-            <button 
-                onClick={(e) => {
-                    e.stopPropagation();
-                    toggleSaveRequest(request.id);
-                }}
-                className={`absolute top-4 right-4 p-2 rounded-full transition z-10 ${
-                    isSaved 
-                        ? 'text-amber-500 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-400' 
-                        : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-zinc-700 hover:text-slate-600 dark:hover:text-slate-200'
-                } ${canDelete ? 'mr-10' : ''}`}
-                title={isSaved ? "Unsave Request" : "Save Request"}
-            >
-                {isSaved ? <BookmarkCheck size={20} /> : <Bookmark size={20} />}
-            </button>
-
             {canDelete && (
-                <div className="absolute top-4 right-4 sm:static sm:mt-0 sm:ml-auto">
+                <div className="absolute top-4 right-4">
                      <button 
                         onClick={() => setIsDeleteConfirmOpen(true)}
                         className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition"
@@ -145,43 +130,55 @@ const ResourceRequestCard: React.FC<ResourceRequestCardProps> = ({ request }) =>
             )}
 
             <div className="mt-4 pt-4 border-t border-slate-100 dark:border-zinc-700">
-                {request.status === ResourceRequestStatus.Open && !isDeleteConfirmOpen && (
-                    <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-                        <div className="flex items-center gap-2 text-sm font-semibold text-amber-600 dark:text-amber-400">
-                            <Clock size={16} />
-                            <span>Request is open</span>
-                        </div>
-                        {user?.id !== request.requester.id && (
+                <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+                    <div className="flex items-center gap-4 w-full sm:w-auto">
+                        {request.status === ResourceRequestStatus.Open && !isDeleteConfirmOpen && (
+                            <div className="flex items-center gap-2 text-sm font-semibold text-amber-600 dark:text-amber-400">
+                                <Clock size={16} />
+                                <span>Request is open</span>
+                            </div>
+                        )}
+                        {request.status === ResourceRequestStatus.Fulfilled && request.fulfillment && (
+                             <div className="flex items-center gap-2 text-sm font-semibold text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded">
+                                <CheckCircle size={16} />
+                                <span>Fulfilled by {request.fulfillment.fulfiller.name}</span>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+                        {request.status === ResourceRequestStatus.Fulfilled && request.fulfillment && (
+                             <button 
+                                onClick={() => setView('resourceDetail', request.fulfillment!.resourceId)}
+                                className="text-sm bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 transition"
+                            >
+                                View Resource
+                            </button>
+                        )}
+                        {request.status === ResourceRequestStatus.Open && user?.id !== request.requester.id && !isDeleteConfirmOpen && (
                              <button
                                 onClick={() => openUploadForRequest(request.id)}
-                                className="w-full sm:w-auto bg-primary-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-primary-700 transition"
+                                className="text-sm bg-primary-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-primary-700 transition"
                             >
                                 Fulfill Request
                             </button>
                         )}
-                    </div>
-                )}
-                {request.status === ResourceRequestStatus.Fulfilled && request.fulfillment && (
-                    <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-green-50 dark:bg-green-900/20 p-3 rounded-lg border border-green-200 dark:border-green-900">
-                        <div className="flex items-center gap-2 text-sm font-semibold text-green-700 dark:text-green-300">
-                            <CheckCircle size={16} />
-                            <span>Fulfilled by 
-                                <button 
-                                    onClick={() => handleUserClick(request.fulfillment!.fulfiller.id)} 
-                                    className="font-bold hover:underline ml-1"
-                                >
-                                    {request.fulfillment.fulfiller.name}
-                                </button>
-                            </span>
-                        </div>
                         <button 
-                            onClick={() => setView('resourceDetail', request.fulfillment!.resourceId)}
-                            className="w-full sm:w-auto bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 transition"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                toggleSaveRequest(request.id);
+                            }}
+                            className={`flex items-center gap-1.5 p-2 rounded-lg transition-colors ${
+                                isSaved 
+                                    ? 'text-amber-500 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-400' 
+                                    : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-zinc-700 hover:text-slate-700 dark:hover:text-slate-200'
+                            }`}
+                            title={isSaved ? "Unsave Request" : "Save Request"}
                         >
-                            View Resource
+                            {isSaved ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
                         </button>
                     </div>
-                )}
+                </div>
             </div>
 
             {previewAttachment && (

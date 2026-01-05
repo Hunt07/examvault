@@ -151,6 +151,7 @@ export interface Conversation {
   id: string;
   participants: string[];
   lastMessageTimestamp: string;
+  hiddenBy?: string[]; // Array of user IDs who have hidden this conversation
 }
 
 export interface DirectMessage {
@@ -220,4 +221,3 @@ export interface QuizQuestion {
   options: string[];
   correctAnswer: string;
 }
- 

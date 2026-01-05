@@ -3,7 +3,7 @@ import React, { useContext, useMemo, useState, useEffect, useRef } from 'react';
 import { AppContext } from '../../App';
 import type { User } from '../../types';
 import { MessageStatus, ResourceType } from '../../types';
-import { Send, Check, CheckCheck, MessageCircle, ArrowLeft, FileText, Notebook, ClipboardList, Archive, ExternalLink, MoreVertical, Edit2, Trash2, X, Smile, UserX } from 'lucide-react';
+import { Send, Check, CheckCheck, MessageCircle, ArrowLeft, FileText, Notebook, ClipboardList, Archive, ExternalLink, MoreVertical, Edit2, Trash2, X, Smile, UserX, EyeOff } from 'lucide-react';
 import Avatar from '../Avatar';
 
 const formatTimestamp = (timestamp: string): string => {
@@ -253,7 +253,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isSender }) => {
 
 
 const MessagesPage: React.FC<{ activeConversationId: string | null }> = ({ activeConversationId }) => {
-    const { user, users, conversations, directMessages, setView, sendMessage, markMessagesAsRead } = useContext(AppContext);
+    const { user, users, conversations, directMessages, setView, sendMessage, markMessagesAsRead, hideConversation } = useContext(AppContext);
     const [newMessage, setNewMessage] = useState('');
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const chatEndRef = useRef<HTMLDivElement>(null);
@@ -273,7 +273,7 @@ const MessagesPage: React.FC<{ activeConversationId: string | null }> = ({ activ
     const userConversations = useMemo(() => {
         if (!user) return [];
         return conversations
-            .filter(c => c.participants.includes(user.id))
+            .filter(c => c.participants.includes(user.id) && !c.hiddenBy?.includes(user.id))
             .sort((a, b) => new Date(b.lastMessageTimestamp).getTime() - new Date(a.lastMessageTimestamp).getTime());
     }, [conversations, user]);
 
@@ -352,7 +352,7 @@ const MessagesPage: React.FC<{ activeConversationId: string | null }> = ({ activ
                             <button
                                 key={convo.id}
                                 onClick={() => setView('messages', convo.id)}
-                                className={`w-full text-left p-4 flex items-center gap-4 transition-colors border-b dark:border-zinc-800 ${activeConversationId === convo.id ? 'bg-primary-50 dark:bg-primary-900/20' : 'hover:bg-slate-50 dark:hover:bg-zinc-800'}`}
+                                className={`w-full text-left p-4 flex items-center gap-4 transition-colors border-b dark:border-zinc-800 group relative ${activeConversationId === convo.id ? 'bg-primary-50 dark:bg-primary-900/20' : 'hover:bg-slate-50 dark:hover:bg-zinc-800'}`}
                             >
                                 <Avatar src={otherParticipant.avatarUrl} alt={otherParticipant.name} className="w-12 h-12" />
                                 <div className="flex-grow overflow-hidden">
@@ -365,9 +365,24 @@ const MessagesPage: React.FC<{ activeConversationId: string | null }> = ({ activ
                                         {unreadCount > 0 && <span className="text-xs font-bold text-white bg-primary-600 rounded-full w-5 h-5 flex items-center justify-center shrink-0">{unreadCount}</span>}
                                     </div>
                                 </div>
+                                <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); hideConversation(convo.id); }}
+                                        className="p-1.5 rounded-full bg-white dark:bg-zinc-700 text-slate-500 hover:text-red-500 dark:text-slate-400 dark:hover:text-red-400 hover:bg-slate-100 dark:hover:bg-zinc-600 shadow-sm border border-slate-200 dark:border-zinc-600"
+                                        title="Hide conversation"
+                                    >
+                                        <EyeOff size={14} />
+                                    </button>
+                                </div>
                             </button>
                         );
                     })}
+                    {userConversations.length === 0 && (
+                        <div className="p-8 text-center text-slate-500 dark:text-slate-400">
+                            <p>No active conversations.</p>
+                            <p className="text-sm mt-1">Start a chat from a user's profile.</p>
+                        </div>
+                    )}
                 </div>
             </aside>
             <main className={`w-full md:w-2/3 flex-col min-w-0 ${activeConversationId ? 'flex' : 'hidden md:flex'}`}>

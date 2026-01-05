@@ -80,6 +80,7 @@ interface AppContextType {
   editMessage: (messageId: string, newText: string) => void;
   deleteMessage: (messageId: string) => void;
   startConversation: (userId: string, initialMessage?: string) => void;
+  hideConversation: (conversationId: string) => void;
   sendDirectMessageToUser: (userId: string, text: string) => void;
   markNotificationAsRead: (id: string) => void;
   markAllNotificationsAsRead: () => void;
@@ -1231,7 +1232,11 @@ const App: React.FC = () => {
       }
 
       await addDoc(collection(db, "directMessages"), msg);
-      await updateDoc(doc(db, "conversations", cid), { lastMessageTimestamp: msg.timestamp });
+      // Update convo timestamp AND reset hiddenBy so chat reappears for all
+      await updateDoc(doc(db, "conversations", cid), { 
+          lastMessageTimestamp: msg.timestamp,
+          hiddenBy: [] 
+      });
       
       if (msg.recipientId) {
           await sendNotification(msg.recipientId, user.id, NotificationType.NewMessage, `${user.name} sent you a message.`, { conversationId: cid });
@@ -1255,9 +1260,12 @@ const App: React.FC = () => {
       let cid = existing?.id;
       
       if (!existing) {
-          const newConvo = { participants: [user.id, uid], lastMessageTimestamp: new Date().toISOString() };
+          const newConvo = { participants: [user.id, uid], lastMessageTimestamp: new Date().toISOString(), hiddenBy: [] };
           const ref = await addDoc(collection(db, "conversations"), newConvo);
           cid = ref.id;
+      } else if (cid && existing.hiddenBy?.includes(user.id)) {
+          // If conversation exists but is hidden for user, unhide it immediately
+          await updateDoc(doc(db, "conversations", cid), { hiddenBy: arrayRemove(user.id) });
       }
       
       if (msg && cid) {
@@ -1265,6 +1273,21 @@ const App: React.FC = () => {
       }
       
       setView('messages', cid);
+  };
+  
+  const hideConversation = async (conversationId: string) => {
+      if (!user || !db) return;
+      try {
+          const convoRef = doc(db, "conversations", conversationId);
+          await updateDoc(convoRef, { hiddenBy: arrayUnion(user.id) });
+          if (view === 'messages' && selectedId === conversationId) {
+              setView('messages', undefined);
+          }
+          showToast("Conversation hidden.", "info");
+      } catch (e) {
+          console.error("Failed to hide conversation", e);
+          showToast("Failed to hide conversation", "error");
+      }
   };
   
   const sendDirectMessageToUser = (uid: string, text: string) => { startConversation(uid, text); };
@@ -1354,7 +1377,7 @@ const App: React.FC = () => {
       addForumPost, handlePostVote, deleteForumPost, addReplyToPost, handleReplyVote, deleteReplyFromPost, toggleVerifiedAnswer,
       addResourceRequest, deleteResourceRequest, openUploadForRequest,
       toggleUserSubscription, toggleLecturerSubscription, toggleCourseCodeSubscription,
-      updateUserProfile, sendMessage, editMessage, deleteMessage, startConversation, sendDirectMessageToUser, markNotificationAsRead, markAllNotificationsAsRead, markMessagesAsRead,
+      updateUserProfile, sendMessage, editMessage, deleteMessage, startConversation, hideConversation, sendDirectMessageToUser, markNotificationAsRead, markAllNotificationsAsRead, markMessagesAsRead,
       clearAllNotifications, goBack, hasUnreadMessages, hasUnreadDiscussions,
       isLoading, deleteResource, deactivateAccount, deleteAccount,
       areResourcesLoading, scrollTargetId, setScrollTargetId, showToast, toggleUserRole, toggleUserStatus, resolveReport

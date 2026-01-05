@@ -540,11 +540,13 @@ export const mockConversations: Conversation[] = [
     id: 'convo-1',
     participants: ['user-1', 'user-2'],
     lastMessageTimestamp: new Date(Date.now() - 1000 * 60 * 3).toISOString(), // 3 mins ago
+    hiddenBy: [],
   },
   {
     id: 'convo-2',
     participants: ['user-1', 'user-4'],
     lastMessageTimestamp: new Date(Date.now() - 1000 * 60 * 60 * 25).toISOString(), // 25 hours ago
+    hiddenBy: [],
   },
 ];
 

@@ -244,7 +244,7 @@ const CommentComponent: React.FC<{
 
 
 const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
-  const { user, userRanks, setView, handleVote, addCommentToResource, goBack, toggleLecturerSubscription, toggleCourseCodeSubscription, savedResourceIds, toggleSaveResource, resources, deleteResource, scrollTargetId, setScrollTargetId } = useContext(AppContext);
+  const { user, userRanks, setView, handleVote, addCommentToResource, goBack, toggleLecturerSubscription, toggleCourseCodeSubscription, savedResourceIds, toggleSaveResource, resources, deleteResource, scrollTargetId, setScrollTargetId, showToast } = useContext(AppContext);
   // ... state ...
   const [summary, setSummary] = useState('');
   const [isSummarizing, setIsSummarizing] = useState(false);
@@ -324,9 +324,10 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   }, [resource.id]);
 
   const isAISupported = useMemo(() => {
-      if (!resource.mimeType) return false;
-      return true; 
-  }, [resource.mimeType]);
+      if (resource.mimeType) return true;
+      if (resource.contentForAI) return true; // Support mock resources
+      return false; 
+  }, [resource.mimeType, resource.contentForAI]);
 
   const commentsByParentId = useMemo(() => {
     const group: Record<string, Comment[]> = {};
@@ -387,9 +388,20 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
 
   const resolveFileBase64 = async (): Promise<string | undefined> => {
     if (resource.fileBase64) return resource.fileBase64;
+    // Mock resources use #
+    if (resource.fileUrl === '#') return undefined; 
+
     try {
-        const response = await fetch(resource.fileUrl);
-        if (!response.ok) throw new Error('Fetch failed');
+        // Attempt fetch with CORS settings that maximize compatibility
+        // credentials: 'omit' is crucial for some Firebase Storage configurations accessed via fetch
+        const response = await fetch(resource.fileUrl, { 
+            method: 'GET',
+            mode: 'cors',
+            credentials: 'omit',
+            referrerPolicy: 'no-referrer'
+        });
+        
+        if (!response.ok) throw new Error(`Fetch failed: ${response.statusText}`);
         const blob = await response.blob();
         return await new Promise<string>((resolve, reject) => {
             const reader = new FileReader();
@@ -398,7 +410,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
             reader.readAsDataURL(blob);
         });
     } catch (error) {
-        console.error("Error fetching file for AI:", error);
+        console.warn("AI File Access Warning (CORS or Network):", error);
         return undefined;
     }
   };
@@ -406,17 +418,61 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   const getMetadataContext = () => {
       return `
       Title: ${resource.title}
-      Course: ${resource.courseCode}
+      Course: ${resource.courseCode} - ${resource.courseName}
       Type: ${resource.type}
+      Description: ${resource.description}
       `;
+  };
+
+  const prepareAIContent = async () => {
+      const textContext = getMetadataContext();
+      let base64 = undefined;
+      let mimeType = resource.mimeType;
+      let additionalText = "";
+
+      // Try to fetch file if not mock
+      if (resource.fileUrl && resource.fileUrl !== '#') {
+          base64 = await resolveFileBase64();
+          
+          if (!base64) {
+              // Graceful Fallback: If we can't get the file (CORS), we don't break.
+              // We inform the user via toast and guide the AI to use metadata.
+              showToast("Cannot read file content directly. AI will use metadata summary.", "info");
+              additionalText += "\n[System Note: The file content could not be accessed directly due to browser security restrictions. Please generate the best possible summary/guide based on the Title, Course, and Description provided above. Infer standard topics covered in this subject.]";
+          } else {
+              // Fix: Extract mimeType from base64 if it wasn't available in the resource metadata
+              if (!mimeType && base64.startsWith('data:')) {
+                  const match = base64.match(/^data:([^;]+);/);
+                  if (match && match[1]) {
+                      mimeType = match[1];
+                  }
+              }
+          }
+      }
+
+      // If mock or no file content found, use contentForAI fallback
+      if (!base64) {
+          if (resource.contentForAI) {
+              additionalText += "\n\n" + resource.contentForAI;
+              mimeType = undefined; // Force text mode
+          } else if (resource.fileUrl !== '#' && !additionalText.includes("System Note")) {
+               // Should be covered by the resolveFileBase64 check, but safe fallback
+               additionalText += "\n[System Note: File unavailable. Use metadata.]";
+          }
+      }
+
+      const fullText = additionalText ? `${textContext}\n\n${additionalText}` : textContext;
+      return { text: fullText, base64, mimeType };
   };
 
   const handleGenerateSummary = async () => {
     setIsSummarizing(true);
     setSummary('');
-    const base64 = await resolveFileBase64();
-    const textContext = getMetadataContext();
-    const result = await summarizeContent(textContext, base64, resource.mimeType);
+    
+    const { text, base64, mimeType } = await prepareAIContent();
+    
+    // We no longer return early error; we pass what we have to the AI
+    const result = await summarizeContent(text!, base64, mimeType);
     setSummary(result);
     setIsSummarizing(false);
   };
@@ -424,9 +480,10 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   const handleGeneratePreview = async () => {
     if (!isAISupported) return;
     setIsGeneratingPreview(true);
-    const base64 = await resolveFileBase64();
-    const textContext = getMetadataContext();
-    const result = await summarizeContent(textContext, base64, resource.mimeType);
+    
+    const { text, base64, mimeType } = await prepareAIContent();
+    
+    const result = await summarizeContent(text!, base64, mimeType);
     setAiGeneratedPreview(result);
     setIsGeneratingPreview(false);
   };
@@ -435,9 +492,10 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     setIsGeneratingStudySet(true);
     setStudySet(null);
     setStudySetType(type);
-    const base64 = await resolveFileBase64();
-    const textContext = getMetadataContext();
-    const result = await generateStudySet(textContext, type, base64, resource.mimeType);
+    
+    const { text, base64, mimeType } = await prepareAIContent();
+    
+    const result = await generateStudySet(text!, type, base64, mimeType);
     setStudySet(result);
     setIsGeneratingStudySet(false);
   };

@@ -66,57 +66,13 @@ const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
     return bytes.buffer;
 };
 
-// Helper: Manual XML Text Extraction using DOMParser (Fallback)
-const extractXmlTextByTag = (xmlString: string, tagName: string): string => {
-    try {
-        const parser = new DOMParser();
-        const xmlDoc = parser.parseFromString(xmlString, "text/xml");
-        const textNodes = xmlDoc.getElementsByTagName("*");
-        let text = "";
-        
-        for (let i = 0; i < textNodes.length; i++) {
-            const node = textNodes[i];
-            // Check localName to ignore namespaces (e.g., 'w:t' -> 't', 'a:t' -> 't')
-            if (node.localName === tagName) {
-                if (node.textContent) {
-                    text += node.textContent + " ";
-                }
-            }
-        }
-        return text.trim();
-    } catch (e) {
-        console.error("XML Parse Error", e);
-        return "";
-    }
-};
-
 // Helper: Extract text from DOCX
 const extractTextFromDocx = async (fileBase64: string): Promise<string> => {
     try {
         const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
         const arrayBuffer = base64ToArrayBuffer(cleanBase64);
-        
-        // 1. Try Mammoth (Standard Library)
-        try {
-            const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
-            const text = result.value.trim();
-            if (text.length > 50) return text; // If we got a decent amount of text, return it
-        } catch (err) {
-            console.warn("Mammoth extraction failed, trying manual fallback", err);
-        }
-
-        // 2. Fallback: Manual XML Parsing of word/document.xml
-        // This helps catch text in textboxes or headers that mammoth might skip
-        const zip = await JSZip.loadAsync(arrayBuffer);
-        const docXml = await zip.file("word/document.xml")?.async("string");
-        
-        if (docXml) {
-            // 't' is the tag for text in WordXML (<w:t>)
-            const manualText = extractXmlTextByTag(docXml, "t");
-            if (manualText.length > 0) return manualText;
-        }
-
-        return "";
+        const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+        return result.value.trim();
     } catch (e) {
         console.error("DOCX Extraction failed", e);
         throw new Error("Failed to extract text from Word document.");
@@ -132,7 +88,7 @@ const extractTextFromPptx = async (fileBase64: string): Promise<string> => {
         
         const xmlFiles: { path: string, file: any }[] = [];
         
-        // Scan for slide XML files
+        // Scan for slide XML files more robustly
         zip.forEach((relativePath, file) => {
             if (relativePath.match(/ppt\/slides\/slide\d+\.xml/i)) {
                 xmlFiles.push({ path: relativePath, file: file });
@@ -151,13 +107,20 @@ const extractTextFromPptx = async (fileBase64: string): Promise<string> => {
         for (const slide of xmlFiles) {
             const xmlContent = await slide.file.async("string");
             
-            // Use DOMParser instead of Regex for robust XML handling
-            // 't' is the tag for text in DrawingML (<a:t>)
-            const slideText = extractXmlTextByTag(xmlContent, "t");
+            // 1. Extract text from <a:t> tags (standard text)
+            // Use a regex that handles namespaces and attributes gracefully
+            const textMatches = xmlContent.match(/<a:t(?:\s+[^>]*)?>(.*?)<\/a:t>/g);
+            
+            let slideContent = "";
+            if (textMatches) {
+                slideContent = textMatches
+                    .map((t: string) => t.replace(/<\/?a:t(?:\s+[^>]*)?>/g, ''))
+                    .join(" ");
+            }
 
-            if (slideText.trim()) {
+            if (slideContent.trim()) {
                 const slideNum = slide.path.match(/slide(\d+)\.xml/)?.[1];
-                extractedText += `[Slide ${slideNum}]: ${slideText}\n\n`;
+                extractedText += `[Slide ${slideNum}]: ${slideContent}\n\n`;
             }
         }
         
@@ -199,16 +162,14 @@ Based on the following material, please provide the summary with these exact sec
         // Branching logic for extraction
         if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
             const extractedText = await extractTextFromDocx(fileBase64);
-            // Check for empty text result BEFORE sending to AI
-            if (!extractedText || extractedText.length < 50) {
-                return "⚠️ **No Readable Text Found**\n\nThe AI could not extract enough text from this Word document.\n\n**Possible reasons:**\n- The document contains scanned images instead of text.\n- The file is empty or corrupted.\n\n*Try converting the file to PDF first.*";
+            if (!extractedText) {
+                return "⚠️ **No Text Found**\n\nThe AI could not extract readable text from this Word document. It might contain only images or scanned pages, which are not currently supported for Word files.";
             }
             parts.push({ text: `Analyze the following document content:\n\n${extractedText}` });
         } else if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
             const extractedText = await extractTextFromPptx(fileBase64);
-            // Check for empty text result BEFORE sending to AI
-            if (!extractedText || extractedText.length < 20) {
-                return "⚠️ **No Readable Text Found**\n\nThe AI could not extract text from this presentation.\n\n**Possible reasons:**\n- The slides contain only images or screenshots (scanned).\n- The text is inside complex shapes/SmartArt not supported by the extractor.\n\n*Try converting the file to PDF first for better results.*";
+            if (!extractedText) {
+                return "⚠️ **No Text Found**\n\nThe AI could not extract readable text from this presentation. It might contain only images/diagrams without selectable text.";
             }
             parts.push({ text: `Analyze the following presentation slides:\n\n${extractedText}` });
         } else {
@@ -305,11 +266,11 @@ export const generateStudySet = async (
         // Branching logic for extraction
         if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
             const extractedText = await extractTextFromDocx(fileBase64);
-            if (!extractedText || extractedText.length < 50) return [];
+            if (!extractedText) return [];
             parts.push({ text: `${promptText}\n\nMaterial:\n${extractedText}` });
         } else if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
             const extractedText = await extractTextFromPptx(fileBase64);
-            if (!extractedText || extractedText.length < 20) return [];
+            if (!extractedText) return [];
             parts.push({ text: `${promptText}\n\nMaterial:\n${extractedText}` });
         } else {
             // PDF or Image

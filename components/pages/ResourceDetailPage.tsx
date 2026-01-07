@@ -324,10 +324,9 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   }, [resource.id]);
 
   const isAISupported = useMemo(() => {
-      if (resource.mimeType) return true;
-      if (resource.contentForAI) return true; // Support mock resources
-      return false; 
-  }, [resource.mimeType, resource.contentForAI]);
+      if (!resource.mimeType) return false;
+      return true; 
+  }, [resource.mimeType]);
 
   const commentsByParentId = useMemo(() => {
     const group: Record<string, Comment[]> = {};
@@ -388,9 +387,6 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
 
   const resolveFileBase64 = async (): Promise<string | undefined> => {
     if (resource.fileBase64) return resource.fileBase64;
-    // Mock resources use #
-    if (resource.fileUrl === '#') return undefined; 
-
     try {
         const response = await fetch(resource.fileUrl);
         if (!response.ok) throw new Error('Fetch failed');
@@ -415,48 +411,12 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
       `;
   };
 
-  const prepareAIContent = async () => {
-      const textContext = getMetadataContext();
-      let base64 = undefined;
-      let mimeType = resource.mimeType;
-      let additionalText = "";
-
-      // Try to fetch file if not mock
-      if (resource.fileUrl && resource.fileUrl !== '#') {
-          base64 = await resolveFileBase64();
-          if (!base64) {
-              return { error: "⚠️ **Connection Error**: Could not download the file for AI analysis. This is often due to browser security settings (CORS) when accessing storage directly." };
-          }
-      }
-
-      // If mock or no file content found, use contentForAI fallback
-      if (!base64) {
-          if (resource.contentForAI) {
-              additionalText = resource.contentForAI;
-              mimeType = undefined; // Force text mode
-          } else if (resource.fileUrl !== '#') {
-              // Real file failed to load
-              return { error: "⚠️ **Error**: Could not read file content." };
-          }
-      }
-
-      const fullText = additionalText ? `${textContext}\n\nFull Content:\n${additionalText}` : textContext;
-      return { text: fullText, base64, mimeType };
-  };
-
   const handleGenerateSummary = async () => {
     setIsSummarizing(true);
     setSummary('');
-    
-    const { text, base64, mimeType, error } = await prepareAIContent();
-    
-    if (error) {
-        setSummary(error);
-        setIsSummarizing(false);
-        return;
-    }
-
-    const result = await summarizeContent(text!, base64, mimeType);
+    const base64 = await resolveFileBase64();
+    const textContext = getMetadataContext();
+    const result = await summarizeContent(textContext, base64, resource.mimeType);
     setSummary(result);
     setIsSummarizing(false);
   };
@@ -464,16 +424,9 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   const handleGeneratePreview = async () => {
     if (!isAISupported) return;
     setIsGeneratingPreview(true);
-    
-    const { text, base64, mimeType, error } = await prepareAIContent();
-    
-    if (error) {
-        setAiGeneratedPreview(error);
-        setIsGeneratingPreview(false);
-        return;
-    }
-
-    const result = await summarizeContent(text!, base64, mimeType);
+    const base64 = await resolveFileBase64();
+    const textContext = getMetadataContext();
+    const result = await summarizeContent(textContext, base64, resource.mimeType);
     setAiGeneratedPreview(result);
     setIsGeneratingPreview(false);
   };
@@ -482,19 +435,9 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     setIsGeneratingStudySet(true);
     setStudySet(null);
     setStudySetType(type);
-    
-    const { text, base64, mimeType, error } = await prepareAIContent();
-    
-    if (error) {
-        // Since we can't show text error in study set view easily without changing UI structure, 
-        // we'll just log and stop loading. 
-        // Ideally UI would handle error state.
-        console.error(error);
-        setIsGeneratingStudySet(false);
-        return;
-    }
-
-    const result = await generateStudySet(text!, type, base64, mimeType);
+    const base64 = await resolveFileBase64();
+    const textContext = getMetadataContext();
+    const result = await generateStudySet(textContext, type, base64, resource.mimeType);
     setStudySet(result);
     setIsGeneratingStudySet(false);
   };

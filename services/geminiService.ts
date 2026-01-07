@@ -203,14 +203,14 @@ Based on the following material, please provide the summary with these exact sec
             if (!extractedText || extractedText.length < 50) {
                 return "⚠️ **No Readable Text Found**\n\nThe AI could not extract enough text from this Word document.\n\n**Possible reasons:**\n- The document contains scanned images instead of text.\n- The file is empty or corrupted.\n\n*Try converting the file to PDF first.*";
             }
-            parts.push({ text: `Analyze the following document content:\n\n${extractedText}` });
+            parts.push({ text: `Analyze the following document content:\n\n${extractedText}\n\nContext:\n${content}` });
         } else if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
             const extractedText = await extractTextFromPptx(fileBase64);
             // Check for empty text result BEFORE sending to AI
             if (!extractedText || extractedText.length < 20) {
                 return "⚠️ **No Readable Text Found**\n\nThe AI could not extract text from this presentation.\n\n**Possible reasons:**\n- The slides contain only images or screenshots (scanned).\n- The text is inside complex shapes/SmartArt not supported by the extractor.\n\n*Try converting the file to PDF first for better results.*";
             }
-            parts.push({ text: `Analyze the following presentation slides:\n\n${extractedText}` });
+            parts.push({ text: `Analyze the following presentation slides:\n\n${extractedText}\n\nContext:\n${content}` });
         } else {
             // PDF or Image (Native Support)
             const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
@@ -220,7 +220,8 @@ Based on the following material, please provide the summary with these exact sec
                     mimeType: mimeType
                 }
             });
-            parts.push({ text: "Analyze the above document/image." });
+            // Include metadata/context to help the model if file content is ambiguous
+            parts.push({ text: `Analyze the above document/image.\n\nContext:\n${content}` });
         }
     } else {
         parts.push({ text: `\n\nMaterial to analyze:\n---\n${content}\n---` });
@@ -306,15 +307,18 @@ export const generateStudySet = async (
         if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
             const extractedText = await extractTextFromDocx(fileBase64);
             if (!extractedText || extractedText.length < 50) return [];
-            parts.push({ text: `${promptText}\n\nMaterial:\n${extractedText}` });
+            parts.push({ text: `${promptText}\n\nMaterial:\n${extractedText}\n\nContext:\n${content}` });
         } else if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
             const extractedText = await extractTextFromPptx(fileBase64);
             if (!extractedText || extractedText.length < 20) return [];
-            parts.push({ text: `${promptText}\n\nMaterial:\n${extractedText}` });
+            parts.push({ text: `${promptText}\n\nMaterial:\n${extractedText}\n\nContext:\n${content}` });
         } else {
             // PDF or Image
             const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
-            parts.push({ text: promptText });
+            
+            // Include metadata context
+            parts.push({ text: `${promptText}\n\nContext:\n${content}` });
+            
             parts.push({
                 inlineData: {
                     data: cleanBase64,

@@ -91,7 +91,7 @@ const extractTextFromPptx = async (fileBase64: string): Promise<string> => {
         const slideFolder = zip.folder("ppt/slides");
         
         if (slideFolder) {
-            slideFolder.forEach((relativePath, file) => {
+            slideFolder.forEach((relativePath: string, file: any) => {
                 if (relativePath.match(/slide\d+\.xml/)) {
                     slideFiles.push({ path: relativePath, file: file });
                 }
@@ -115,10 +115,6 @@ const extractTextFromPptx = async (fileBase64: string): Promise<string> => {
             const xmlDoc = parser.parseFromString(xmlContent, "application/xml");
             
             // Try to find text within <a:t> (drawingml text) or <t>
-            // Note: getElementsByTagName is case-insensitive for HTML but case-sensitive for XML in some browsers?
-            // In standard DOMParser XML mode, it is case sensitive.
-            // PowerPoint OpenXML usually uses 'a:t'
-            
             let textNodes = Array.from(xmlDoc.getElementsByTagName("a:t"));
             if (textNodes.length === 0) {
                 // Fallback attempt
@@ -126,7 +122,7 @@ const extractTextFromPptx = async (fileBase64: string): Promise<string> => {
             }
 
             const slideText = textNodes
-                .map(node => node.textContent)
+                .map((node: any) => node.textContent)
                 .join(" ")
                 .replace(/\s+/g, ' ') // normalize whitespace
                 .trim();

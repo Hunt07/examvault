@@ -437,7 +437,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
           base64 = await resolveFileBase64();
           
           if (!base64) {
-              showToast("Cannot read file content directly. AI will use metadata summary.", "info");
+              // Silently fallback to metadata without toast
               additionalText += "\n[System Note: The file content could not be accessed directly due to browser security restrictions. Please generate the best possible summary/guide based on the Title, Course, and Description provided above. Infer standard topics covered in this subject.]";
           } else {
               // Try to sniff mime type from Data URL if not present or generic

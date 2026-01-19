@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import type { User, Resource, ForumPost, Comment, ForumReply, Notification, Conversation, DirectMessage, ResourceRequest, Attachment, Report, LogEntry } from './types';
 import { NotificationType, MessageStatus, ResourceRequestStatus } from './types';
@@ -501,7 +500,7 @@ const App: React.FC = () => {
               targetId: targetId || null,
               timestamp: new Date().toISOString()
           });
-      } catch (e) {
+      } catch (e: any) {
           console.error("Failed to log action", e);
       }
   };
@@ -714,7 +713,7 @@ const App: React.FC = () => {
           await updateDoc(userRef, { status: 'deactivated' });
           await logAction('account', 'Account Deactivated');
           await logout();
-      } catch (error) { console.error("Failed to deactivate", error); showToast("Failed to deactivate account.", "error"); }
+      } catch (error: any) { console.error("Failed to deactivate", error); showToast("Failed to deactivate account.", "error"); }
   };
 
   const deleteAccount = async () => {
@@ -742,7 +741,7 @@ const App: React.FC = () => {
           localStorage.removeItem(`examvault_tour_${user.id}`);
           if (auth.currentUser) await auth.currentUser.delete(); else await logout();
           window.location.reload();
-      } catch (error) { setIsLoading(false); showToast("Failed to delete account.", "error"); }
+      } catch (error: any) { setIsLoading(false); showToast("Failed to delete account.", "error"); }
   };
 
   const toggleSaveResource = async (resourceId: string) => { if (!user) return; const isSaved = user.savedResourceIds?.includes(resourceId); await updateDoc(doc(db, "users", user.id), { savedResourceIds: isSaved ? arrayRemove(resourceId) : arrayUnion(resourceId) }); };
@@ -836,7 +835,7 @@ const App: React.FC = () => {
 
           setIsUploadModalOpen(false);
           showToast("Upload successful!", "success");
-      } catch (error) { console.error(error); setToast({ message: "Upload failed.", type: 'error' }); } finally { setIsUploading(false); }
+      } catch (error: any) { console.error(error); setToast({ message: "Upload failed.", type: 'error' }); } finally { setIsUploading(false); }
   };
 
   const deleteResource = async (resourceId: string, fileUrl: string, previewUrl?: string) => {
@@ -892,7 +891,7 @@ const App: React.FC = () => {
           // 6. Show notification with negative points
           showToast("Resource deleted.", "info", -25);
 
-      } catch (error) { 
+      } catch (error: any) { 
           console.error(error); 
           setToast({ message: "Failed to delete resource.", type: 'error' }); 
       }
@@ -979,7 +978,7 @@ const App: React.FC = () => {
              await logAction('delete', `Deleted comment from resource ${data.title}`, resourceId);
           }
           setToast({ message: "Comment deleted.", type: 'success' });
-      } catch (error) {
+      } catch (error: any) {
           console.error("Failed to delete comment", error);
           setToast({ message: "Failed to delete comment.", type: 'error' });
       }
@@ -1037,7 +1036,7 @@ const App: React.FC = () => {
               await logAction('delete', `Deleted discussion post: ${data.title}`, postId);
               setViewState('discussions'); 
           }
-      } catch (e) {
+      } catch (e: any) {
           console.error(e);
       }
   };
@@ -1100,7 +1099,7 @@ const App: React.FC = () => {
              await logAction('delete', `Deleted reply from discussion: ${data.title}`, postId);
           }
           setToast({ message: "Reply deleted.", type: 'success' });
-      } catch (error) {
+      } catch (error: any) {
           console.error("Delete reply failed", error);
           setToast({ message: "Failed to delete reply.", type: 'error' });
       }
@@ -1199,7 +1198,7 @@ const App: React.FC = () => {
                   showToast("Request deleted.", "success");
               }
           }
-      } catch (e) {
+      } catch (e: any) {
           console.error("Failed to delete request", e);
           showToast("Failed to delete request.", "error");
       }
@@ -1302,7 +1301,7 @@ const App: React.FC = () => {
               setView('messages', undefined);
           }
           showToast("Conversation removed from list.", "info");
-      } catch (e) {
+      } catch (e: any) {
           console.error("Failed to hide conversation", e);
           showToast("Failed to hide conversation", "error");
       }

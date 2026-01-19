@@ -7,28 +7,20 @@ import JSZip from "jszip";
 
 // Robustly retrieve API Key
 const getApiKey = (): string => {
-  // 1. Try standard Vite injection (most likely source)
   // @ts-ignore
   if (import.meta.env && import.meta.env.VITE_API_KEY) {
     // @ts-ignore
     return import.meta.env.VITE_API_KEY;
   }
-
-  // 2. Fallback for some cloud environments or alternative setups
   try {
     if (typeof process !== 'undefined' && process.env) {
       return process.env.VITE_API_KEY || process.env.API_KEY || "";
     }
-  } catch (e) {
-    // ignore
-  }
-
+  } catch (e) {}
   return "";
 };
 
 const apiKey = getApiKey();
-
-// Initialize AI client conditionally
 let ai: GoogleGenAI | null = null;
 if (apiKey) {
   ai = new GoogleGenAI({ apiKey: apiKey });
@@ -44,12 +36,12 @@ const isMimeTypeSupported = (mimeType: string): boolean => {
         'text/csv', 
         'text/markdown',
         'text/html',
-        // Office formats (via extraction)
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // docx
         'application/vnd.openxmlformats-officedocument.presentationml.presentation' // pptx
     ];
     if (supportedExact.includes(mimeType)) return true;
     if (mimeType.startsWith('image/')) return true;
+    // Gemini 1.5/2.5 supports audio/video natively too
     if (mimeType.startsWith('audio/')) return true;
     if (mimeType.startsWith('video/')) return true;
     return false;
@@ -75,7 +67,6 @@ const extractTextFromDocx = async (fileBase64: string): Promise<string> => {
         return result.value || "";
     } catch (e) {
         console.error("DOCX Extraction failed", e);
-        // Don't throw, return empty string so main logic can handle "insufficient content"
         return "";
     }
 };
@@ -100,7 +91,7 @@ const extractTextFromPptx = async (fileBase64: string): Promise<string> => {
 
         if (slideFiles.length === 0) return "";
 
-        // Sort slides naturally (slide1, slide2, slide10...)
+        // Sort slides naturally
         slideFiles.sort((a, b) => {
             const numA = parseInt(a.path.match(/\d+/)?.[0] || "0");
             const numB = parseInt(b.path.match(/\d+/)?.[0] || "0");
@@ -114,24 +105,21 @@ const extractTextFromPptx = async (fileBase64: string): Promise<string> => {
             const xmlContent = await slide.file.async("string");
             const xmlDoc = parser.parseFromString(xmlContent, "application/xml");
             
-            // Try to find text within <a:t> (drawingml text) or <t>
             let textNodes = Array.from(xmlDoc.getElementsByTagName("a:t"));
             if (textNodes.length === 0) {
-                // Fallback attempt
                 textNodes = Array.from(xmlDoc.getElementsByTagName("t"));
             }
 
             const slideText = textNodes
                 .map((node: any) => node.textContent)
                 .join(" ")
-                .replace(/\s+/g, ' ') // normalize whitespace
+                .replace(/\s+/g, ' ')
                 .trim();
             
             if (slideText.length > 0) {
                 extractedText += `[Slide ${slide.path.match(/\d+/)?.[0]}]: ${slideText}\n\n`;
             }
         }
-        
         return extractedText;
     } catch (e) {
         console.error("PPTX Extraction failed", e);
@@ -145,43 +133,46 @@ export const summarizeContent = async (
   mimeType?: string
 ): Promise<string> => {
   if (!ai || !apiKey) {
-      console.error("Missing API Key");
-      return "Configuration Error: API Key is missing. Please ensure VITE_API_KEY is set in your .env.local file and restart the server.";
+      return "Configuration Error: API Key is missing. Please ensure VITE_API_KEY is set in your .env.local file.";
   }
 
   try {
-    const systemInstruction = `You are an expert academic assistant. Your task is to analyze the provided study material and create a highly informative, concise summary for a university student, formatted in markdown. The summary should be easy to digest and focus on what's most important for exam preparation.
+    const systemInstruction = `You are an expert academic assistant. Your task is to analyze the provided study material and create a highly informative, concise summary for a university student, formatted in markdown.
+    
+    If the content is a document (PDF, Word, PPT), analyze the visible text and structure.
+    If the file content appears empty or unreadable, explicitly state that.
 
-Do not use generic phrases like "This document discusses..." or "The material covers...". Get straight to the point.
-
-Based on the following material, please provide the summary with these exact sections:
-- **Key Concepts:** A bulleted list of the most important terms, definitions, and concepts.
-- **Main Takeaways:** 2-3 sentences summarizing the core message or conclusions.
-- **Potential Exam Questions:** A numbered list of 2-3 sample questions that could be asked on an exam based on this material.`;
+    The summary MUST include these exact sections:
+    - **Key Concepts:** A bulleted list of the most important terms, definitions, and concepts.
+    - **Main Takeaways:** 2-3 sentences summarizing the core message.
+    - **Potential Exam Questions:** A numbered list of 3 sample questions.`;
 
     const parts: any[] = [];
     
-    // Handle File Input
     if (fileBase64 && mimeType) {
         if (!isMimeTypeSupported(mimeType)) {
-            return "⚠️ **Format Not Supported**\n\nAI Summarization is available for **PDFs**, **Images**, **Word (.docx)**, and **PowerPoint (.pptx)**.\n\nLegacy binary formats like .doc and .ppt are not supported. Please convert them to the newer formats.";
+            return "⚠️ **Format Not Supported**\n\nAI Summarization is available for PDFs, Images, Word (.docx), and PowerPoint (.pptx).";
         }
 
-        // Branching logic for extraction
+        // For Office documents, try local extraction first as it can be more reliable for text-heavy content
         if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
             const extractedText = await extractTextFromDocx(fileBase64);
-            if (!extractedText || extractedText.trim().length < 50) {
-                return "⚠️ **Insufficient Content**\n\nWe couldn't extract enough text from this Word document to generate a summary. It might contain mostly images, equations, or be empty. Try converting it to PDF first.";
+            if (extractedText && extractedText.length > 50) {
+                parts.push({ text: `Analyze the following document content:\n\n${extractedText}` });
+            } else {
+                // Fallback to sending binary if extraction fails (though Gemini might not support docx binary directly, text is safer)
+                 return "⚠️ **Insufficient Content**\n\nCould not extract text from this Word document.";
             }
-            parts.push({ text: `Analyze the following document content:\n\n${extractedText}` });
         } else if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
             const extractedText = await extractTextFromPptx(fileBase64);
-            if (!extractedText || extractedText.trim().length < 50) {
-                return "⚠️ **Insufficient Content**\n\nWe couldn't extract enough text from this PowerPoint presentation. It likely contains images of text (scanned slides) rather than selectable text. \n\n**Tip:** Convert the PPT to PDF and upload the PDF for better results.";
+            if (extractedText && extractedText.length > 50) {
+                parts.push({ text: `Analyze the following presentation slides:\n\n${extractedText}` });
+            } else {
+                 return "⚠️ **Insufficient Content**\n\nCould not extract text from this PowerPoint.";
             }
-            parts.push({ text: `Analyze the following presentation slides:\n\n${extractedText}` });
         } else {
-            // PDF or Image (Native Support)
+            // PDF, Image, etc. - Send as Inline Data
+            // Strip the Data URI prefix if present to get raw base64
             const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
             parts.push({
                 inlineData: {
@@ -189,7 +180,7 @@ Based on the following material, please provide the summary with these exact sec
                     mimeType: mimeType
                 }
             });
-            parts.push({ text: "Analyze the above document/image." });
+            parts.push({ text: "Analyze the above document." });
         }
     } else {
         parts.push({ text: `\n\nMaterial to analyze:\n---\n${content}\n---` });
@@ -199,20 +190,17 @@ Based on the following material, please provide the summary with these exact sec
         model: 'gemini-2.5-flash',
         config: {
             systemInstruction: systemInstruction,
+            temperature: 0.3, // Lower temperature for more factual summaries
         },
-        contents: { parts }
+        contents: { parts } // Wrap in parts object
     });
 
     return response.text || "No summary generated.";
   } catch (error: any) {
     console.error("Gemini API Error:", error);
-    if (error.message?.includes('403') || error.message?.includes('API key')) {
-        return "Error: Invalid or revoked API Key.";
-    }
-    if (error.message?.includes('429')) {
-        return "Error: Quota exceeded. Please try again later.";
-    }
-    return "Could not generate summary. Please check your Internet connection or file integrity.";
+    if (error.message?.includes('403') || error.message?.includes('API key')) return "Error: Invalid or revoked API Key.";
+    if (error.message?.includes('429')) return "Error: Quota exceeded. Please try again later.";
+    return "Could not generate summary. Please check your Internet connection.";
   }
 };
 
@@ -222,16 +210,14 @@ export const generateStudySet = async (
   fileBase64?: string, 
   mimeType?: string
 ): Promise<any> => {
-  if (!ai || !apiKey) {
-      console.error("API Key missing");
-      return [];
-  }
+  if (!ai || !apiKey) return [];
+  
   try {
     let promptText;
     let schema;
 
     if (setType === 'flashcards') {
-      promptText = `Analyze the provided study material and generate a set of 5-10 flashcards.`;
+      promptText = `Analyze the provided study material and generate 5-10 flashcards.`;
       schema = {
         type: Type.ARRAY,
         items: {
@@ -251,10 +237,7 @@ export const generateStudySet = async (
             type: Type.OBJECT,
             properties: {
                 question: { type: Type.STRING },
-                options: { 
-                    type: Type.ARRAY, 
-                    items: { type: Type.STRING } 
-                },
+                options: { type: Type.ARRAY, items: { type: Type.STRING } },
                 correctAnswer: { type: Type.STRING },
             },
             required: ['question', 'options', 'correctAnswer'],
@@ -264,32 +247,22 @@ export const generateStudySet = async (
 
     const parts: any[] = [];
     
-    // Handle File Input
     if (fileBase64 && mimeType) {
-        if (!isMimeTypeSupported(mimeType)) {
-             console.warn("Unsupported MIME type for study set generation:", mimeType);
-             return []; 
-        }
-
-        // Branching logic for extraction
         if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
             const extractedText = await extractTextFromDocx(fileBase64);
-            if (!extractedText || extractedText.trim().length < 50) return []; // Fail silently or handle in UI
             parts.push({ text: `${promptText}\n\nMaterial:\n${extractedText}` });
         } else if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
             const extractedText = await extractTextFromPptx(fileBase64);
-            if (!extractedText || extractedText.trim().length < 50) return []; // Fail silently or handle in UI
             parts.push({ text: `${promptText}\n\nMaterial:\n${extractedText}` });
         } else {
-            // PDF or Image
             const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
-            parts.push({ text: promptText });
             parts.push({
                 inlineData: {
                     data: cleanBase64,
                     mimeType: mimeType
                 }
             });
+            parts.push({ text: promptText });
         }
     } else {
         parts.push({ text: `${promptText}\n\nMaterial:\n---\n${content}\n---` });
@@ -307,31 +280,27 @@ export const generateStudySet = async (
     const text = response.text;
     return text ? JSON.parse(text) : [];
   } catch (error) {
-    console.error(`Error generating ${setType} with Gemini:`, error);
+    console.error(`Error generating ${setType}:`, error);
     return [];
   }
 };
 
-// Kept for backward compatibility if needed elsewhere
 export const describeImage = async (base64Data: string, mimeType: string): Promise<string> => {
   if (!ai || !apiKey) return "Error: API Key missing.";
   try {
     const cleanBase64 = base64Data.replace(/^data:.+;base64,/, '');
-    const prompt = "Analyze this image from a study document. Describe the key information, including any text, diagrams, or main concepts.";
-
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: {
             parts: [
                 { inlineData: { mimeType, data: cleanBase64 } },
-                { text: prompt }
+                { text: "Analyze this image from a study document. Describe key info." }
             ]
         }
     });
-
     return response.text || "No description generated.";
   } catch (error) {
-    console.error("Error describing image with Gemini:", error);
-    return "Could not generate a description for the image.";
+    console.error("Error describing image:", error);
+    return "Could not generate a description.";
   }
 };

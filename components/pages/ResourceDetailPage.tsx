@@ -342,10 +342,6 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     setRelatedStartIndex(0);
   }, [resource.id]);
 
-  const isAISupported = useMemo(() => {
-      return true; // Assume supported via fallback
-  }, [resource.mimeType, resource.contentForAI, resource.fileName]);
-
   const commentsByParentId = useMemo(() => {
     const group: Record<string, Comment[]> = {};
     for (const comment of resource.comments) {
@@ -386,24 +382,25 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   };
 
   const resolveFileBase64 = async (): Promise<{ base64: string, mimeType: string } | undefined> => {
-    // If the resource object already has base64 data, use it
+    // 1. If we have explicit base64 data stored (rare but possible), use it
     if (resource.fileBase64 && resource.fileBase64.length > 0 && resource.mimeType) {
         return { base64: resource.fileBase64, mimeType: resource.mimeType };
     }
     
-    // If we have a URL, try to fetch it
+    // 2. Fetch from URL
     if (resource.fileUrl && resource.fileUrl !== '#') { 
         try {
-            // Use fetch to get the file content as a blob
             const response = await fetch(resource.fileUrl);
             
-            if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
+            if (!response.ok) {
+                console.error(`Fetch failed for resource ${resource.id}: ${response.status} ${response.statusText}`);
+                return undefined;
+            }
             
             const blob = await response.blob();
             
-            // Robust MIME type detection
             let mimeType = blob.type;
-            // Fallback for generic types based on extension
+            // Fallback for generic types based on extension if blob type is unhelpful
             if (!mimeType || mimeType === 'application/octet-stream') {
                  const ext = resource.fileName.split('.').pop()?.toLowerCase();
                  if (ext === 'pdf') mimeType = 'application/pdf';
@@ -422,8 +419,8 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
             
             return { base64, mimeType };
         } catch (error) {
-            console.warn("AI File Access Warning:", error);
-            // Fallback to undefined so we use metadata
+            console.warn("AI File Access Warning (likely CORS or Network):", error);
+            // Return undefined to trigger fallback
             return undefined;
         }
     }
@@ -451,7 +448,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
           mimeType = fileData.mimeType;
           source = 'file';
       } else {
-          // If no file data, check for pre-extracted content or mock content
+          // If no file data (e.g. mock data or fetch failed), check for pre-extracted content
           if (resource.contentForAI) {
               additionalText += "\n\n" + resource.contentForAI;
           } else {
@@ -474,14 +471,6 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     setSummary(result);
     setSummarySource(source);
     setIsSummarizing(false);
-  };
-  
-  const handleGeneratePreview = async () => {
-    setIsGeneratingPreview(true);
-    const { text, base64, mimeType } = await prepareAIContent();
-    const result = await summarizeContent(text!, base64, mimeType);
-    setAiGeneratedPreview(result);
-    setIsGeneratingPreview(false);
   };
   
   const handleGenerateStudySet = async (type: 'flashcards' | 'quiz') => {

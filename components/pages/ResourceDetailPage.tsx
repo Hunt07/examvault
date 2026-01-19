@@ -1,14 +1,11 @@
 
 import React, { useState, useContext, useRef, useMemo, useEffect } from 'react';
-import { ResourceType, type Resource, type Comment, type Flashcard, type QuizQuestion, type Attachment } from '../../types';
+import { ResourceType, type Resource, type Comment, type Attachment } from '../../types';
 import { AppContext } from '../../App';
-import { summarizeContent, generateStudySet } from '../../services/geminiService';
-import { ArrowLeft, ArrowRight, ThumbsUp, ThumbsDown, MessageSquare, Download, BrainCircuit, Loader2, FileText, Notebook, ClipboardList, Archive, Bell, BellOff, Flag, CheckCircle, MessageCircle, BookCopy, HelpCircle, Eye, X, AlertCircle, FileType, Bookmark, BookmarkCheck, Share2, Trash2, UserPlus, UserMinus, Clock, Paperclip, Image as ImageIcon } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ThumbsUp, ThumbsDown, MessageSquare, Download, Loader2, FileText, Notebook, ClipboardList, Archive, Bell, BellOff, Flag, CheckCircle, MessageCircle, Eye, X, AlertCircle, FileType, Bookmark, BookmarkCheck, Share2, Trash2, Paperclip, Image as ImageIcon } from 'lucide-react';
 import MarkdownRenderer from '../MarkdownRenderer';
 import MarkdownToolbar from '../MarkdownToolbar';
 import UserRankBadge from '../UserRankBadge';
-import FlashcardViewer from '../FlashcardViewer';
-import QuizComponent from '../QuizComponent';
 import ShareModal from '../ShareModal';
 import ResourceCard from '../ResourceCard';
 import Avatar from '../Avatar';
@@ -246,8 +243,6 @@ const CommentComponent: React.FC<{
 const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   const { user, userRanks, setView, handleVote, addCommentToResource, goBack, toggleLecturerSubscription, toggleCourseCodeSubscription, savedResourceIds, toggleSaveResource, resources, deleteResource, scrollTargetId, setScrollTargetId, showToast } = useContext(AppContext);
   // ... state ...
-  const [summary, setSummary] = useState('');
-  const [isSummarizing, setIsSummarizing] = useState(false);
   const [newComment, setNewComment] = useState('');
   const [newCommentFile, setNewCommentFile] = useState<File | undefined>(undefined);
   const [isReporting, setIsReporting] = useState(false);
@@ -258,13 +253,8 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [relatedStartIndex, setRelatedStartIndex] = useState(0);
-  const [aiGeneratedPreview, setAiGeneratedPreview] = useState('');
-  const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
   const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
   const commentFileInputRef = useRef<HTMLInputElement>(null);
-  const [studySet, setStudySet] = useState<(Flashcard[] | QuizQuestion[]) | null>(null);
-  const [studySetType, setStudySetType] = useState<'flashcards' | 'quiz' | null>(null);
-  const [isGeneratingStudySet, setIsGeneratingStudySet] = useState(false);
   const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null);
 
   const authorRank = userRanks.get(resource.author.id);
@@ -307,11 +297,6 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   }, [scrollTargetId, resource.comments, setScrollTargetId]);
 
   useEffect(() => {
-    setSummary('');
-    setIsSummarizing(false);
-    setStudySet(null);
-    setStudySetType(null);
-    setIsGeneratingStudySet(false);
     setNewComment('');
     setNewCommentFile(undefined);
     setIsReporting(false);
@@ -319,15 +304,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     setHasReported(false);
     setIsPreviewOpen(false);
     setRelatedStartIndex(0);
-    setAiGeneratedPreview('');
-    setIsGeneratingPreview(false);
   }, [resource.id]);
-
-  const isAISupported = useMemo(() => {
-      if (resource.mimeType) return true;
-      if (resource.contentForAI) return true; // Support mock resources
-      return false; 
-  }, [resource.mimeType, resource.contentForAI]);
 
   const commentsByParentId = useMemo(() => {
     const group: Record<string, Comment[]> = {};
@@ -384,125 +361,6 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     } else {
         setView('publicProfile', authorId);
     }
-  };
-
-  const resolveFileBase64 = async (): Promise<string | undefined> => {
-    if (resource.fileBase64) return resource.fileBase64;
-    // Mock resources use #
-    if (resource.fileUrl === '#') return undefined; 
-
-    try {
-        // Attempt fetch with CORS settings that maximize compatibility
-        // credentials: 'omit' is crucial for some Firebase Storage configurations accessed via fetch
-        const response = await fetch(resource.fileUrl, { 
-            method: 'GET',
-            mode: 'cors',
-            credentials: 'omit',
-            referrerPolicy: 'no-referrer'
-        });
-        
-        if (!response.ok) throw new Error(`Fetch failed: ${response.statusText}`);
-        const blob = await response.blob();
-        return await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-        });
-    } catch (error) {
-        console.warn("AI File Access Warning (CORS or Network):", error);
-        return undefined;
-    }
-  };
-
-  const getMetadataContext = () => {
-      return `
-      Title: ${resource.title}
-      Course: ${resource.courseCode} - ${resource.courseName}
-      Type: ${resource.type}
-      Description: ${resource.description}
-      `;
-  };
-
-  const prepareAIContent = async () => {
-      const textContext = getMetadataContext();
-      let base64 = undefined;
-      let mimeType = resource.mimeType;
-      let additionalText = "";
-
-      // Try to fetch file if not mock
-      if (resource.fileUrl && resource.fileUrl !== '#') {
-          base64 = await resolveFileBase64();
-          
-          if (!base64) {
-              // Graceful Fallback: If we can't get the file (CORS), we don't break.
-              // We inform the user via toast and guide the AI to use metadata.
-              showToast("Cannot read file content directly. AI will use metadata summary.", "info");
-              additionalText += "\n[System Note: The file content could not be accessed directly due to browser security restrictions. Please generate the best possible summary/guide based on the Title, Course, and Description provided above. Infer standard topics covered in this subject.]";
-          } else {
-              // Fix: Extract mimeType from base64 if it wasn't available in the resource metadata
-              if (!mimeType && base64.startsWith('data:')) {
-                  const match = base64.match(/^data:([^;]+);/);
-                  if (match && match[1]) {
-                      mimeType = match[1];
-                  }
-              }
-          }
-      }
-
-      // If mock or no file content found, use contentForAI fallback
-      if (!base64) {
-          if (resource.contentForAI) {
-              additionalText += "\n\n" + resource.contentForAI;
-              mimeType = undefined; // Force text mode
-          } else if (resource.fileUrl !== '#' && !additionalText.includes("System Note")) {
-               // Should be covered by the resolveFileBase64 check, but safe fallback
-               additionalText += "\n[System Note: File unavailable. Use metadata.]";
-          }
-      }
-
-      const fullText = additionalText ? `${textContext}\n\n${additionalText}` : textContext;
-      return { text: fullText, base64, mimeType };
-  };
-
-  const handleGenerateSummary = async () => {
-    setIsSummarizing(true);
-    setSummary('');
-    
-    const { text, base64, mimeType } = await prepareAIContent();
-    
-    // We no longer return early error; we pass what we have to the AI
-    const result = await summarizeContent(text!, base64, mimeType);
-    setSummary(result);
-    setIsSummarizing(false);
-  };
-  
-  const handleGeneratePreview = async () => {
-    if (!isAISupported) return;
-    setIsGeneratingPreview(true);
-    
-    const { text, base64, mimeType } = await prepareAIContent();
-    
-    const result = await summarizeContent(text!, base64, mimeType);
-    setAiGeneratedPreview(result);
-    setIsGeneratingPreview(false);
-  };
-  
-  const handleGenerateStudySet = async (type: 'flashcards' | 'quiz') => {
-    setIsGeneratingStudySet(true);
-    setStudySet(null);
-    setStudySetType(type);
-    
-    const { text, base64, mimeType } = await prepareAIContent();
-    
-    const result = await generateStudySet(text!, type, base64, mimeType);
-    setStudySet(result);
-    setIsGeneratingStudySet(false);
-  };
-
-  const resetStudySet = () => {
-      setStudySet(null);
-      setStudySetType(null);
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -636,41 +494,14 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
         );
     }
 
-    const contentToDisplay = aiGeneratedPreview || null;
     return (
         <div className="flex flex-col items-center justify-center h-full p-8 text-center">
             <FileType size={64} className="text-slate-400 mb-4" />
             <h3 className="text-xl font-bold text-slate-800 mb-2">Preview Unavailable</h3>
             <p className="text-slate-600 mb-6 max-w-md">This file type (<strong>.{ext}</strong>) cannot be displayed directly.</p>
             <div className="w-full max-w-3xl bg-white rounded-lg border border-slate-200 p-6 text-left h-96 overflow-y-auto shadow-inner relative flex flex-col">
-                <div className="mb-4 pb-2 border-b border-slate-100 flex items-center justify-between shrink-0">
-                    <div className="flex items-center gap-2">
-                        <FileText size={16} className="text-slate-400" />
-                        <span className="text-sm font-semibold text-slate-500">Content Overview</span>
-                    </div>
-                     {!contentToDisplay && !isGeneratingPreview && isAISupported && (
-                        <button onClick={handleGeneratePreview} className="text-xs bg-primary-50 text-primary-600 px-2 py-1 rounded hover:bg-primary-100 font-semibold transition flex items-center gap-1">
-                            <BrainCircuit size={12} /> Generate with AI
-                        </button>
-                    )}
-                </div>
-                <div className="flex-grow overflow-y-auto">
-                    {isGeneratingPreview ? (
-                         <div className="flex flex-col items-center justify-center h-full text-slate-400"><Loader2 size={32} className="animate-spin mb-2 text-primary-500" /><p className="text-sm">Analyzing document...</p></div>
-                    ) : contentToDisplay ? (
-                        <MarkdownRenderer content={contentToDisplay} />
-                    ) : (
-                        <div className="flex flex-col items-center justify-center h-full text-slate-400 py-12">
-                            <p className="italic mb-4">No text preview available.</p>
-                            {isAISupported ? (
-                                 <button onClick={handleGeneratePreview} className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition font-semibold text-sm shadow-sm">
-                                    <BrainCircuit size={16} /> Generate AI Summary
-                                </button>
-                            ) : (
-                                <p className="text-xs text-slate-400">AI features are not supported for this file type.</p>
-                            )}
-                        </div>
-                    )}
+                <div className="flex-grow overflow-y-auto flex flex-col items-center justify-center text-slate-400">
+                     <p className="italic mb-4">No text preview available.</p>
                 </div>
             </div>
         </div>
@@ -777,52 +608,6 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
                     )
                 )}
             </div>
-          </div>
-
-          {/* AI Summary */}
-          <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md mt-8 transition-colors duration-300 border border-transparent dark:border-zinc-700">
-            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4">AI Summary</h3>
-            {!isAISupported && (
-                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 mb-4 flex items-start gap-3">
-                    <AlertCircle className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" size={20} />
-                    <div><h4 className="font-bold text-amber-800 dark:text-amber-200 text-sm">File Type Not Fully Supported</h4><p className="text-amber-700 dark:text-amber-300 text-xs mt-1">AI summarization works best with PDF and Image files. For Word and PowerPoint, reliability may vary.</p></div>
-                </div>
-            )}
-            {!summary && !isSummarizing && (
-              <div className="border-2 border-dashed border-slate-300 dark:border-zinc-700 rounded-lg p-6 text-center">
-                  <BrainCircuit className="mx-auto h-12 w-12 text-slate-400 dark:text-slate-500" />
-                  <p className="mt-2 text-slate-600 dark:text-slate-400">Get a quick overview of this document.</p>
-                  <button onClick={handleGenerateSummary} disabled={!isAISupported} className={`mt-4 inline-flex items-center gap-2 font-bold py-2 px-4 rounded-lg transition ${isAISupported ? 'bg-primary-600 text-white hover:bg-primary-700' : 'bg-slate-200 dark:bg-zinc-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'}`}>
-                      <BrainCircuit size={18} /> Generate with Gemini
-                  </button>
-              </div>
-            )}
-            {isSummarizing && <div className="border border-slate-200 dark:border-zinc-700 rounded-lg p-6 text-center"><Loader2 className="mx-auto h-12 w-12 text-primary-500 animate-spin" /><p className="mt-4 text-slate-600 dark:text-slate-300 font-medium">Gemini is thinking...</p><p className="text-sm text-slate-500 dark:text-slate-400">Generating a summary for you.</p></div>}
-            {summary && <div className="bg-slate-50 dark:bg-zinc-800/50 border border-slate-200 dark:border-zinc-700 rounded-lg p-4 sm:p-6 dark:text-slate-200"><MarkdownRenderer content={summary} /></div>}
-          </div>
-          
-          {/* AI Study Tools */}
-          <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md mt-8 transition-colors duration-300 border border-transparent dark:border-zinc-700">
-            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4">AI Study Tools</h3>
-            {!isAISupported && <div className="bg-slate-50 dark:bg-zinc-800/50 p-4 rounded-lg text-center mb-4"><p className="text-sm text-slate-500 dark:text-slate-400">Study tools may be limited for this file type.</p></div>}
-            {isGeneratingStudySet && <div className="border border-slate-200 dark:border-zinc-700 rounded-lg p-6 text-center"><Loader2 className="mx-auto h-12 w-12 text-primary-500 animate-spin" /><p className="mt-4 text-slate-600 dark:text-slate-300 font-medium">Gemini is thinking...</p><p className="text-sm text-slate-500 dark:text-slate-400">Generating {studySetType === 'flashcards' ? 'flashcards' : 'a quiz'} for you.</p></div>}
-            {!isGeneratingStudySet && !studySet && (
-                <div className={`border-2 border-dashed border-slate-300 dark:border-zinc-700 rounded-lg p-6 text-center ${!isAISupported ? 'opacity-50 pointer-events-none' : ''}`}>
-                    <div className="flex justify-center gap-4">
-                        <button onClick={() => handleGenerateStudySet('flashcards')} disabled={!isAISupported} className="flex-1 inline-flex flex-col items-center gap-2 bg-slate-50 dark:bg-zinc-800 text-slate-700 dark:text-slate-200 font-bold py-4 px-4 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-700 transition border border-slate-200 dark:border-zinc-700"><BookCopy size={24} /> Generate Flashcards</button>
-                        <button onClick={() => handleGenerateStudySet('quiz')} disabled={!isAISupported} className="flex-1 inline-flex flex-col items-center gap-2 bg-slate-50 dark:bg-zinc-800 text-slate-700 dark:text-slate-200 font-bold py-4 px-4 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-700 transition border border-slate-200 dark:border-zinc-700"><HelpCircle size={24} /> Generate Practice Quiz</button>
-                    </div>
-                </div>
-            )}
-            {!isGeneratingStudySet && studySet && studySet.length > 0 && (
-                <div className="bg-slate-50 dark:bg-zinc-800/50 border border-slate-200 dark:border-zinc-700 rounded-lg p-4 sm:p-6">
-                    {studySetType === 'flashcards' && <FlashcardViewer flashcards={studySet as Flashcard[]} onReset={resetStudySet} />}
-                    {studySetType === 'quiz' && <QuizComponent questions={studySet as QuizQuestion[]} onReset={resetStudySet} />}
-                </div>
-            )}
-            {!isGeneratingStudySet && studySet && studySet.length === 0 && (
-                 <div className="p-4 text-center bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg"><p className="text-red-700 dark:text-red-300 font-semibold">Could not generate study set.</p><p className="text-red-600 dark:text-red-400 text-sm">Please try again later or check if the file format is supported.</p><button onClick={resetStudySet} className="mt-2 text-sm text-primary-600 dark:text-primary-400 font-semibold hover:text-primary-800 dark:hover:text-primary-300">Try again</button></div>
-            )}
           </div>
 
           {/* Discussion */}

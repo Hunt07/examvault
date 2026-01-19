@@ -2,12 +2,11 @@ import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 
 // Use Vite environment variable or fallback to the provided key
 // Cast to any to prevent TS error: Property 'env' does not exist on type 'ImportMeta'
-// IMPORTANT: If this key was committed to GitHub, Google may have revoked it. Generate a new one if AI fails.
 const apiKey = (import.meta as any).env?.VITE_API_KEY || "AIzaSyDgLsFeuU6aqJfFJoyQueF-c5taEViwV9s";
 const genAI = new GoogleGenerativeAI(apiKey);
 
-// Switched to gemini-1.5-flash for maximum stability and free-tier compatibility
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+// Using gemini-2.5-flash as per latest guidelines for text tasks
+const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
 export const summarizeContent = async (
   content: string, 
@@ -47,11 +46,8 @@ Based on the following material, please provide the summary with these exact sec
     const result = await model.generateContent(parts);
     const response = result.response;
     return response.text() || "No summary generated.";
-  } catch (error: any) {
-    console.error("Gemini API Error:", error);
-    if (error.message?.includes('403') || error.message?.includes('API key')) {
-        return "Error: Invalid API Key. Google may have revoked your key if it was exposed on GitHub. Please generate a new key and add it to Vercel Environment Variables.";
-    }
+  } catch (error) {
+    console.error("Error generating summary with Gemini:", error);
     return "Could not generate summary. Please check your Internet connection or API Key quota.";
   }
 };
@@ -122,7 +118,7 @@ export const generateStudySet = async (
 
     // Initialize a model with generation config for JSON
     const jsonModel = genAI.getGenerativeModel({
-        model: "gemini-1.5-flash",
+        model: "gemini-2.5-flash",
         generationConfig: {
             responseMimeType: "application/json",
             responseSchema: schema,

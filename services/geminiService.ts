@@ -179,14 +179,19 @@ export const summarizeContent = async (
   }
 
   try {
-    const systemInstruction = `You are an expert academic assistant. Your task is to analyze the provided study material (or context about it) and create a highly informative, concise summary for a university student, formatted in markdown. The summary should be easy to digest and focus on what's most important for exam preparation.
+    const systemInstruction = `You are an expert academic assistant. Your PRIMARY task is to analyze the ACTUAL CONTENT of the provided file (PDF, Image, etc.).
 
-Do not use generic phrases like "This document discusses..." or "The material covers...". Get straight to the point.
+    CRITICAL INSTRUCTIONS:
+    1. READ the file content provided in the user's message.
+    2. Do NOT rely solely on the "Metadata" context (like Title or Description) unless the file content is empty or unreadable. The Metadata is provided only for context.
+    3. If the file content contradicts the metadata, trust the file content.
+    4. Create a highly informative, concise summary for a university student, formatted in markdown.
+    5. Focus on what's most important for exam preparation.
 
-Based on the available context, please provide the summary with these exact sections:
-- **Key Concepts:** A bulleted list of the most important terms, definitions, and concepts likely covered.
-- **Main Takeaways:** 2-3 sentences summarizing the core message or likely conclusions.
-- **Potential Exam Questions:** A numbered list of 2-3 sample questions that could be asked on an exam based on this topic.`;
+    Structure the summary with these exact sections:
+    - **Key Concepts:** A bulleted list of the most important terms, definitions, and concepts found IN THE DOCUMENT.
+    - **Main Takeaways:** 2-3 sentences summarizing the core message of the document.
+    - **Potential Exam Questions:** A numbered list of 2-3 sample questions that could be asked based on this specific document's content.`;
 
     const parts: any[] = [];
     
@@ -203,14 +208,14 @@ Based on the available context, please provide the summary with these exact sect
             if (!extractedText || extractedText.length < 50) {
                 return "⚠️ **No Readable Text Found**\n\nThe AI could not extract enough text from this Word document.\n\n**Possible reasons:**\n- The document contains scanned images instead of text.\n- The file is empty or corrupted.\n\n*Try converting the file to PDF first.*";
             }
-            parts.push({ text: `Analyze the following document content:\n\n${extractedText}\n\nContext:\n${content}` });
+            parts.push({ text: `Analyze the following document content:\n\n${extractedText}\n\nMetadata Context:\n${content}` });
         } else if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
             const extractedText = await extractTextFromPptx(fileBase64);
             // Check for empty text result BEFORE sending to AI
             if (!extractedText || extractedText.length < 20) {
                 return "⚠️ **No Readable Text Found**\n\nThe AI could not extract text from this presentation.\n\n**Possible reasons:**\n- The slides contain only images or screenshots (scanned).\n- The text is inside complex shapes/SmartArt not supported by the extractor.\n\n*Try converting the file to PDF first for better results.*";
             }
-            parts.push({ text: `Analyze the following presentation slides:\n\n${extractedText}\n\nContext:\n${content}` });
+            parts.push({ text: `Analyze the following presentation slides:\n\n${extractedText}\n\nMetadata Context:\n${content}` });
         } else {
             // PDF or Image (Native Support)
             const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
@@ -221,7 +226,7 @@ Based on the available context, please provide the summary with these exact sect
                 }
             });
             // Include metadata/context to help the model if file content is ambiguous
-            parts.push({ text: `Analyze the above document/image.\n\nContext:\n${content}` });
+            parts.push({ text: `Analyze the document attached above.\n\nMetadata Context (Use only if document is unclear):\n${content}` });
         }
     } else {
         // Metadata only fallback
@@ -264,7 +269,7 @@ export const generateStudySet = async (
     let schema;
 
     if (setType === 'flashcards') {
-      promptText = `Analyze the provided study material (or infer from context) and generate a set of 5-10 flashcards.`;
+      promptText = `Analyze the provided study material and generate a set of 5-10 flashcards based STRICTLY on its content.`;
       schema = {
         type: Type.ARRAY,
         items: {
@@ -277,7 +282,7 @@ export const generateStudySet = async (
         },
       };
     } else {
-      promptText = `Analyze the provided study material (or infer from context) and generate a 5-question multiple-choice quiz.`;
+      promptText = `Analyze the provided study material and generate a 5-question multiple-choice quiz based STRICTLY on its content.`;
       schema = {
         type: Type.ARRAY,
         items: {
@@ -318,7 +323,7 @@ export const generateStudySet = async (
             const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
             
             // Include metadata context
-            parts.push({ text: `${promptText}\n\nContext:\n${content}` });
+            parts.push({ text: `${promptText}\n\nMetadata Context:\n${content}` });
             
             parts.push({
                 inlineData: {

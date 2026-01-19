@@ -327,8 +327,11 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   const isAISupported = useMemo(() => {
       if (resource.mimeType) return true;
       if (resource.contentForAI) return true; 
+      // If extension is known
+      const ext = resource.fileName.split('.').pop()?.toLowerCase();
+      if (['pdf', 'docx', 'pptx', 'txt', 'md'].includes(ext || '')) return true;
       return false; 
-  }, [resource.mimeType, resource.contentForAI]);
+  }, [resource.mimeType, resource.contentForAI, resource.fileName]);
 
   const commentsByParentId = useMemo(() => {
     const group: Record<string, Comment[]> = {};
@@ -437,11 +440,19 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
               showToast("Cannot read file content directly. AI will use metadata summary.", "info");
               additionalText += "\n[System Note: The file content could not be accessed directly due to browser security restrictions. Please generate the best possible summary/guide based on the Title, Course, and Description provided above. Infer standard topics covered in this subject.]";
           } else {
-              if (!mimeType && base64.startsWith('data:')) {
+              // Try to sniff mime type from Data URL if not present or generic
+              if ((!mimeType || mimeType === 'application/octet-stream') && base64.startsWith('data:')) {
                   const match = base64.match(/^data:([^;]+);/);
                   if (match && match[1]) {
                       mimeType = match[1];
                   }
+              }
+              // If still unknown/generic, try to infer from extension
+              if (!mimeType || mimeType === 'application/octet-stream') {
+                  const ext = resource.fileName.split('.').pop()?.toLowerCase();
+                  if (ext === 'pdf') mimeType = 'application/pdf';
+                  if (ext === 'docx') mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+                  if (ext === 'pptx') mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
               }
           }
       }
@@ -789,7 +800,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
                   </button>
               </div>
             )}
-            {isSummarizing && <div className="border border-slate-200 dark:border-zinc-700 rounded-lg p-6 text-center"><Loader2 className="mx-auto h-12 w-12 text-primary-500 animate-spin" /><p className="mt-4 text-slate-600 dark:text-slate-300 font-medium">Gemini is thinking...</p><p className="text-sm text-slate-500 dark:text-slate-400">Generating a summary for you.</p></div>}
+            {isSummarizing && <div className="border border-slate-200 dark:border-zinc-700 rounded-lg p-6 text-center"><Loader2 className="mx-auto h-12 w-12 text-primary-500 animate-spin" /><p className="mt-4 text-slate-600 dark:text-slate-300 font-medium">Gemini is reading the document...</p><p className="text-sm text-slate-500 dark:text-slate-400">Analyzing content for you. This might take a few seconds.</p></div>}
             {summary && <div className="bg-slate-50 dark:bg-zinc-800/50 border border-slate-200 dark:border-zinc-700 rounded-lg p-4 sm:p-6 dark:text-slate-200"><MarkdownRenderer content={summary} /></div>}
           </div>
           

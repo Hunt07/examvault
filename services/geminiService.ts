@@ -1,5 +1,5 @@
 
-import { GoogleGenAI, Type, Chat } from "@google/genai";
+import { GoogleGenAI, Type, Chat, Part } from "@google/genai";
 // @ts-ignore
 import mammoth from "mammoth";
 // @ts-ignore
@@ -173,12 +173,14 @@ const processContentForAI = async (
     content: string, 
     fileBase64?: string, 
     mimeType?: string
-): Promise<{ parts: any[], error?: string }> => {
-    const parts: any[] = [];
+): Promise<{ parts: Part[], error?: string }> => {
+    const parts: Part[] = [];
 
     if (fileBase64 && mimeType) {
         if (!isMimeTypeSupported(mimeType)) {
-            return { parts, error: "Format not supported" };
+            // Even if not supported, we can try to send metadata
+             parts.push({ text: `Analyze the following metadata (File content not available/supported):\n${content}` });
+             return { parts, error: "Format not natively supported by AI." };
         }
 
         // Branching logic for extraction
@@ -225,11 +227,6 @@ export const createChatSession = async (
 
     const { parts, error } = await processContentForAI(content, fileBase64, mimeType);
     
-    // We initiate the chat. 
-    // We will inject the document in the history as the user's "first" hidden message or system instruction context
-    // However, ai.chats.create doesn't support 'parts' in systemInstruction easily in all versions, 
-    // and sending it as the first message is the most robust way to "load" the context.
-    
     const systemInstruction = `You are an expert academic assistant for University students.
     You are currently assisting a student with a specific document.
     
@@ -247,14 +244,12 @@ export const createChatSession = async (
 
     try {
         // Prime the chat with the document content immediately.
-        // This message acts as the "Context Loading" step.
-        // We won't display this exchange in the UI.
-        let primeMessage = parts;
+        let primeMessage: Part[] = parts;
         if (primeMessage.length === 0) {
              primeMessage = [{ text: `Metadata Context:\n${content}` }];
         }
         
-        // Pass the parts array directly to the 'message' property
+        // Correctly pass the array of parts to the message property
         await chat.sendMessage({ message: primeMessage });
         
         return { chat, initialError: error };
@@ -278,7 +273,7 @@ export const summarizeContent = async (
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         config: {
-            systemInstruction: "You are an expert academic assistant. Summarize the provided content.",
+            systemInstruction: "You are an expert academic assistant. Summarize the provided content clearly and concisely using Markdown.",
         },
         contents: { parts }
     });
@@ -299,8 +294,8 @@ export const generateStudySet = async (
   if (!ai || !apiKey) return [];
   try {
     let promptText = setType === 'flashcards' 
-        ? `Generate 5-10 flashcards (term/definition).`
-        : `Generate 5 multiple-choice questions.`;
+        ? `Generate 5-10 flashcards (term/definition) based on the provided content.`
+        : `Generate 5 multiple-choice questions based on the provided content.`;
         
     let schema = setType === 'flashcards' 
         ? { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { term: { type: Type.STRING }, definition: { type: Type.STRING } }, required: ['term', 'definition'] } }

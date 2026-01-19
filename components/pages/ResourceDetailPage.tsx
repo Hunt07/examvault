@@ -1,18 +1,19 @@
 
 import React, { useState, useContext, useRef, useMemo, useEffect } from 'react';
-import { ResourceType, type Resource, type Comment, type Attachment } from '../../types';
+import { ResourceType, type Resource, type Comment, type Attachment, type Flashcard, type QuizQuestion } from '../../types';
 import { AppContext } from '../../App';
-import { createChatSession } from '../../services/geminiService';
-import { ArrowLeft, ArrowRight, ThumbsUp, ThumbsDown, MessageSquare, Download, Loader2, FileText, Notebook, ClipboardList, Archive, Bell, BellOff, Flag, CheckCircle, MessageCircle, Eye, X, AlertCircle, FileType, Bookmark, BookmarkCheck, Share2, Trash2, Paperclip, Image as ImageIcon, Sparkles, Send, Bot } from 'lucide-react';
+import { summarizeContent, generateStudySet } from '../../services/geminiService';
+import { ArrowLeft, ArrowRight, ThumbsUp, ThumbsDown, MessageSquare, Download, Loader2, FileText, Notebook, ClipboardList, Archive, Bell, BellOff, Flag, CheckCircle, MessageCircle, Eye, X, AlertCircle, FileType, Bookmark, BookmarkCheck, Share2, Trash2, Paperclip, Image as ImageIcon, Sparkles, Send, Bot, BrainCircuit, Copy } from 'lucide-react';
 import MarkdownRenderer from '../MarkdownRenderer';
 import MarkdownToolbar from '../MarkdownToolbar';
 import UserRankBadge from '../UserRankBadge';
 import ShareModal from '../ShareModal';
 import ResourceCard from '../ResourceCard';
 import Avatar from '../Avatar';
+import FlashcardViewer from '../FlashcardViewer';
+import QuizComponent from '../QuizComponent';
 import { db } from '../../services/firebase';
 import { collection, addDoc } from 'firebase/firestore';
-import type { Chat } from '@google/genai';
 
 const CommentComponent: React.FC<{
   comment: Comment;
@@ -241,23 +242,15 @@ const CommentComponent: React.FC<{
   );
 };
 
-interface ChatMessage {
-    id: string;
-    role: 'user' | 'model';
-    text: string;
-    timestamp: number;
-}
-
 const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   const { user, userRanks, setView, handleVote, addCommentToResource, toggleLecturerSubscription, toggleCourseCodeSubscription, savedResourceIds, toggleSaveResource, resources, deleteResource, scrollTargetId, setScrollTargetId, showToast } = useContext(AppContext);
   
-  // Chat State
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [chatInput, setChatInput] = useState('');
-  const [isChatLoading, setIsChatLoading] = useState(false);
-  const [isInitializingChat, setIsInitializingChat] = useState(false);
-  const chatSessionRef = useRef<Chat | null>(null);
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  // AI Feature State
+  const [summary, setSummary] = useState('');
+  const [isSummaryLoading, setIsSummaryLoading] = useState(false);
+  const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
+  const [quiz, setQuiz] = useState<QuizQuestion[]>([]);
+  const [isStudyToolsLoading, setIsStudyToolsLoading] = useState(false);
 
   const [newComment, setNewComment] = useState('');
   const [newCommentFile, setNewCommentFile] = useState<File | undefined>(undefined);
@@ -282,11 +275,6 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
 
   const isUpvoted = resource.upvotedBy?.includes(user?.id || '');
   const isDownvoted = resource.downvotedBy?.includes(user?.id || '');
-
-  // Scroll to new messages
-  useEffect(() => {
-      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
 
   // Enhanced Deep Linking with Retry Logic
   useEffect(() => {
@@ -320,21 +308,18 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     setIsPreviewOpen(false);
     setRelatedStartIndex(0);
     
-    // Reset Chat
-    setMessages([]);
-    chatSessionRef.current = null;
-    initializeChat();
+    // Reset AI Features
+    setSummary('');
+    setFlashcards([]);
+    setQuiz([]);
   }, [resource.id]);
 
   const isAISupported = useMemo(() => {
-      if (resource.mimeType) return true;
-      if (resource.contentForAI) return true; 
-      const ext = resource.fileName.split('.').pop()?.toLowerCase();
-      if (['pdf', 'docx', 'pptx', 'txt', 'md'].includes(ext || '')) return true;
-      return false; 
+      // The AI logic in geminiService handles fallback for all types, so generally true
+      return true;
   }, [resource.mimeType, resource.contentForAI, resource.fileName]);
 
-  // === Chat Logic ===
+  // === AI Logic ===
 
   const resolveFileBase64 = async (): Promise<string | undefined> => {
     if (resource.fileBase64) return resource.fileBase64;
@@ -375,9 +360,9 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
           base64 = await resolveFileBase64();
           
           if (!base64) {
-              // Silently handle fallback
               additionalText += "\n[System Note: File content access restricted. Using metadata summary.]";
           } else {
+              // Ensure mimeType is set correctly if initially generic
               if ((!mimeType || mimeType === 'application/octet-stream') && base64.startsWith('data:')) {
                   const match = base64.match(/^data:([^;]+);/);
                   if (match && match[1]) mimeType = match[1];
@@ -385,8 +370,8 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
               if (!mimeType || mimeType === 'application/octet-stream') {
                   const ext = resource.fileName.split('.').pop()?.toLowerCase();
                   if (ext === 'pdf') mimeType = 'application/pdf';
-                  if (ext === 'docx') mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-                  if (ext === 'pptx') mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+                  else if (ext === 'docx') mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+                  else if (ext === 'pptx') mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
               }
           }
       }
@@ -404,67 +389,31 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
       return { text: fullText, base64, mimeType };
   };
 
-  const initializeChat = async () => {
-      if (!isAISupported || chatSessionRef.current) return;
-      setIsInitializingChat(true);
-
+  const handleGenerateSummary = async () => {
+      setIsSummaryLoading(true);
       const { text, base64, mimeType } = await prepareAIContent();
-      const { chat, initialError } = await createChatSession(text!, base64, mimeType);
-
-      if (chat) {
-          chatSessionRef.current = chat;
-          setMessages([
-              { 
-                  id: 'init', 
-                  role: 'model', 
-                  text: initialError 
-                    ? `I encountered an issue reading the file (${initialError}), but I've reviewed the metadata. How can I help you with **${resource.title}**?`
-                    : `I've analyzed **${resource.title}**. Ask me for a summary, practice questions, or anything else about this document!`,
-                  timestamp: Date.now() 
-              }
-          ]);
-      } else {
-          setMessages([{ id: 'err', role: 'model', text: "Sorry, I couldn't initialize the assistant for this document.", timestamp: Date.now() }]);
-      }
-      setIsInitializingChat(false);
+      const result = await summarizeContent(text, base64, mimeType);
+      setSummary(result);
+      setIsSummaryLoading(false);
   };
 
-  const handleSendMessage = async (text: string) => {
-      if (!chatSessionRef.current || !text.trim()) return;
-
-      const userMsg: ChatMessage = { id: Date.now().toString(), role: 'user', text, timestamp: Date.now() };
-      setMessages(prev => [...prev, userMsg]);
-      setChatInput('');
-      setIsChatLoading(true);
-
-      try {
-          const result = await chatSessionRef.current.sendMessageStream({ message: text });
-          let fullResponse = "";
-          const botMsgId = (Date.now() + 1).toString();
-          
-          // Add placeholder for streaming
-          setMessages(prev => [...prev, { id: botMsgId, role: 'model', text: '', timestamp: Date.now() }]);
-
-          for await (const chunk of result) {
-              const chunkText = chunk.text;
-              if (chunkText) {
-                  fullResponse += chunkText;
-                  setMessages(prev => prev.map(msg => msg.id === botMsgId ? { ...msg, text: fullResponse } : msg));
-              }
-          }
-      } catch (e) {
-          console.error("Chat Error", e);
-          setMessages(prev => [...prev, { id: Date.now().toString(), role: 'model', text: "I'm having trouble connecting right now. Please try again.", timestamp: Date.now() }]);
-      } finally {
-          setIsChatLoading(false);
-      }
+  const handleGenerateFlashcards = async () => {
+      setIsStudyToolsLoading(true);
+      const { text, base64, mimeType } = await prepareAIContent();
+      const result = await generateStudySet(text, 'flashcards', base64, mimeType);
+      setFlashcards(result);
+      setIsStudyToolsLoading(false);
   };
 
-  const handleSuggestionClick = (suggestion: string) => {
-      handleSendMessage(suggestion);
+  const handleGenerateQuiz = async () => {
+      setIsStudyToolsLoading(true);
+      const { text, base64, mimeType } = await prepareAIContent();
+      const result = await generateStudySet(text, 'quiz', base64, mimeType);
+      setQuiz(result);
+      setIsStudyToolsLoading(false);
   };
 
-  // === End Chat Logic ===
+  // === End AI Logic ===
 
   const commentsByParentId = useMemo(() => {
     const group: Record<string, Comment[]> = {};
@@ -478,22 +427,6 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     }
     return group;
   }, [resource.comments]);
-
-  const relatedResources = useMemo(() => {
-    const candidates = resources.filter(r => r.id !== resource.id);
-    let matches = candidates.filter(r => r.courseCode === resource.courseCode);
-    if (matches.length < 8) {
-        const subjectMatch = resource.courseCode.match(/^[A-Za-z]+/);
-        if (subjectMatch) {
-            const subject = subjectMatch[0];
-            const subjectMatches = candidates.filter(r => 
-                r.courseCode.startsWith(subject) && !matches.includes(r)
-            );
-            matches = [...matches, ...subjectMatches];
-        }
-    }
-    return matches.slice(0, 8);
-  }, [resources, resource]);
 
   const handleAuthorClick = (authorId: string) => {
     if (authorId === user?.id) setView('profile');
@@ -541,9 +474,6 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
         </CommentComponent>
     ));
   };
-
-  const fileType = resource.fileName.split('.').pop()?.toUpperCase();
-  const formattedUploadDate = new Date(resource.uploadDate).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
   const getBadgeStyle = (type: ResourceType) => {
     switch (type) {
@@ -599,95 +529,104 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
             </div>
           </div>
 
-          {/* Gemini Chat Assistant */}
-          <div className="bg-white dark:bg-dark-surface rounded-xl shadow-md mt-8 overflow-hidden border border-transparent dark:border-zinc-700 flex flex-col h-[600px]">
-            <div className="p-4 border-b border-slate-100 dark:border-zinc-700 flex items-center gap-3 bg-gradient-to-r from-blue-50 to-white dark:from-blue-900/10 dark:to-dark-surface">
+          {/* AI Smart Summary Section */}
+          <div className="bg-white dark:bg-dark-surface rounded-xl shadow-md mt-8 overflow-hidden border border-transparent dark:border-zinc-700">
+            <div className="p-4 border-b border-slate-100 dark:border-zinc-700 flex items-center gap-3 bg-gradient-to-r from-purple-50 to-white dark:from-purple-900/10 dark:to-dark-surface">
                 <div className="bg-white dark:bg-zinc-800 p-2 rounded-lg shadow-sm">
-                    <Sparkles className="text-blue-500" size={20} />
+                    <BrainCircuit className="text-purple-500" size={24} />
                 </div>
                 <div>
-                    <h3 className="font-bold text-slate-800 dark:text-white">Gemini Document Assistant</h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Ask questions, get summaries, or create quizzes.</p>
+                    <h3 className="font-bold text-slate-800 dark:text-white">AI Smart Summary & Tools</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Instantly summarize documents and generate study aids.</p>
                 </div>
             </div>
             
-            <div className="flex-grow overflow-y-auto p-4 space-y-4 bg-slate-50 dark:bg-zinc-900/30">
-                {isInitializingChat ? (
-                    <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                        <Loader2 size={32} className="animate-spin text-blue-500 mb-3" />
-                        <p>Analyzing document...</p>
+            <div className="p-6">
+                {!summary ? (
+                    <div className="text-center py-8">
+                        <p className="text-slate-600 dark:text-slate-300 mb-6 max-w-md mx-auto">
+                            Click below to analyze the document. The AI will read the content (PDF, DOCX, PPT, or Images) and provide a concise summary.
+                        </p>
+                        <button 
+                            onClick={handleGenerateSummary}
+                            disabled={isSummaryLoading}
+                            className="bg-purple-600 text-white font-bold py-3 px-8 rounded-full hover:bg-purple-700 transition shadow-md shadow-purple-500/20 disabled:opacity-70 flex items-center gap-2 mx-auto"
+                        >
+                            {isSummaryLoading ? (
+                                <><Loader2 size={20} className="animate-spin"/> Analyzing Document...</>
+                            ) : (
+                                <><Sparkles size={20} /> Generate Summary</>
+                            )}
+                        </button>
                     </div>
                 ) : (
-                    <>
-                        {messages.map((msg) => (
-                            <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`flex gap-3 max-w-[85%] ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-primary-100 dark:bg-primary-900/50' : 'bg-white dark:bg-zinc-700 shadow-sm'}`}>
-                                        {msg.role === 'user' ? <Avatar src={user?.avatarUrl} alt="User" className="w-8 h-8"/> : <Sparkles size={16} className="text-blue-500" />}
-                                    </div>
-                                    <div className={`p-3 rounded-2xl text-sm ${msg.role === 'user' ? 'bg-primary-600 text-white rounded-br-none' : 'bg-white dark:bg-zinc-800 text-slate-800 dark:text-slate-200 shadow-sm rounded-bl-none border border-slate-100 dark:border-zinc-700'}`}>
-                                        <MarkdownRenderer content={msg.text} />
-                                    </div>
-                                </div>
+                    <div className="space-y-6">
+                        <div className="bg-slate-50 dark:bg-zinc-800/50 p-6 rounded-xl border border-slate-100 dark:border-zinc-700">
+                            <h4 className="font-bold text-lg text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                                <FileText size={20} className="text-purple-500"/> Executive Summary
+                            </h4>
+                            <div className="prose-sm dark:prose-invert">
+                                <MarkdownRenderer content={summary} />
                             </div>
-                        ))}
-                        {isChatLoading && (
-                            <div className="flex justify-start">
-                                 <div className="flex gap-3 max-w-[85%]">
-                                    <div className="w-8 h-8 rounded-full bg-white dark:bg-zinc-700 shadow-sm flex items-center justify-center shrink-0">
-                                        <Loader2 size={16} className="animate-spin text-blue-500" />
+                        </div>
+
+                        {/* Study Tools Section */}
+                        <div className="border-t border-slate-200 dark:border-zinc-700 pt-6">
+                            <h4 className="font-bold text-lg text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                                <Notebook size={20} className="text-blue-500"/> Interactive Study Tools
+                            </h4>
+                            
+                            <div className="flex gap-4 mb-6">
+                                <button 
+                                    onClick={handleGenerateFlashcards}
+                                    disabled={isStudyToolsLoading}
+                                    className="flex-1 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 hover:border-blue-400 dark:hover:border-blue-500 p-4 rounded-xl shadow-sm transition group text-left"
+                                >
+                                    <div className="flex justify-between items-start mb-2">
+                                        <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400 group-hover:bg-blue-600 group-hover:text-white transition">
+                                            <Copy size={20} />
+                                        </div>
                                     </div>
-                                    <div className="p-3 rounded-2xl rounded-bl-none bg-white dark:bg-zinc-800 shadow-sm border border-slate-100 dark:border-zinc-700">
-                                        <span className="flex gap-1">
-                                            <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-                                            <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-                                            <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"></span>
-                                        </span>
+                                    <span className="font-bold text-slate-800 dark:text-white block">Generate Flashcards</span>
+                                    <span className="text-xs text-slate-500 dark:text-slate-400">Create key term definitions</span>
+                                </button>
+
+                                <button 
+                                    onClick={handleGenerateQuiz}
+                                    disabled={isStudyToolsLoading}
+                                    className="flex-1 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 hover:border-green-400 dark:hover:border-green-500 p-4 rounded-xl shadow-sm transition group text-left"
+                                >
+                                    <div className="flex justify-between items-start mb-2">
+                                        <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg text-green-600 dark:text-green-400 group-hover:bg-green-600 group-hover:text-white transition">
+                                            <CheckCircle size={20} />
+                                        </div>
                                     </div>
-                                </div>
+                                    <span className="font-bold text-slate-800 dark:text-white block">Generate Quiz</span>
+                                    <span className="text-xs text-slate-500 dark:text-slate-400">Practice multiple choice</span>
+                                </button>
                             </div>
-                        )}
-                        <div ref={chatEndRef} />
-                    </>
+
+                            {isStudyToolsLoading && (
+                                <div className="text-center py-4">
+                                    <Loader2 size={32} className="animate-spin text-blue-500 mx-auto mb-2" />
+                                    <p className="text-sm text-slate-500 dark:text-slate-400">Generating study materials...</p>
+                                </div>
+                            )}
+
+                            {flashcards.length > 0 && (
+                                <div className="mb-8 animate-fade-in">
+                                    <FlashcardViewer flashcards={flashcards} onReset={handleGenerateFlashcards} />
+                                </div>
+                            )}
+
+                            {quiz.length > 0 && (
+                                <div className="animate-fade-in">
+                                    <QuizComponent questions={quiz} onReset={handleGenerateQuiz} />
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 )}
-            </div>
-
-            {/* Suggestions */}
-            {!isChatLoading && messages.length < 3 && !isInitializingChat && (
-                <div className="px-4 py-2 bg-slate-50 dark:bg-zinc-900/30 flex gap-2 overflow-x-auto no-scrollbar">
-                    {['Summarize this', 'List key concepts', 'Create a 5-question quiz', 'Explain the main topic'].map((s) => (
-                        <button 
-                            key={s} 
-                            onClick={() => handleSuggestionClick(s)}
-                            className="whitespace-nowrap px-3 py-1.5 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-full text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:border-blue-200 dark:hover:border-blue-800 transition"
-                        >
-                            {s}
-                        </button>
-                    ))}
-                </div>
-            )}
-
-            <div className="p-4 bg-white dark:bg-dark-surface border-t border-slate-100 dark:border-zinc-700">
-                <form 
-                    onSubmit={(e) => { e.preventDefault(); handleSendMessage(chatInput); }}
-                    className="flex gap-2"
-                >
-                    <input 
-                        type="text" 
-                        value={chatInput}
-                        onChange={(e) => setChatInput(e.target.value)}
-                        placeholder={isInitializingChat ? "Initializing..." : "Ask a question about this document..."}
-                        disabled={isChatLoading || isInitializingChat}
-                        className="flex-grow bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-white px-4 py-2.5 rounded-xl border-none focus:ring-2 focus:ring-blue-500 transition placeholder:text-slate-400"
-                    />
-                    <button 
-                        type="submit" 
-                        disabled={!chatInput.trim() || isChatLoading || isInitializingChat}
-                        className="p-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-blue-500/20"
-                    >
-                        <Send size={20} />
-                    </button>
-                </form>
             </div>
           </div>
 
@@ -796,10 +735,6 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
             </div>
         </div>
       </div>
-      
-      {/* Related Resources ... (kept same) */}
-      
-      {/* Modals ... (kept same) */}
       
       <ShareModal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} resource={resource} />
     </div>

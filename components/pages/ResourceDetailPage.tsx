@@ -15,6 +15,29 @@ import QuizComponent from '../QuizComponent';
 import { db } from '../../services/firebase';
 import { collection, addDoc } from 'firebase/firestore';
 
+const renderPreviewContent = (item: Resource | Attachment, isDarkBg: boolean = false) => {
+    const name = 'fileName' in item ? item.fileName : item.name;
+    const url = 'fileUrl' in item ? item.fileUrl : item.url;
+    
+    const ext = name.split('.').pop()?.toLowerCase();
+    const isPdf = ext === 'pdf';
+    const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext || '');
+    const isOfficeDoc = ['ppt', 'pptx', 'doc', 'docx', 'xls', 'xlsx'].includes(ext || '');
+
+    if (isImage) return <img src={url} alt="Preview" className="max-w-full max-h-full object-contain" />;
+    if (isPdf) return <iframe src={url} className="w-full h-full border-none" title="PDF Preview"></iframe>;
+    if (isOfficeDoc) return (<iframe src={`https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`} className="w-full h-full border-none" title="Office Document Preview" />);
+    return (
+        <div className="flex flex-col items-center justify-center h-full text-slate-500 dark:text-slate-400">
+            <FileText size={48} className="mb-4 text-slate-400" />
+            <p>Preview not available for this file type.</p>
+            <a href={url} download={name} className="mt-4 text-primary-600 dark:text-primary-400 hover:underline flex items-center gap-2">
+                <Download size={16} /> Download File
+            </a>
+        </div>
+    );
+};
+
 const CommentComponent: React.FC<{
   comment: Comment;
   resourceId: string;
@@ -242,28 +265,6 @@ const CommentComponent: React.FC<{
   );
 };
 
-const renderPreviewContent = (item: Resource | Attachment, isDarkBg: boolean = false) => {
-    const name = 'fileName' in item ? item.fileName : item.name;
-    const url = 'fileUrl' in item ? item.fileUrl : item.url;
-    
-    const ext = name.split('.').pop()?.toLowerCase();
-    const isPdf = ext === 'pdf';
-    const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext || '');
-    const isOfficeDoc = ['ppt', 'pptx', 'doc', 'docx', 'xls', 'xlsx'].includes(ext || '');
-
-    if (isImage) return <img src={url} alt="Preview" className="max-w-full max-h-full object-contain" />;
-    if (isPdf) return <iframe src={url} className="w-full h-full border-none" title="PDF Preview"></iframe>;
-    if (isOfficeDoc) return (<iframe src={`https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`} className="w-full h-full border-none" title="Office Document Preview" />);
-    return (
-        <div className="flex flex-col items-center justify-center h-full text-slate-500 dark:text-slate-400">
-            <FileText size={48} className="mb-4 text-slate-400" />
-            <p>Preview not available for this file type.</p>
-            <a href={url} download={name} className="mt-4 text-primary-600 dark:text-primary-400 hover:underline flex items-center gap-2">
-                <Download size={16} /> Download File
-            </a>
-        </div>
-    );
-};
 
 const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   const { user, userRanks, setView, handleVote, addCommentToResource, toggleLecturerSubscription, toggleCourseCodeSubscription, savedResourceIds, toggleSaveResource, resources, deleteResource, scrollTargetId, setScrollTargetId } = useContext(AppContext);
@@ -385,40 +386,49 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   };
 
   const resolveFileBase64 = async (): Promise<{ base64: string, mimeType: string } | undefined> => {
-    if (resource.fileBase64 && resource.mimeType) return { base64: resource.fileBase64, mimeType: resource.mimeType };
-    if (resource.fileUrl === '#' || !resource.fileUrl) return undefined; 
-
-    try {
-        // Use a simple fetch without custom headers to avoid strict CORS preflight issues on some buckets
-        const response = await fetch(resource.fileUrl);
-        
-        if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
-        
-        const blob = await response.blob();
-        
-        // Robust MIME type detection
-        let mimeType = blob.type;
-        if (!mimeType || mimeType === 'application/octet-stream') {
-             const ext = resource.fileName.split('.').pop()?.toLowerCase();
-             if (ext === 'pdf') mimeType = 'application/pdf';
-             else if (ext === 'docx') mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-             else if (ext === 'pptx') mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
-             else if (['jpg', 'jpeg'].includes(ext || '')) mimeType = 'image/jpeg';
-             else if (ext === 'png') mimeType = 'image/png';
-        }
-
-        const base64 = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-        });
-        
-        return { base64, mimeType };
-    } catch (error) {
-        console.warn("AI File Access Warning:", error);
-        return undefined;
+    // If the resource object already has base64 data, use it
+    if (resource.fileBase64 && resource.fileBase64.length > 0 && resource.mimeType) {
+        return { base64: resource.fileBase64, mimeType: resource.mimeType };
     }
+    
+    // If we have a URL, try to fetch it
+    if (resource.fileUrl && resource.fileUrl !== '#') { 
+        try {
+            // Use fetch to get the file content as a blob
+            const response = await fetch(resource.fileUrl);
+            
+            if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
+            
+            const blob = await response.blob();
+            
+            // Robust MIME type detection
+            let mimeType = blob.type;
+            // Fallback for generic types based on extension
+            if (!mimeType || mimeType === 'application/octet-stream') {
+                 const ext = resource.fileName.split('.').pop()?.toLowerCase();
+                 if (ext === 'pdf') mimeType = 'application/pdf';
+                 else if (ext === 'docx') mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+                 else if (ext === 'pptx') mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+                 else if (['jpg', 'jpeg'].includes(ext || '')) mimeType = 'image/jpeg';
+                 else if (ext === 'png') mimeType = 'image/png';
+            }
+
+            const base64 = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+            
+            return { base64, mimeType };
+        } catch (error) {
+            console.warn("AI File Access Warning:", error);
+            // Fallback to undefined so we use metadata
+            return undefined;
+        }
+    }
+    
+    return undefined;
   };
 
   const prepareAIContent = async () => {
@@ -434,20 +444,19 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
       let additionalText = "";
       let source: 'file' | 'metadata' = 'metadata';
 
-      if (resource.fileUrl && resource.fileUrl !== '#') {
-          const fileData = await resolveFileBase64();
-          if (fileData) {
-              base64 = fileData.base64;
-              mimeType = fileData.mimeType;
-              source = 'file';
+      const fileData = await resolveFileBase64();
+      
+      if (fileData) {
+          base64 = fileData.base64;
+          mimeType = fileData.mimeType;
+          source = 'file';
+      } else {
+          // If no file data, check for pre-extracted content or mock content
+          if (resource.contentForAI) {
+              additionalText += "\n\n" + resource.contentForAI;
           } else {
               additionalText += "\n[System Note: File content unavailable. Using metadata summary.]";
           }
-      }
-
-      if (!base64 && resource.contentForAI) {
-          additionalText += "\n\n" + resource.contentForAI;
-          mimeType = undefined;
       }
 
       const fullText = additionalText ? `${textContext}\n\n${additionalText}` : textContext;

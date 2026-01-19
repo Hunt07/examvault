@@ -760,19 +760,19 @@ const App: React.FC = () => {
       return r;
   }, [users]);
 
-  const toggleUserRole = async (uid: string, role: any) => { 
+  const toggleUserRole = async (uid: string, role: 'student' | 'admin') => { 
       if (user?.role === 'admin') {
           await updateDoc(doc(db!, "users", uid), { role }); 
           await logAction('admin', `Changed user role to ${role}`, uid);
       }
   };
-  const toggleUserStatus = async (uid: string, status: any) => { 
+  const toggleUserStatus = async (uid: string, status: 'active' | 'banned') => { 
       if (user?.role === 'admin') {
           await updateDoc(doc(db!, "users", uid), { status });
           await logAction('admin', `Changed user status to ${status}`, uid);
       }
   };
-  const resolveReport = async (rid: string, status: any) => { 
+  const resolveReport = async (rid: string, status: 'resolved' | 'dismissed') => { 
       if (user?.role === 'admin') {
           await updateDoc(doc(db!, "reports", rid), { status });
           await logAction('admin', `Resolved report as ${status}`, rid);
@@ -1416,7 +1416,7 @@ const App: React.FC = () => {
           {view === 'admin' && user.role === 'admin' && <AdminPage />} 
         </main>
         {isUploadModalOpen && <UploadModal onClose={() => { if(!isUploading) { setIsUploadModalOpen(false); setFulfillingRequest(undefined); } }} onUpload={handleUpload} fulfillingRequest={fulfillingRequest} isLoading={isUploading} />}
-        {runTour && <TooltipGuide targetSelector={tourSteps[tourStep - 1]?.selector || 'body'} content={tourSteps[tourStep - 1]?.content || ''} currentStep={tourStep} totalSteps={tourSteps.length} onNext={() => { if (tourStep < tourSteps.length) setTourStep(tourStep + 1); else { setRunTour(false); localStorage.setItem(`examvault_tour_${user.id}`, 'true'); } }} onPrev={() => setTourStep(Math.max(1, tourStep - 1))} onSkip={() => { setRunTour(false); localStorage.setItem(`examvault_tour_${user.id}`, 'true'); }} />}
+        {runTour && <TooltipGuide targetSelector={tourSteps[tourStep - 1]?.selector || 'body'} content={tourSteps[tourStep - 1]?.content || ''} currentStep={tourStep} totalSteps={tourSteps.length} onNext={() => { if (tourStep < tourSteps.length) setTourStep(tourStep + 1); else { setRunTour(false); if(user) localStorage.setItem(`examvault_tour_${user.id}`, 'true'); } }} onPrev={() => setTourStep(Math.max(1, tourStep - 1))} onSkip={() => { setRunTour(false); if(user) localStorage.setItem(`examvault_tour_${user.id}`, 'true'); }} />}
         {toast && <ToastNotification message={toast.message} points={toast.points} type={toast.type} onClose={() => setToast(null)} />}
       </div>
     </AppContext.Provider>

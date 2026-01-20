@@ -461,7 +461,8 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
       }
 
       const fullText = additionalText ? `${textContext}\n\n${additionalText}` : textContext;
-      return { text: fullText, base64, mimeType, source };
+      const aiText = source === 'file' ? '' : fullText;
+      return { text: aiText, base64, mimeType, source };
   };
 
   const handleGenerateSummary = async () => {

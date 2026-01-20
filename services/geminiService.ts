@@ -7,9 +7,8 @@ import JSZip from "jszip";
 import * as pdfjsLib from "pdfjs-dist";
 
 /* ============================
-   PDF.JS INIT
+   PDF.js SETUP
 ============================ */
-
 const pdfjs: any = (pdfjsLib as any).default || pdfjsLib;
 
 if (pdfjs?.GlobalWorkerOptions) {
@@ -18,46 +17,33 @@ if (pdfjs?.GlobalWorkerOptions) {
 }
 
 /* ============================
-   API KEY (VITE SAFE)
+   GEMINI INIT (VITE SAFE)
 ============================ */
-
 const apiKey: string =
   ((import.meta as any).env?.VITE_API_KEY as string) || "";
 
-if (!apiKey) {
-  console.warn("Gemini API key missing");
-}
+if (!apiKey) console.warn("❌ VITE_API_KEY missing");
 
 const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
 /* ============================
-   MIME HELPERS (STRICT)
+   MIME HELPERS
 ============================ */
-
-const isImage = (mimeType: string): boolean =>
-  mimeType.startsWith("image/");
-
-const isPdf = (mimeType: string): boolean =>
-  mimeType === "application/pdf";
-
-const isDocx = (mimeType: string): boolean =>
-  mimeType ===
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-
-const isPptx = (mimeType: string): boolean =>
-  mimeType ===
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+const isImage = (m: string) => m.startsWith("image/");
+const isPdf = (m: string) => m === "application/pdf";
+const isDocx = (m: string) =>
+  m === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const isPptx = (m: string) =>
+  m === "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 
 /* ============================
    BASE64 → BUFFER
 ============================ */
-
 const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
   const clean = base64.replace(/^data:.+;base64,/, "");
   const binary = atob(clean);
-  const len = binary.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
     bytes[i] = binary.charCodeAt(i);
   }
   return bytes.buffer;
@@ -66,24 +52,22 @@ const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
 /* ============================
    PDF EXTRACTION
 ============================ */
-
-const extractTextFromPdf = async (base64: string): Promise<string> => {
+const extractPdf = async (b64: string): Promise<string> => {
   try {
-    const buffer = base64ToArrayBuffer(base64);
-    const pdf = await pdfjs.getDocument({ data: buffer }).promise;
+    const pdf = await pdfjs
+      .getDocument({ data: base64ToArrayBuffer(b64) })
+      .promise;
 
     let text = "";
-    const maxPages = Math.min(pdf.numPages, 20);
+    const pages = Math.min(pdf.numPages, 20);
 
-    for (let i = 1; i <= maxPages; i++) {
+    for (let i = 1; i <= pages; i++) {
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
-      text += content.items.map((it: any) => it.str).join(" ") + "\n";
+      text += content.items.map((x: any) => x.str).join(" ") + "\n";
     }
-
     return text.trim();
-  } catch (err) {
-    console.error("PDF extraction failed", err);
+  } catch {
     return "";
   }
 };
@@ -91,14 +75,13 @@ const extractTextFromPdf = async (base64: string): Promise<string> => {
 /* ============================
    DOCX EXTRACTION
 ============================ */
-
-const extractTextFromDocx = async (base64: string): Promise<string> => {
+const extractDocx = async (b64: string): Promise<string> => {
   try {
-    const buffer = base64ToArrayBuffer(base64);
-    const result = await mammoth.extractRawText({ arrayBuffer: buffer });
+    const result = await mammoth.extractRawText({
+      arrayBuffer: base64ToArrayBuffer(b64),
+    });
     return result.value?.trim() || "";
-  } catch (err) {
-    console.error("DOCX extraction failed", err);
+  } catch {
     return "";
   }
 };
@@ -106,17 +89,14 @@ const extractTextFromDocx = async (base64: string): Promise<string> => {
 /* ============================
    PPTX EXTRACTION
 ============================ */
-
-const extractTextFromPptx = async (base64: string): Promise<string> => {
+const extractPptx = async (b64: string): Promise<string> => {
   try {
-    const buffer = base64ToArrayBuffer(base64);
-    const zip = await JSZip.loadAsync(buffer);
+    const zip = await JSZip.loadAsync(base64ToArrayBuffer(b64));
     const slides = zip.folder("ppt/slides");
-
     if (!slides) return "";
 
-    const texts: string[] = [];
     const parser = new DOMParser();
+    const texts: string[] = [];
 
     for (const name of Object.keys(slides.files)) {
       if (!name.endsWith(".xml")) continue;
@@ -128,110 +108,133 @@ const extractTextFromPptx = async (base64: string): Promise<string> => {
     }
 
     return texts.join(" ").trim();
-  } catch (err) {
-    console.error("PPTX extraction failed", err);
+  } catch {
     return "";
   }
 };
 
 /* ============================
-   BUILD GEMINI PARTS
+   BUILD PARTS (CRITICAL)
 ============================ */
-
 const buildParts = async (
-  fileBase64?: string,
+  base64?: string,
   mimeType?: string,
-  fallbackText?: string
+  fallback?: string
 ): Promise<any[]> => {
   const parts: any[] = [];
 
-  if (fileBase64 && mimeType) {
-    // 🖼️ IMAGE
+  if (base64 && mimeType) {
+    // 🖼 IMAGE
     if (isImage(mimeType)) {
       parts.push({
         inlineData: {
-          data: fileBase64.replace(/^data:.+;base64,/, ""),
           mimeType,
+          data: base64.replace(/^data:.+;base64,/, ""),
         },
       });
-      parts.push({
-        text: "Analyze this image and extract all relevant study information.",
-      });
+      parts.push({ text: "Describe and extract study-relevant information." });
       return parts;
     }
 
     // 📄 DOCUMENTS (TEXT ONLY)
     let text = "";
 
-    if (isPdf(mimeType)) text = await extractTextFromPdf(fileBase64);
-    if (isDocx(mimeType)) text = await extractTextFromDocx(fileBase64);
-    if (isPptx(mimeType)) text = await extractTextFromPptx(fileBase64);
+    if (isPdf(mimeType)) text = await extractPdf(base64);
+    if (isDocx(mimeType)) text = await extractDocx(base64);
+    if (isPptx(mimeType)) text = await extractPptx(base64);
 
-    if (!text || text.length < 50) {
-      throw new Error("Document text extraction failed");
+    if (!text || text.length < 30) {
+      throw new Error("❌ File text extraction failed");
     }
 
-    parts.push({
-      text: `Analyze the following document:\n\n${text}`,
-    });
-
+    parts.push({ text });
     return parts;
   }
 
-  parts.push({ text: fallbackText || "" });
+  parts.push({ text: fallback || "" });
   return parts;
 };
 
 /* ============================
-   SUMMARY
+   SUMMARY API
 ============================ */
-
 export const summarizeContent = async (
   content: string,
-  fileBase64?: string,
+  base64?: string,
   mimeType?: string
 ): Promise<string> => {
   if (!ai) return "Gemini not configured";
 
   try {
-    const parts = await buildParts(fileBase64, mimeType, content);
+    const parts = await buildParts(base64, mimeType, content);
 
-    const response = await ai.models.generateContent({
+    const res = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: [{ role: "user", parts }],
       config: {
-        systemInstruction: `
-You are an expert academic assistant.
-Return markdown with:
-- **Key Concepts**
-- **Main Takeaways**
-- **Potential Exam Questions**
-`,
         temperature: 0.3,
+        systemInstruction: `
+You are an academic assistant.
+Return markdown with:
+- Key Concepts
+- Main Takeaways
+- Potential Exam Questions
+`,
       },
     });
 
-    return response.text || "No summary generated.";
-  } catch (err: any) {
-    console.error("Summary error", err);
-    return err.message || "Failed to generate summary.";
+    return res.text || "No output";
+  } catch (e: any) {
+    console.error(e);
+    return e.message;
   }
 };
-
-/* ============================
-   FLASHCARDS / QUIZ
-============================ */
-
 export const generateStudySet = async (
   content: string,
   setType: "flashcards" | "quiz",
-  fileBase64?: string,
+  base64?: string,
   mimeType?: string
 ): Promise<any[]> => {
   if (!ai) return [];
 
   try {
-    const parts = await buildParts(fileBase64, mimeType, content);
+    const parts = await (async () => {
+      // reuse internal logic without duplication
+      const fallback = content || "";
+
+      if (base64 && mimeType) {
+        // image
+        if (mimeType.startsWith("image/")) {
+          return [
+            {
+              inlineData: {
+                mimeType,
+                data: base64.replace(/^data:.+;base64,/, ""),
+              },
+            },
+            { text: `Generate ${setType} from this image.` },
+          ];
+        }
+
+        // document
+        let text = "";
+        if (mimeType === "application/pdf") text = await extractPdf(base64);
+        if (
+          mimeType ===
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+          text = await extractDocx(base64);
+        if (
+          mimeType ===
+          "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        )
+          text = await extractPptx(base64);
+
+        if (text) return [{ text }];
+      }
+
+      return [{ text: fallback }];
+    })();
 
     const schema =
       setType === "flashcards"
@@ -273,7 +276,7 @@ export const generateStudySet = async (
 
     return response.text ? JSON.parse(response.text) : [];
   } catch (err) {
-    console.error("Study set error", err);
+    console.error("generateStudySet error", err);
     return [];
   }
 };

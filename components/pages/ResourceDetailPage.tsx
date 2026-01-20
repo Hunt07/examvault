@@ -419,8 +419,8 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
             
             return { base64, mimeType };
         } catch (error) {
-            console.warn("AI File Access Warning (likely CORS or Network):", error);
-            // Return undefined to trigger fallback
+            console.warn("AI File Access Warning (Likely CORS):", error);
+            // Don't return undefined yet, let the caller handle missing fileData to show specific error
             return undefined;
         }
     }
@@ -449,7 +449,10 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
           source = 'file';
       } else {
           // If no file data (e.g. mock data or fetch failed), check for pre-extracted content
-          if (resource.contentForAI) {
+          // If resource.fileUrl is valid but fetch failed (CORS), we should let user know
+          if (resource.fileUrl && resource.fileUrl !== '#' && !fileData) {
+              additionalText += "\n[System Note: File content could not be downloaded. This is often due to CORS restrictions on the storage bucket. Metadata analysis only.]";
+          } else if (resource.contentForAI) {
               additionalText += "\n\n" + resource.contentForAI;
           } else {
               additionalText += "\n[System Note: File content unavailable. Using metadata summary.]";
@@ -678,7 +681,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
                     {summarySource && (
                         <div className={`mb-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold border ${summarySource === 'file' ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800' : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800'}`}>
                             {summarySource === 'file' ? <FileCheck size={14}/> : <AlertCircle size={14}/>}
-                            {summarySource === 'file' ? 'Based on File Content' : 'Based on Metadata (File Unreadable)'}
+                            {summarySource === 'file' ? 'Based on File Content' : 'Based on Metadata (File Unreadable/Blocked)'}
                         </div>
                     )}
                     <div className="bg-slate-50 dark:bg-zinc-800/50 border border-slate-200 dark:border-zinc-700 rounded-xl p-6 dark:text-slate-200">

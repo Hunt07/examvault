@@ -4,6 +4,11 @@ import { GoogleGenAI, Type } from "@google/genai";
 import mammoth from "mammoth";
 // @ts-ignore
 import JSZip from "jszip";
+// @ts-ignore
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Initialize PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@3.11.174/build/pdf.worker.min.js`;
 
 // Robustly retrieve API Key
 const getApiKey = (): string => {
@@ -41,9 +46,6 @@ const isMimeTypeSupported = (mimeType: string): boolean => {
     ];
     if (supportedExact.includes(mimeType)) return true;
     if (mimeType.startsWith('image/')) return true;
-    // Gemini 1.5/2.5 supports audio/video natively too
-    if (mimeType.startsWith('audio/')) return true;
-    if (mimeType.startsWith('video/')) return true;
     return false;
 };
 
@@ -56,6 +58,37 @@ const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
         bytes[i] = binaryString.charCodeAt(i);
     }
     return bytes.buffer;
+};
+
+// Helper: Extract text from PDF using pdfjs-dist
+const extractTextFromPdf = async (fileBase64: string): Promise<string> => {
+    try {
+        const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
+        const arrayBuffer = base64ToArrayBuffer(cleanBase64);
+        
+        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+        const pdf = await loadingTask.promise;
+        let fullText = "";
+
+        // Limit to first 20 pages to prevent memory issues on client
+        const maxPages = Math.min(pdf.numPages, 20);
+
+        for (let i = 1; i <= maxPages; i++) {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            const pageText = textContent.items
+                // @ts-ignore
+                .map((item) => item.str)
+                .join(' ');
+            
+            fullText += `--- Page ${i} ---\n${pageText}\n\n`;
+        }
+        
+        return fullText;
+    } catch (e) {
+        console.error("PDF Extraction failed", e);
+        return "";
+    }
 };
 
 // Helper: Extract text from DOCX
@@ -127,6 +160,39 @@ const extractTextFromPptx = async (fileBase64: string): Promise<string> => {
     }
 };
 
+const processFileContent = async (fileBase64: string, mimeType: string): Promise<{ text?: string, parts: any[] }> => {
+    const parts: any[] = [];
+    
+    // Attempt Text Extraction First
+    let extractedText = "";
+    
+    if (mimeType === 'application/pdf') {
+        extractedText = await extractTextFromPdf(fileBase64);
+    } else if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+        extractedText = await extractTextFromDocx(fileBase64);
+    } else if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
+        extractedText = await extractTextFromPptx(fileBase64);
+    }
+
+    if (extractedText && extractedText.length > 100) {
+        // Successful text extraction
+        parts.push({ text: `Analyze the following extracted document content:\n\n${extractedText}` });
+        return { text: extractedText, parts };
+    }
+
+    // Fallback to Binary (Multimodal) if extraction failed or empty (e.g., scanned PDF)
+    const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
+    parts.push({
+        inlineData: {
+            data: cleanBase64,
+            mimeType: mimeType
+        }
+    });
+    parts.push({ text: "Analyze the above document." });
+    
+    return { parts };
+};
+
 export const summarizeContent = async (
   content: string, 
   fileBase64?: string, 
@@ -139,49 +205,16 @@ export const summarizeContent = async (
   try {
     const systemInstruction = `You are an expert academic assistant. Your task is to analyze the provided study material and create a highly informative, concise summary for a university student, formatted in markdown.
     
-    If the content is a document (PDF, Word, PPT), analyze the visible text and structure.
-    If the file content appears empty or unreadable, explicitly state that.
-
     The summary MUST include these exact sections:
     - **Key Concepts:** A bulleted list of the most important terms, definitions, and concepts.
     - **Main Takeaways:** 2-3 sentences summarizing the core message.
-    - **Potential Exam Questions:** A numbered list of 3 sample questions.`;
+    - **Potential Exam Questions:** A numbered list of 3 sample questions based on the content.`;
 
-    const parts: any[] = [];
+    let parts: any[] = [];
     
-    if (fileBase64 && mimeType) {
-        if (!isMimeTypeSupported(mimeType)) {
-            return "⚠️ **Format Not Supported**\n\nAI Summarization is available for PDFs, Images, Word (.docx), and PowerPoint (.pptx).";
-        }
-
-        // For Office documents, try local extraction first as it can be more reliable for text-heavy content
-        if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-            const extractedText = await extractTextFromDocx(fileBase64);
-            if (extractedText && extractedText.length > 50) {
-                parts.push({ text: `Analyze the following document content:\n\n${extractedText}` });
-            } else {
-                // Fallback to sending binary if extraction fails (though Gemini might not support docx binary directly, text is safer)
-                 return "⚠️ **Insufficient Content**\n\nCould not extract text from this Word document.";
-            }
-        } else if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
-            const extractedText = await extractTextFromPptx(fileBase64);
-            if (extractedText && extractedText.length > 50) {
-                parts.push({ text: `Analyze the following presentation slides:\n\n${extractedText}` });
-            } else {
-                 return "⚠️ **Insufficient Content**\n\nCould not extract text from this PowerPoint.";
-            }
-        } else {
-            // PDF, Image, etc. - Send as Inline Data
-            // Strip the Data URI prefix if present to get raw base64
-            const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
-            parts.push({
-                inlineData: {
-                    data: cleanBase64,
-                    mimeType: mimeType
-                }
-            });
-            parts.push({ text: "Analyze the above document." });
-        }
+    if (fileBase64 && mimeType && isMimeTypeSupported(mimeType)) {
+        const result = await processFileContent(fileBase64, mimeType);
+        parts = result.parts;
     } else {
         parts.push({ text: `\n\nMaterial to analyze:\n---\n${content}\n---` });
     }
@@ -190,9 +223,9 @@ export const summarizeContent = async (
         model: 'gemini-2.5-flash',
         config: {
             systemInstruction: systemInstruction,
-            temperature: 0.3, // Lower temperature for more factual summaries
+            temperature: 0.3,
         },
-        contents: { parts } // Wrap in parts object
+        contents: { parts }
     });
 
     return response.text || "No summary generated.";
@@ -200,7 +233,7 @@ export const summarizeContent = async (
     console.error("Gemini API Error:", error);
     if (error.message?.includes('403') || error.message?.includes('API key')) return "Error: Invalid or revoked API Key.";
     if (error.message?.includes('429')) return "Error: Quota exceeded. Please try again later.";
-    return "Could not generate summary. Please check your Internet connection.";
+    return "Could not generate summary. If this is a PDF, please ensuring it is not password protected.";
   }
 };
 
@@ -217,7 +250,7 @@ export const generateStudySet = async (
     let schema;
 
     if (setType === 'flashcards') {
-      promptText = `Analyze the provided study material and generate 5-10 flashcards.`;
+      promptText = `Analyze the study material and generate 5-10 flashcards.`;
       schema = {
         type: Type.ARRAY,
         items: {
@@ -230,7 +263,7 @@ export const generateStudySet = async (
         },
       };
     } else {
-      promptText = `Analyze the provided study material and generate a 5-question multiple-choice quiz.`;
+      promptText = `Analyze the study material and generate a 5-question multiple-choice quiz.`;
       schema = {
         type: Type.ARRAY,
         items: {
@@ -245,24 +278,17 @@ export const generateStudySet = async (
       };
     }
 
-    const parts: any[] = [];
+    let parts: any[] = [];
     
-    if (fileBase64 && mimeType) {
-        if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-            const extractedText = await extractTextFromDocx(fileBase64);
-            parts.push({ text: `${promptText}\n\nMaterial:\n${extractedText}` });
-        } else if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
-            const extractedText = await extractTextFromPptx(fileBase64);
-            parts.push({ text: `${promptText}\n\nMaterial:\n${extractedText}` });
+    if (fileBase64 && mimeType && isMimeTypeSupported(mimeType)) {
+        const result = await processFileContent(fileBase64, mimeType);
+        // If text was extracted, append prompt to it
+        if (result.text) {
+             parts.push({ text: `${promptText}\n\nMaterial:\n${result.text}` });
         } else {
-            const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
-            parts.push({
-                inlineData: {
-                    data: cleanBase64,
-                    mimeType: mimeType
-                }
-            });
-            parts.push({ text: promptText });
+             // If binary
+             parts = result.parts;
+             parts.push({ text: promptText });
         }
     } else {
         parts.push({ text: `${promptText}\n\nMaterial:\n---\n${content}\n---` });

@@ -388,7 +388,8 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     }
     
     // 2. Fetch from URL
-    if (resource.fileUrl && resource.fileUrl !== '#') { 
+    // GUARD: Do not attempt to fetch from mock URL '#', javascript schemes, or empty strings.
+    if (resource.fileUrl && resource.fileUrl !== '#' && !resource.fileUrl.startsWith('javascript:')) { 
         try {
             const response = await fetch(resource.fileUrl);
             

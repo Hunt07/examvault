@@ -8,14 +8,24 @@ import JSZip from "jszip";
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Robustly resolve PDF.js exports
-// @ts-ignore
-const pdfjs = pdfjsLib.default || pdfjsLib;
-const getDocument = pdfjs.getDocument;
-const GlobalWorkerOptions = pdfjs.GlobalWorkerOptions;
+let pdfjs: any = {};
+try {
+    // @ts-ignore
+    pdfjs = pdfjsLib.default || pdfjsLib;
+} catch (e) {
+    console.error("PDF.js import failed", e);
+}
 
-// Initialize PDF.js worker
+const getDocument = pdfjs?.getDocument;
+const GlobalWorkerOptions = pdfjs?.GlobalWorkerOptions;
+
+// Initialize PDF.js worker safely
 if (GlobalWorkerOptions) {
-    GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@3.11.174/build/pdf.worker.min.js`;
+    try {
+        GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@3.11.174/build/pdf.worker.min.js`;
+    } catch (e) {
+        console.warn("Could not set PDF worker source", e);
+    }
 }
 
 // Robustly retrieve API Key
@@ -71,6 +81,8 @@ const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
 // Helper: Extract text from PDF using pdfjs-dist
 const extractTextFromPdf = async (fileBase64: string): Promise<string> => {
     try {
+        if (!getDocument) throw new Error("PDF.js not initialized");
+
         const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
         const arrayBuffer = base64ToArrayBuffer(cleanBase64);
         

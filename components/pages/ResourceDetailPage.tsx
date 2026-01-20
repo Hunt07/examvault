@@ -470,12 +470,18 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     setSummary('');
     setSummarySource(null);
     
-    const { text, base64, mimeType, source } = await prepareAIContent();
-    
-    const result = await summarizeContent(text!, base64, mimeType);
-    setSummary(result);
-    setSummarySource(source);
-    setIsSummarizing(false);
+    try {
+      const { text, base64, mimeType, source } = await prepareAIContent();
+      const result = await summarizeContent(text!, base64, mimeType);
+      setSummary(result);
+      setSummarySource(source);
+    } catch (error) {
+      console.error('Failed to generate summary:', error);
+      setSummary('Unable to generate a summary. Please try again.');
+      setSummarySource(null);
+    } finally {
+      setIsSummarizing(false);
+    }
   };
   
   const handleGenerateStudySet = async (type: 'flashcards' | 'quiz') => {
@@ -483,10 +489,16 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     setStudySet(null);
     setStudySetType(type);
     
-    const { text, base64, mimeType } = await prepareAIContent();
-    const result = await generateStudySet(text!, type, base64, mimeType);
-    setStudySet(result);
-    setIsGeneratingStudySet(false);
+    try {
+      const { text, base64, mimeType } = await prepareAIContent();
+      const result = await generateStudySet(text!, type, base64, mimeType);
+      setStudySet(result);
+    } catch (error) {
+      console.error('Failed to generate study set:', error);
+      setStudySet([]);
+    } finally {
+      setIsGeneratingStudySet(false);
+    }
   };
 
   const resetStudySet = () => {

@@ -5,10 +5,15 @@ import mammoth from "mammoth";
 // @ts-ignore
 import JSZip from "jszip";
 // @ts-ignore
-import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Robustly resolve PDF.js exports
+// @ts-ignore
+const pdfjs = pdfjsLib.default || pdfjsLib;
+const getDocument = pdfjs.getDocument;
+const GlobalWorkerOptions = pdfjs.GlobalWorkerOptions;
 
 // Initialize PDF.js worker
-// Ensure GlobalWorkerOptions exists before setting properties
 if (GlobalWorkerOptions) {
     GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@3.11.174/build/pdf.worker.min.js`;
 }
@@ -69,7 +74,6 @@ const extractTextFromPdf = async (fileBase64: string): Promise<string> => {
         const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
         const arrayBuffer = base64ToArrayBuffer(cleanBase64);
         
-        // Use named import getDocument
         const loadingTask = getDocument({ data: arrayBuffer });
         const pdf = await loadingTask.promise;
         let fullText = "";

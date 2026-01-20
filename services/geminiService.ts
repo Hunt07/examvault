@@ -5,10 +5,13 @@ import mammoth from "mammoth";
 // @ts-ignore
 import JSZip from "jszip";
 // @ts-ignore
-import * as pdfjsLib from 'pdfjs-dist';
+import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
 
 // Initialize PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@3.11.174/build/pdf.worker.min.js`;
+// Ensure GlobalWorkerOptions exists before setting properties
+if (GlobalWorkerOptions) {
+    GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@3.11.174/build/pdf.worker.min.js`;
+}
 
 // Robustly retrieve API Key
 const getApiKey = (): string => {
@@ -66,7 +69,8 @@ const extractTextFromPdf = async (fileBase64: string): Promise<string> => {
         const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
         const arrayBuffer = base64ToArrayBuffer(cleanBase64);
         
-        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+        // Use named import getDocument
+        const loadingTask = getDocument({ data: arrayBuffer });
         const pdf = await loadingTask.promise;
         let fullText = "";
 

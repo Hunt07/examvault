@@ -1,7 +1,7 @@
 
 import React, { useState, useContext, useRef, useMemo, useEffect } from 'react';
 import { ResourceType, type Resource, type Comment, type Flashcard, type QuizQuestion } from '../../types';
-import { AppContext } from '../AppContext';
+import { AppContext } from '../../components/AppContext';
 import { summarizeContent, generateStudySet } from '../../services/geminiService';
 import { ArrowLeft, ArrowRight, ThumbsUp, ThumbsDown, MessageSquare, Download, BrainCircuit, Loader2, FileText, Notebook, ClipboardList, Archive, Bell, BellOff, Flag, CheckCircle, MessageCircle, BookCopy, HelpCircle, Eye, X, AlertCircle, FileType, Bookmark, BookmarkCheck, Share2, Trash2, UserPlus, UserMinus, Clock } from 'lucide-react';
 import MarkdownRenderer from '../MarkdownRenderer';

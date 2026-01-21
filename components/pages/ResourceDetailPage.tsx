@@ -199,10 +199,8 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   const isUpvoted = resource.upvotedBy?.includes(user?.id || '');
   const isDownvoted = resource.downvotedBy?.includes(user?.id || '');
 
-  // Handle Deep Linking / Scrolling
   useEffect(() => {
       if (scrollTargetId) {
-          // Allow DOM to render
           setTimeout(() => {
               const targetElement = document.getElementById(scrollTargetId);
               if (targetElement) {
@@ -234,7 +232,8 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   }, [resource.id]);
 
   const isAISupported = useMemo(() => {
-      // Support almost all common doc types now via extraction, plus fallback to text content for mocks
+      // Support almost all common doc types now via extraction
+      if (!resource.mimeType) return false;
       return true; 
   }, [resource.mimeType]);
 
@@ -254,13 +253,9 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   }, [resource.comments]);
 
   const relatedResources = useMemo(() => {
-    // Filter out the current resource
     const candidates = resources.filter(r => r.id !== resource.id);
-    
-    // 1. Priority: Same Course Code
     let matches = candidates.filter(r => r.courseCode === resource.courseCode);
     
-    // 2. Fallback: Same Subject Area
     if (matches.length < 8) {
         const subjectMatch = resource.courseCode.match(/^[A-Za-z]+/);
         if (subjectMatch) {
@@ -272,7 +267,6 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
         }
     }
 
-    // 3. Fallback: Same Resource Type
     if (matches.length < 8) {
         const typeMatches = candidates.filter(r => 
             r.type === resource.type && !matches.includes(r)
@@ -280,7 +274,6 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
         matches = [...matches, ...typeMatches];
     }
     
-    // 4. Fallback: Any other resources
     if (matches.length < 8) {
         const otherMatches = candidates.filter(r => !matches.includes(r));
         matches = [...matches, ...otherMatches];
@@ -318,17 +311,17 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
             reader.readAsDataURL(blob);
         });
     } catch (error) {
-        // This is expected for mock data or if file access is restricted
+        console.error("Error fetching file for AI:", error);
         return undefined;
     }
   };
 
   const getMetadataContext = () => {
+      // Basic metadata to guide the AI, but relying on file content for the meat
       return `
       Title: ${resource.title}
       Course: ${resource.courseCode}
       Type: ${resource.type}
-      Description: ${resource.description}
       `;
   };
 
@@ -337,10 +330,10 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     setSummary('');
     
     const base64 = await resolveFileBase64();
-    // Use contentForAI as fallback if base64 fetch failed (e.g. mock data) or if explicit content exists
-    const contentToAnalyze = base64 ? getMetadataContext() : (resource.contentForAI || getMetadataContext());
+    // Do not include placeholder text if it's just the default
+    const textContext = getMetadataContext();
 
-    const result = await summarizeContent(contentToAnalyze, base64, resource.mimeType);
+    const result = await summarizeContent(textContext, base64, resource.mimeType);
     setSummary(result);
     setIsSummarizing(false);
   };
@@ -350,9 +343,9 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     setIsGeneratingPreview(true);
     
     const base64 = await resolveFileBase64();
-    const contentToAnalyze = base64 ? getMetadataContext() : (resource.contentForAI || getMetadataContext());
+    const textContext = getMetadataContext();
 
-    const result = await summarizeContent(contentToAnalyze, base64, resource.mimeType);
+    const result = await summarizeContent(textContext, base64, resource.mimeType);
     setAiGeneratedPreview(result);
     setIsGeneratingPreview(false);
   };
@@ -363,9 +356,9 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     setStudySetType(type);
     
     const base64 = await resolveFileBase64();
-    const contentToAnalyze = base64 ? getMetadataContext() : (resource.contentForAI || getMetadataContext());
+    const textContext = getMetadataContext();
     
-    const result = await generateStudySet(contentToAnalyze, type, base64, resource.mimeType);
+    const result = await generateStudySet(textContext, type, base64, resource.mimeType);
     setStudySet(result);
     setIsGeneratingStudySet(false);
   };
@@ -441,13 +434,6 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
 
 
   const fileType = resource.fileName.split('.').pop()?.toUpperCase();
-  const formattedUploadDate = new Date(resource.uploadDate).toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
 
   const InfoTag: React.FC<{ label: string; value: string | number }> = ({ label, value }) => (
     <div className="bg-slate-100 dark:bg-zinc-800 p-3 rounded-lg">
@@ -457,7 +443,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   );
 
   const renderPreviewContent = () => {
-    const isMock = resource.fileUrl === '#' || !resource.fileUrl;
+    const isMock = resource.fileUrl === '#';
     const ext = resource.fileName.split('.').pop()?.toLowerCase();
     const isPdf = ext === 'pdf';
     const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext || '');
@@ -473,7 +459,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
                     Below is the extracted text content associated with this resource.
                 </p>
                 <div className="w-full max-w-3xl bg-white rounded-lg border border-slate-200 p-6 text-left h-96 overflow-y-auto shadow-inner">
-                    <MarkdownRenderer content={resource.contentForAI || "No content available for this mock resource."} />
+                    <MarkdownRenderer content={resource.contentForAI} />
                 </div>
             </div>
         );
@@ -589,7 +575,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
 
   return (
     <div>
-      <button onClick={() => setView('dashboard')} className="flex items-center gap-2 text-primary-600 dark:text-primary-400 font-semibold hover:text-primary-800 dark:hover:text-primary-300 transition mb-6">
+      <button onClick={goBack} className="flex items-center gap-2 text-primary-600 dark:text-primary-400 font-semibold hover:text-primary-800 dark:hover:text-primary-300 transition mb-6">
         <ArrowLeft size={20} />
         Back to all resources
       </button>
@@ -609,13 +595,12 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
             <p className="text-lg text-slate-600 dark:text-slate-300 mt-1">{resource.courseName}</p>
             <p className="text-sm text-slate-500 dark:text-slate-200 mt-4">{resource.description}</p>
             
-            <div className="mt-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className="mt-6 grid grid-cols-2 md:grid-cols-5 gap-4">
                 <InfoTag label="Year" value={resource.year} />
                 <InfoTag label="Semester" value={resource.semester} />
                 {resource.lecturer && <InfoTag label="Lecturer" value={resource.lecturer} />}
                 {resource.examType && <InfoTag label={resource.type === ResourceType.PastPaper ? "Paper Type" : "Assessment Type"} value={resource.examType} />}
                 {fileType && <InfoTag label="File Type" value={fileType} />}
-                <InfoTag label="Uploaded On" value={formattedUploadDate} />
             </div>
 
             <div className="mt-6 pt-6 border-t border-slate-200 dark:border-dark-border space-y-4">
@@ -699,7 +684,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
                             value={reportReason}
                             onChange={(e) => setReportReason(e.target.value)}
                             placeholder="e.g., Incorrect information, offensive content, spam..."
-                            className="w-full bg-white dark:bg-zinc-900 text-slate-900 dark:text-white placeholder:text-slate-500 dark:placeholder:text-slate-400 px-4 py-2 border border-slate-300 dark:border-zinc-700 rounded-lg focus:ring-primary-500 focus:border-primary-500 transition focus:outline-none"
+                            className="w-full bg-white dark:bg-zinc-900 text-slate-900 dark:text-white placeholder:text-slate-500 dark:placeholder:text-slate-500 px-4 py-2 border border-slate-300 dark:border-zinc-700 rounded-lg focus:ring-primary-500 focus:border-primary-500 transition focus:outline-none"
                             rows={3}
                             autoFocus
                         />
@@ -832,7 +817,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
                     placeholder="Add a comment..."
-                    className="w-full bg-slate-100 dark:bg-zinc-800 dark:text-white text-slate-900 placeholder:text-slate-500 dark:placeholder:text-slate-400 px-4 py-2 border border-slate-300 dark:border-zinc-700 rounded-b-lg focus:ring-primary-500 focus:border-primary-500 transition focus:outline-none"
+                    className="w-full bg-slate-100 dark:bg-zinc-800 dark:text-white text-slate-900 placeholder:text-slate-500 dark:placeholder:text-slate-500 px-4 py-2 border border-slate-300 dark:border-zinc-700 rounded-b-lg focus:ring-primary-500 focus:border-primary-500 transition focus:outline-none"
                     rows={3}
                 />
                  <div className="flex justify-end mt-2">

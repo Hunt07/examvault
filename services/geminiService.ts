@@ -1,10 +1,12 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 
-// Initialize with the process.env.API_KEY as per strict guidelines
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Use Vite environment variable for Vercel deployment with safety check
+// Cast to any to prevent TS error: Property 'env' does not exist on type 'ImportMeta'
+const apiKey = (import.meta as any).env?.VITE_API_KEY || "AIzaSyB045vOfwnjSeImdx3RPqZTK23J0cV70m8";
+const genAI = new GoogleGenerativeAI(apiKey);
 
-// Use gemini-3-flash-preview for best speed/cost ratio in production
-const MODEL_NAME = "gemini-3-flash-preview";
+// Using gemini-1.5-flash for best speed/cost ratio in production
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 export const summarizeContent = async (
   content: string, 
@@ -19,7 +21,8 @@ Do not use generic phrases like "This document discusses..." or "The material co
 Based on the following material, please provide the summary with these exact sections:
 - **Key Concepts:** A bulleted list of the most important terms, definitions, and concepts.
 - **Main Takeaways:** 2-3 sentences summarizing the core message or conclusions.
-- **Potential Exam Questions:** A numbered list of 2-3 sample questions that could be asked on an exam based on this material.`;
+- **Potential Exam Questions:** A numbered list of 2-3 sample questions that could be asked on an exam based on this material.
+`;
 
     let parts: any[] = [];
 
@@ -40,33 +43,34 @@ Based on the following material, please provide the summary with these exact sec
         parts = [{ text: `${textPrompt}\n\nMaterial to analyze:\n---\n${content}\n---` }];
     }
 
-    const response = await ai.models.generateContent({
-        model: MODEL_NAME,
-        contents: { parts }
-    });
-    
-    return response.text || "No summary generated.";
+    const result = await model.generateContent(parts);
+    const response = result.response;
+    return response.text() || "No summary generated.";
   } catch (error) {
     console.error("Error generating summary with Gemini:", error);
-    return "Could not generate summary. Please check your API key and connection.";
+    return "Could not generate summary. Please check your VITE_API_KEY configuration.";
   }
 };
 
 export const describeImage = async (base64Data: string, mimeType: string): Promise<string> => {
   try {
+    const textPart = {
+      text: "Analyze this image from a study document. Describe the key information, including any text, diagrams, or main concepts. This will be used as a summary for other students."
+    };
+
     // Remove data URL prefix if present for clean base64
     const cleanBase64 = base64Data.replace(/^data:.+;base64,/, '');
 
-    const response = await ai.models.generateContent({
-        model: MODEL_NAME,
-        contents: {
-            parts: [
-                { text: "Analyze this image from a study document. Describe the key information, including any text, diagrams, or main concepts." },
-                { inlineData: { mimeType, data: cleanBase64 } }
-            ]
-        }
-    });
-    return response.text || "No description generated.";
+    const imagePart = {
+      inlineData: {
+        data: cleanBase64,
+        mimeType: mimeType,
+      },
+    };
+
+    const result = await model.generateContent([textPart, imagePart]);
+    const response = result.response;
+    return response.text() || "No description generated.";
   } catch (error) {
     console.error("Error describing image with Gemini:", error);
     return "Could not generate a description for the image.";
@@ -86,12 +90,12 @@ export const generateStudySet = async (
     if (setType === 'flashcards') {
       promptText = `Analyze the provided study material and generate a set of 5-10 flashcards.`;
       schema = {
-        type: Type.ARRAY,
+        type: SchemaType.ARRAY,
         items: {
-          type: Type.OBJECT,
+          type: SchemaType.OBJECT,
           properties: {
-            term: { type: Type.STRING },
-            definition: { type: Type.STRING },
+            term: { type: SchemaType.STRING },
+            definition: { type: SchemaType.STRING },
           },
           required: ['term', 'definition'],
         },
@@ -99,18 +103,27 @@ export const generateStudySet = async (
     } else {
       promptText = `Analyze the provided study material and generate a 5-question multiple-choice quiz.`;
       schema = {
-        type: Type.ARRAY,
+        type: SchemaType.ARRAY,
         items: {
-            type: Type.OBJECT,
+            type: SchemaType.OBJECT,
             properties: {
-                question: { type: Type.STRING },
-                options: { type: Type.ARRAY, items: { type: Type.STRING } },
-                correctAnswer: { type: Type.STRING },
+                question: { type: SchemaType.STRING },
+                options: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+                correctAnswer: { type: SchemaType.STRING },
             },
             required: ['question', 'options', 'correctAnswer'],
         }
       };
     }
+
+    // Initialize a model with generation config for JSON
+    const jsonModel = genAI.getGenerativeModel({
+        model: "gemini-1.5-flash",
+        generationConfig: {
+            responseMimeType: "application/json",
+            responseSchema: schema,
+        }
+    });
 
     let parts: any[] = [];
     if (fileBase64 && mimeType) {
@@ -128,17 +141,9 @@ export const generateStudySet = async (
         parts = [{ text: `${promptText}\n\nMaterial to analyze:\n---\n${content}\n---` }];
     }
     
-    const response = await ai.models.generateContent({
-        model: MODEL_NAME,
-        contents: { parts },
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: schema,
-        }
-    });
-
-    const text = response.text;
-    if (!text) return [];
+    const result = await jsonModel.generateContent(parts);
+    const response = result.response;
+    const text = response.text();
     
     return JSON.parse(text);
   } catch (error) {

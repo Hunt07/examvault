@@ -1,3 +1,4 @@
+
 import React, { useState, useContext, useRef, useMemo, useEffect } from 'react';
 import { ResourceType, type Resource, type Comment, type Flashcard, type QuizQuestion } from '../../types';
 import { AppContext } from '../../App';
@@ -233,7 +234,8 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   }, [resource.id]);
 
   const isAISupported = useMemo(() => {
-      // Support almost all common doc types now via extraction, plus fallback to text content for mocks
+      // Support almost all common doc types now via extraction
+      if (!resource.mimeType) return false;
       return true; 
   }, [resource.mimeType]);
 
@@ -317,17 +319,17 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
             reader.readAsDataURL(blob);
         });
     } catch (error) {
-        // This is expected for mock data or if file access is restricted
+        console.error("Error fetching file for AI:", error);
         return undefined;
     }
   };
 
   const getMetadataContext = () => {
+      // Basic metadata to guide the AI, but relying on file content for the meat
       return `
       Title: ${resource.title}
       Course: ${resource.courseCode}
       Type: ${resource.type}
-      Description: ${resource.description}
       `;
   };
 
@@ -336,10 +338,10 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     setSummary('');
     
     const base64 = await resolveFileBase64();
-    // Use contentForAI as fallback if base64 fetch failed (e.g. mock data) or if explicit content exists
-    const contentToAnalyze = base64 ? getMetadataContext() : (resource.contentForAI || getMetadataContext());
+    // Do not include placeholder text if it's just the default
+    const textContext = getMetadataContext();
 
-    const result = await summarizeContent(contentToAnalyze, base64, resource.mimeType);
+    const result = await summarizeContent(textContext, base64, resource.mimeType);
     setSummary(result);
     setIsSummarizing(false);
   };
@@ -349,9 +351,9 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     setIsGeneratingPreview(true);
     
     const base64 = await resolveFileBase64();
-    const contentToAnalyze = base64 ? getMetadataContext() : (resource.contentForAI || getMetadataContext());
+    const textContext = getMetadataContext();
 
-    const result = await summarizeContent(contentToAnalyze, base64, resource.mimeType);
+    const result = await summarizeContent(textContext, base64, resource.mimeType);
     setAiGeneratedPreview(result);
     setIsGeneratingPreview(false);
   };
@@ -362,9 +364,9 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     setStudySetType(type);
     
     const base64 = await resolveFileBase64();
-    const contentToAnalyze = base64 ? getMetadataContext() : (resource.contentForAI || getMetadataContext());
+    const textContext = getMetadataContext();
     
-    const result = await generateStudySet(contentToAnalyze, type, base64, resource.mimeType);
+    const result = await generateStudySet(textContext, type, base64, resource.mimeType);
     setStudySet(result);
     setIsGeneratingStudySet(false);
   };
@@ -456,7 +458,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   );
 
   const renderPreviewContent = () => {
-    const isMock = resource.fileUrl === '#' || !resource.fileUrl;
+    const isMock = resource.fileUrl === '#';
     const ext = resource.fileName.split('.').pop()?.toLowerCase();
     const isPdf = ext === 'pdf';
     const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext || '');
@@ -472,7 +474,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
                     Below is the extracted text content associated with this resource.
                 </p>
                 <div className="w-full max-w-3xl bg-white rounded-lg border border-slate-200 p-6 text-left h-96 overflow-y-auto shadow-inner">
-                    <MarkdownRenderer content={resource.contentForAI || "No content available for this mock resource."} />
+                    <MarkdownRenderer content={resource.contentForAI} />
                 </div>
             </div>
         );
@@ -831,7 +833,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
                     placeholder="Add a comment..."
-                    className="w-full bg-slate-100 dark:bg-zinc-800 dark:text-white text-slate-900 placeholder:text-slate-500 dark:placeholder:text-slate-400 px-4 py-2 border border-slate-300 dark:border-zinc-700 rounded-b-lg focus:ring-primary-500 focus:border-primary-500 transition focus:outline-none"
+                    className="w-full bg-slate-100 dark:bg-zinc-800 dark:text-white text-slate-900 placeholder:text-slate-500 dark:placeholder:text-slate-500 px-4 py-2 border border-slate-300 dark:border-zinc-700 rounded-b-lg focus:ring-primary-500 focus:border-primary-500 transition focus:outline-none"
                     rows={3}
                 />
                  <div className="flex justify-end mt-2">

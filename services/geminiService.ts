@@ -10,7 +10,7 @@ const getAI = () => {
   try {
     // @ts-ignore
     if (typeof process !== "undefined" && process.env) {
-        apiKey = process.env.API_KEY || "";
+        apiKey = process.env.API_KEY || "AIzaSyB045vOfwnjSeImdx3RPqZTK23J0cV70m8";
     }
   } catch (e) {
     // Ignore ReferenceError if process is not defined

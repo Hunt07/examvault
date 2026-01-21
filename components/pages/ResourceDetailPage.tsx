@@ -3,9 +3,9 @@ import { ResourceType, type Resource, type Comment, type Attachment, type Flashc
 import { AppContext } from '../../App';
 import { summarizeContent, generateStudySet } from '../../services/geminiService';
 import {
-  ArrowLeft, ArrowRight, ThumbsUp, ThumbsDown, MessageSquare, Download, Loader2, FileText, Notebook,
-  ClipboardList, Archive, Flag, CheckCircle, MessageCircle, Eye, X, AlertCircle, Bookmark,
-  BookmarkCheck, Share2, Trash2, Paperclip, Image as ImageIcon, BrainCircuit, BookCopy, HelpCircle, FileCheck
+  ArrowLeft, ArrowRight, ThumbsUp, ThumbsDown, MessageSquare, Download, Loader2, FileText, Notebook, ClipboardList,
+  Archive, Flag, CheckCircle, MessageCircle, Eye, X, AlertCircle, Bookmark, BookmarkCheck, Share2, Trash2, Paperclip,
+  Image as ImageIcon, BrainCircuit, BookCopy, HelpCircle, FileCheck
 } from 'lucide-react';
 import MarkdownRenderer from '../MarkdownRenderer';
 import MarkdownToolbar from '../MarkdownToolbar';
@@ -70,8 +70,11 @@ const CommentComponent: React.FC<{
   const canDelete = isOwnComment || user?.role === 'admin';
 
   const handleUserClick = (userId: string) => {
-    if (userId === user?.id) setView('profile');
-    else setView('publicProfile', userId);
+    if (userId === user?.id) {
+      setView('profile');
+    } else {
+      setView('publicProfile', userId);
+    }
   };
 
   const handleVoteForComment = () => {
@@ -261,9 +264,7 @@ const CommentComponent: React.FC<{
                 value={replyText}
                 onChange={(e) => setReplyText(e.target.value)}
                 placeholder={`Replying to ${comment.author.name}...`}
-                className={`w-full bg-slate-100 dark:bg-zinc-800 dark:text-white text-slate-900 placeholder:text-slate-500 dark:placeholder:text-slate-500 px-4 py-2 border border-slate-300 dark:border-zinc-700 ${
-                  replyFile ? 'border-t-0' : ''
-                } rounded-b-lg focus:ring-primary-500 focus:border-primary-500 transition focus:outline-none`}
+                className={`w-full bg-slate-100 dark:bg-zinc-800 dark:text-white text-slate-900 placeholder:text-slate-500 dark:placeholder:text-slate-500 px-4 py-2 border border-slate-300 dark:border-zinc-700 ${replyFile ? 'border-t-0' : ''} rounded-b-lg focus:ring-primary-500 focus:border-primary-500 transition focus:outline-none`}
                 rows={2}
                 autoFocus
               />
@@ -272,19 +273,10 @@ const CommentComponent: React.FC<{
                 <button type="submit" className="bg-primary-600 text-white font-semibold py-1 px-3 rounded-lg hover:bg-primary-700 transition text-sm">
                   Post Reply
                 </button>
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="bg-slate-200 dark:bg-zinc-700 text-slate-700 dark:text-slate-300 p-1.5 rounded-lg hover:bg-slate-300 dark:hover:bg-zinc-600 transition"
-                  title="Attach file"
-                >
+                <button type="button" onClick={() => fileInputRef.current?.click()} className="bg-slate-200 dark:bg-zinc-700 text-slate-700 dark:text-slate-300 p-1.5 rounded-lg hover:bg-slate-300 dark:hover:bg-zinc-600 transition" title="Attach file">
                   <Paperclip size={16} />
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setIsReplying(false)}
-                  className="ml-auto bg-slate-200 dark:bg-zinc-700 text-slate-700 dark:text-slate-300 font-semibold py-1 px-3 rounded-lg hover:bg-slate-300 dark:hover:bg-zinc-600 transition text-sm"
-                >
+                <button type="button" onClick={() => setIsReplying(false)} className="ml-auto bg-slate-200 dark:bg-zinc-700 text-slate-700 dark:text-slate-300 font-semibold py-1 px-3 rounded-lg hover:bg-slate-300 dark:hover:bg-zinc-600 transition text-sm">
                   Cancel
                 </button>
               </div>
@@ -293,29 +285,18 @@ const CommentComponent: React.FC<{
         </div>
       )}
 
-      <div className="pl-8 border-l-2 border-slate-200 dark:border-zinc-700 ml-5">{children}</div>
+      <div className="pl-8 border-l-2 border-slate-200 dark:border-zinc-700 ml-5">
+        {children}
+      </div>
     </div>
   );
 };
 
-type PendingAIAction =
-  | { kind: 'summary' }
-  | { kind: 'study'; studyType: 'flashcards' | 'quiz' }
-  | null;
-
 const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   const {
-    user,
-    userRanks,
-    setView,
-    handleVote,
-    addCommentToResource,
-    savedResourceIds,
-    toggleSaveResource,
-    resources,
-    deleteResource,
-    scrollTargetId,
-    setScrollTargetId
+    user, userRanks, setView, handleVote, addCommentToResource,
+    savedResourceIds, toggleSaveResource, resources, deleteResource,
+    scrollTargetId, setScrollTargetId
   } = useContext(AppContext);
 
   const [summary, setSummary] = useState('');
@@ -326,40 +307,29 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   const [studySetType, setStudySetType] = useState<'flashcards' | 'quiz' | null>(null);
   const [isGeneratingStudySet, setIsGeneratingStudySet] = useState(false);
 
+  const [aiFileError, setAiFileError] = useState<string>(''); // ✅ new
+
   const [newComment, setNewComment] = useState('');
   const [newCommentFile, setNewCommentFile] = useState<File | undefined>(undefined);
-
   const [isReporting, setIsReporting] = useState(false);
   const [reportReason, setReportReason] = useState('');
   const [hasReported, setHasReported] = useState(false);
-
   const [isDownloading, setIsDownloading] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
-
   const [relatedStartIndex, setRelatedStartIndex] = useState(0);
   const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
   const commentFileInputRef = useRef<HTMLInputElement>(null);
   const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null);
 
-  // ✅ AI file override (fixes CORS / missing file bytes on detail page)
-  const aiFileInputRef = useRef<HTMLInputElement>(null);
-  const [aiFileDataUrl, setAiFileDataUrl] = useState<string>('');
-  const [aiFileMimeType, setAiFileMimeType] = useState<string>('');
-  const [aiFileName, setAiFileName] = useState<string>('');
-  const [aiFileError, setAiFileError] = useState<string>('');
-  const [pendingAIAction, setPendingAIAction] = useState<PendingAIAction>(null);
-
   const authorRank = userRanks.get(resource.author.id);
   const isSaved = savedResourceIds.includes(resource.id);
   const isAuthor = user?.id === resource.author.id;
   const canDelete = isAuthor || user?.role === 'admin';
-
   const isUpvoted = resource.upvotedBy?.includes(user?.id || '');
   const isDownvoted = resource.downvotedBy?.includes(user?.id || '');
 
-  // Scroll-to-comment logic
   useEffect(() => {
     if (scrollTargetId) {
       const tryScroll = (attempts: number) => {
@@ -367,21 +337,9 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
         if (targetElement) {
           setTimeout(() => {
             targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            targetElement.classList.add(
-              'bg-yellow-100',
-              'dark:bg-yellow-900/40',
-              'ring-2',
-              'ring-yellow-400',
-              'dark:ring-yellow-600'
-            );
+            targetElement.classList.add('bg-yellow-100', 'dark:bg-yellow-900/40', 'ring-2', 'ring-yellow-400', 'dark:ring-yellow-600');
             setTimeout(() => {
-              targetElement.classList.remove(
-                'bg-yellow-100',
-                'dark:bg-yellow-900/40',
-                'ring-2',
-                'ring-yellow-400',
-                'dark:ring-yellow-600'
-              );
+              targetElement.classList.remove('bg-yellow-100', 'dark:bg-yellow-900/40', 'ring-2', 'ring-yellow-400', 'dark:ring-yellow-600');
               setScrollTargetId(null);
             }, 2500);
           }, 100);
@@ -393,7 +351,6 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     }
   }, [scrollTargetId, resource.comments, setScrollTargetId]);
 
-  // Reset when resource changes
   useEffect(() => {
     setSummary('');
     setIsSummarizing(false);
@@ -401,6 +358,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     setStudySet(null);
     setStudySetType(null);
     setIsGeneratingStudySet(false);
+    setAiFileError('');
     setNewComment('');
     setNewCommentFile(undefined);
     setIsReporting(false);
@@ -408,13 +366,6 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     setHasReported(false);
     setIsPreviewOpen(false);
     setRelatedStartIndex(0);
-
-    // reset AI override too
-    setAiFileDataUrl('');
-    setAiFileMimeType('');
-    setAiFileName('');
-    setAiFileError('');
-    setPendingAIAction(null);
   }, [resource.id]);
 
   const commentsByParentId = useMemo(() => {
@@ -431,14 +382,13 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   }, [resource.comments]);
 
   const relatedResources = useMemo(() => {
-    const candidates = resources.filter((r) => r.id !== resource.id);
-    let matches = candidates.filter((r) => r.courseCode === resource.courseCode);
-
+    const candidates = resources.filter(r => r.id !== resource.id);
+    let matches = candidates.filter(r => r.courseCode === resource.courseCode);
     if (matches.length < 8) {
       const subjectMatch = resource.courseCode.match(/^[A-Za-z]+/);
       if (subjectMatch) {
         const subject = subjectMatch[0];
-        const subjectMatches = candidates.filter((r) => r.courseCode.startsWith(subject) && !matches.includes(r));
+        const subjectMatches = candidates.filter(r => r.courseCode.startsWith(subject) && !matches.includes(r));
         matches = [...matches, ...subjectMatches];
       }
     }
@@ -450,34 +400,25 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     else setView('publicProfile', authorId);
   };
 
-  // ✅ helper: File/Blob -> dataURL
-  const fileOrBlobToDataURL = (blob: Blob): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = () => reject(reader.error);
-      reader.onload = () => resolve(reader.result as string);
-      reader.readAsDataURL(blob);
-    });
-  };
-
-  // ✅ Try to resolve file bytes automatically (if you stored base64 OR if fetch works)
-  const resolveFileDataUrl = async (): Promise<{ dataUrl: string; mimeType: string } | undefined> => {
-    // If you store it on the resource (best)
-    // @ts-ignore (in case types.ts doesn't include these fields yet)
+  // ✅ Your existing fetch+dataURL logic is OK. We keep it.
+  // ✅ We will *NOT* fall back to metadata AI if this fails.
+  const resolveFileBase64 = async (): Promise<{ base64: string, mimeType: string } | undefined> => {
+    // 1) if stored on resource (optional fields)
+    // @ts-ignore
     if (resource.fileBase64 && resource.fileBase64.length > 0 && resource.mimeType) {
       // @ts-ignore
-      return { dataUrl: resource.fileBase64, mimeType: resource.mimeType };
+      return { base64: resource.fileBase64, mimeType: resource.mimeType };
     }
 
-    // Otherwise try fetch (often fails due to CORS)
+    // 2) fetch from URL (may fail due to CORS/auth)
     if (resource.fileUrl && resource.fileUrl !== '#' && !resource.fileUrl.startsWith('javascript:')) {
       try {
         const response = await fetch(resource.fileUrl);
         if (!response.ok) return undefined;
 
         const blob = await response.blob();
-        let mimeType = blob.type;
 
+        let mimeType = blob.type;
         if (!mimeType || mimeType === 'application/octet-stream') {
           const ext = resource.fileName?.split('.').pop()?.toLowerCase();
           if (ext === 'pdf') mimeType = 'application/pdf';
@@ -485,12 +426,17 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
           else if (ext === 'pptx') mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
           else if (['jpg', 'jpeg'].includes(ext || '')) mimeType = 'image/jpeg';
           else if (ext === 'png') mimeType = 'image/png';
-          else mimeType = resource.mimeType || 'application/octet-stream';
         }
 
-        const dataUrl = await fileOrBlobToDataURL(blob);
-        return { dataUrl, mimeType };
-      } catch (err) {
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+
+        return { base64, mimeType: mimeType || resource.mimeType || 'application/octet-stream' };
+      } catch (error) {
         return undefined;
       }
     }
@@ -498,151 +444,77 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
     return undefined;
   };
 
-  // ✅ Always prepare AI payload as: ("", dataUrl, mimeType) when file exists
-  const prepareAI = async (): Promise<{ text: string; dataUrl?: string; mimeType?: string; source: 'file' | 'metadata' }> => {
-    // 1) AI override chosen by user on this page
-    if (aiFileDataUrl && aiFileMimeType) {
-      return { text: '', dataUrl: aiFileDataUrl, mimeType: aiFileMimeType, source: 'file' };
+  // ✅ Critical: Only return FILE payload; never metadata payload for Gemini.
+  const prepareAIContent = async () => {
+    const fileData = await resolveFileBase64();
+    if (fileData?.base64 && fileData?.mimeType) {
+      return {
+        text: "",
+        base64: fileData.base64,
+        mimeType: fileData.mimeType,
+        source: 'file' as const,
+        fileReadable: true
+      };
     }
 
-    // 2) Attempt automatic resolution (stored base64 OR fetch success)
-    const auto = await resolveFileDataUrl();
-    if (auto?.dataUrl && auto?.mimeType) {
-      return { text: '', dataUrl: auto.dataUrl, mimeType: auto.mimeType, source: 'file' };
-    }
-
-    // 3) Absolute last resort: metadata only (but we label it clearly)
-    const metaText = `
-Title: ${resource.title}
-Course: ${resource.courseCode} - ${resource.courseName}
-Type: ${resource.type}
-Description: ${resource.description}
-[System Note: File content was unavailable on this page. This summary is based on metadata only.]
-    `.trim();
-
-    return { text: metaText, dataUrl: undefined, mimeType: undefined, source: 'metadata' };
-  };
-
-  const triggerAIFilePicker = (action: PendingAIAction) => {
-    setAiFileError('');
-    setPendingAIAction(action);
-    aiFileInputRef.current?.click();
-  };
-
-  const handleAIFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      const dataUrl = await fileOrBlobToDataURL(file);
-      setAiFileDataUrl(dataUrl);
-      setAiFileMimeType(file.type || 'application/octet-stream');
-      setAiFileName(file.name);
-      setAiFileError('');
-
-      // auto-run pending action
-      const action = pendingAIAction;
-      setPendingAIAction(null);
-
-      if (action?.kind === 'summary') {
-        await runGenerateSummary(dataUrl, file.type || 'application/octet-stream', 'file');
-      } else if (action?.kind === 'study') {
-        await runGenerateStudySet(action.studyType, dataUrl, file.type || 'application/octet-stream');
-      }
-    } catch (err) {
-      setAiFileError('Failed to read the selected file. Please try again.');
-      setPendingAIAction(null);
-    } finally {
-      // allow reselecting same file later
-      if (aiFileInputRef.current) aiFileInputRef.current.value = '';
-    }
-  };
-
-  const runGenerateSummary = async (dataUrl?: string, mimeType?: string, sourceOverride?: 'file' | 'metadata') => {
-    setIsSummarizing(true);
-    setSummary('');
-    setSummarySource(null);
-
-    try {
-      const source = sourceOverride ?? (dataUrl && mimeType ? 'file' : 'metadata');
-      const result = await summarizeContent('', dataUrl, mimeType);
-      setSummary(result);
-      setSummarySource(source);
-    } catch (e) {
-      setSummary(e instanceof Error ? e.message : 'Failed to generate summary');
-      setSummarySource('metadata');
-    } finally {
-      setIsSummarizing(false);
-    }
-  };
-
-  const runGenerateStudySet = async (type: 'flashcards' | 'quiz', dataUrl?: string, mimeType?: string) => {
-    setIsGeneratingStudySet(true);
-    setStudySet(null);
-    setStudySetType(type);
-
-    try {
-      const result = await generateStudySet('', type, dataUrl, mimeType);
-      setStudySet(result);
-    } catch (e) {
-      setStudySet([]);
-    } finally {
-      setIsGeneratingStudySet(false);
-    }
+    return {
+      text: "",
+      base64: undefined,
+      mimeType: undefined,
+      source: 'metadata' as const,
+      fileReadable: false
+    };
   };
 
   const handleGenerateSummary = async () => {
-    const { text, dataUrl, mimeType, source } = await prepareAI();
-
-    // If we only have metadata AND no file bytes, prompt user to select the file.
-    if (source === 'metadata' && (!dataUrl || !mimeType)) {
-      triggerAIFilePicker({ kind: 'summary' });
-      return;
-    }
-
-    // If file bytes exist, enforce empty text (no metadata prompt)
-    if (source === 'file' && dataUrl && mimeType) {
-      await runGenerateSummary(dataUrl, mimeType, 'file');
-      return;
-    }
-
-    // Metadata-only fallback (rare / last resort)
     setIsSummarizing(true);
     setSummary('');
     setSummarySource(null);
+    setAiFileError('');
+
     try {
-      const result = await summarizeContent(text, undefined, undefined);
+      const { base64, mimeType, source, fileReadable } = await prepareAIContent();
+
+      if (!fileReadable || !base64 || !mimeType) {
+        setAiFileError(
+          'Cannot access file bytes on this page (likely CORS/auth). AI summary is disabled to prevent metadata-only/fabricated results.'
+        );
+        return;
+      }
+
+      // ✅ Critical rule: Gemini gets ONLY file content
+      const result = await summarizeContent("", base64, mimeType);
       setSummary(result);
-      setSummarySource('metadata');
-    } catch (e) {
-      setSummary(e instanceof Error ? e.message : 'Failed to generate summary');
-      setSummarySource('metadata');
+      setSummarySource(source);
+    } catch (err) {
+      setAiFileError(err instanceof Error ? err.message : 'Failed to generate summary.');
     } finally {
       setIsSummarizing(false);
     }
   };
 
   const handleGenerateStudySet = async (type: 'flashcards' | 'quiz') => {
-    const { text, dataUrl, mimeType, source } = await prepareAI();
-
-    if (source === 'metadata' && (!dataUrl || !mimeType)) {
-      triggerAIFilePicker({ kind: 'study', studyType: type });
-      return;
-    }
-
-    if (source === 'file' && dataUrl && mimeType) {
-      await runGenerateStudySet(type, dataUrl, mimeType);
-      return;
-    }
-
-    // Metadata-only fallback
     setIsGeneratingStudySet(true);
     setStudySet(null);
     setStudySetType(type);
+    setAiFileError('');
+
     try {
-      const result = await generateStudySet(text, type, undefined, undefined);
+      const { base64, mimeType, fileReadable } = await prepareAIContent();
+
+      if (!fileReadable || !base64 || !mimeType) {
+        setAiFileError(
+          'Cannot access file bytes on this page (likely CORS/auth). AI study tools are disabled to prevent metadata-only/fabricated results.'
+        );
+        setStudySet([]);
+        return;
+      }
+
+      // ✅ Critical rule: Gemini gets ONLY file content
+      const result = await generateStudySet("", type, base64, mimeType);
       setStudySet(result);
-    } catch (e) {
+    } catch (err) {
+      setAiFileError(err instanceof Error ? err.message : 'Failed to generate study set.');
       setStudySet([]);
     } finally {
       setIsGeneratingStudySet(false);
@@ -674,15 +546,8 @@ Description: ${resource.description}
     }
   };
 
-  const handleUpvoteClick = () => {
-    if (!user || isAuthor) return;
-    handleVote(resource.id, 'up');
-  };
-
-  const handleDownvoteClick = () => {
-    if (!user || isAuthor) return;
-    handleVote(resource.id, 'down');
-  };
+  const handleUpvoteClick = () => { if (!user || isAuthor) return; handleVote(resource.id, 'up'); };
+  const handleDownvoteClick = () => { if (!user || isAuthor) return; handleVote(resource.id, 'down'); };
 
   const handleSubmitReport = async () => {
     if (reportReason.trim() !== "") {
@@ -719,7 +584,7 @@ Description: ${resource.description}
 
   const renderComments = (parentId: string | null) => {
     const comments = commentsByParentId[parentId || 'root'] || [];
-    return comments.map((comment) => (
+    return comments.map(comment => (
       <CommentComponent key={comment.id} comment={comment} resourceId={resource.id} onPreview={setPreviewAttachment}>
         {renderComments(comment.id)}
       </CommentComponent>
@@ -759,18 +624,7 @@ Description: ${resource.description}
 
   return (
     <div>
-      {/* Hidden input used for AI-only file selection */}
-      <input
-        ref={aiFileInputRef}
-        type="file"
-        className="hidden"
-        onChange={handleAIFileSelected}
-      />
-
-      <button
-        onClick={() => setView('dashboard')}
-        className="flex items-center gap-2 text-primary-600 dark:text-primary-400 font-semibold hover:text-primary-800 dark:hover:text-primary-300 transition mb-6"
-      >
+      <button onClick={() => setView('dashboard')} className="flex items-center gap-2 text-primary-600 dark:text-primary-400 font-semibold hover:text-primary-800 dark:hover:text-primary-300 transition mb-6">
         <ArrowLeft size={20} />
         Back to all resources
       </button>
@@ -784,15 +638,11 @@ Description: ${resource.description}
                 {getBadgeIcon(resource.type)}
                 {resource.type}
               </span>
-              <span className="text-sm font-bold text-slate-800 dark:text-white px-3 py-1 bg-slate-100 dark:bg-zinc-800 rounded-full">
-                {resource.courseCode}
-              </span>
+              <span className="text-sm font-bold text-slate-800 dark:text-white px-3 py-1 bg-slate-100 dark:bg-zinc-800 rounded-full">{resource.courseCode}</span>
             </div>
-
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">{resource.title}</h1>
             <p className="text-lg text-slate-600 dark:text-slate-300 mt-1">{resource.courseName}</p>
             <p className="text-sm text-slate-500 dark:text-slate-200 mt-4">{resource.description}</p>
-
             <div className="mt-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
               <InfoTag label="Year" value={resource.year} />
               <InfoTag label="Semester" value={resource.semester} />
@@ -802,56 +652,12 @@ Description: ${resource.description}
 
             <div className="mt-6 pt-6 border-t border-slate-200 dark:border-dark-border space-y-4">
               <div className="flex flex-col gap-3 !mt-6">
-                <button
-                  onClick={() => setIsPreviewOpen(true)}
-                  className="w-full flex items-center justify-center gap-2 font-bold py-3 px-4 rounded-lg transition-all duration-200 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-zinc-700 hover:text-primary-700 dark:hover:text-primary-400 border border-slate-200 dark:border-zinc-700"
-                >
+                <button onClick={() => setIsPreviewOpen(true)} className="w-full flex items-center justify-center gap-2 font-bold py-3 px-4 rounded-lg transition-all duration-200 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-zinc-700 hover:text-primary-700 dark:hover:text-primary-400 border border-slate-200 dark:border-zinc-700">
                   <Eye size={18} /> Preview File
                 </button>
-
-                <a
-                  href={resource.fileUrl}
-                  download={resource.fileName}
-                  onClick={handleDownloadClick}
-                  className={`w-full flex items-center justify-center gap-2 font-bold py-3 px-4 rounded-lg transition-all duration-200 ${
-                    isDownloading
-                      ? 'bg-primary-700 text-primary-100 cursor-wait'
-                      : 'bg-primary-600 text-white hover:bg-primary-700 hover:-translate-y-0.5 shadow-md hover:shadow-lg'
-                  }`}
-                >
-                  {isDownloading ? (
-                    <>
-                      <Loader2 size={18} className="animate-spin" /> Downloading...
-                    </>
-                  ) : (
-                    <>
-                      <Download size={18} /> Download
-                    </>
-                  )}
+                <a href={resource.fileUrl} download={resource.fileName} onClick={handleDownloadClick} className={`w-full flex items-center justify-center gap-2 font-bold py-3 px-4 rounded-lg transition-all duration-200 ${isDownloading ? 'bg-primary-700 text-primary-100 cursor-wait' : 'bg-primary-600 text-white hover:bg-primary-700 hover:-translate-y-0.5 shadow-md hover:shadow-lg'}`}>
+                  {isDownloading ? <><Loader2 size={18} className="animate-spin" /> Downloading...</> : <><Download size={18} /> Download</>}
                 </a>
-              </div>
-
-              {/* AI override status */}
-              <div className="rounded-lg border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800/30 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-bold text-slate-800 dark:text-white">AI File Input</p>
-                    <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-                      {aiFileDataUrl
-                        ? `Using selected file: ${aiFileName || 'File'}`
-                        : 'If the file is stored in a way the browser cannot fetch (CORS), select it here for accurate AI results.'}
-                    </p>
-                    {aiFileError && <p className="mt-2 text-sm text-red-600">{aiFileError}</p>}
-                  </div>
-
-                  <button
-                    onClick={() => triggerAIFilePicker({ kind: 'summary' })}
-                    className="shrink-0 inline-flex items-center gap-2 font-bold py-2 px-4 rounded-lg bg-slate-200 dark:bg-zinc-700 text-slate-800 dark:text-slate-100 hover:bg-slate-300 dark:hover:bg-zinc-600 transition"
-                    title="Select the file for AI"
-                  >
-                    <Paperclip size={16} /> Select file
-                  </button>
-                </div>
               </div>
 
               {!isAuthor && (
@@ -864,31 +670,17 @@ Description: ${resource.description}
                     </div>
                   </div>
                 ) : !isReporting ? (
-                  <button
-                    onClick={() => setIsReporting(true)}
-                    className="w-full flex items-center justify-center gap-2 text-slate-500 dark:text-slate-400 font-semibold py-2 px-4 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 hover:text-slate-700 dark:hover:text-slate-200 transition text-sm"
-                  >
+                  <button onClick={() => setIsReporting(true)} className="w-full flex items-center justify-center gap-2 text-slate-500 dark:text-slate-400 font-semibold py-2 px-4 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 hover:text-slate-700 dark:hover:text-slate-200 transition text-sm">
                     <Flag size={16} className="text-red-500" /> Report this resource
                   </button>
                 ) : (
                   <div className="p-4 bg-slate-50 dark:bg-zinc-800/50 rounded-lg border border-slate-200 dark:border-zinc-700">
                     <h4 className="font-bold text-slate-700 dark:text-slate-200 mb-2">Report Resource</h4>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Please provide a reason for reporting this content.</p>
-                    <textarea
-                      value={reportReason}
-                      onChange={(e) => setReportReason(e.target.value)}
-                      placeholder="Reason..."
-                      className="w-full bg-white dark:bg-zinc-900 px-4 py-2 border border-slate-300 dark:border-zinc-700 rounded-lg"
-                      rows={3}
-                      autoFocus
-                    />
+                    <textarea value={reportReason} onChange={(e) => setReportReason(e.target.value)} placeholder="Reason..." className="w-full bg-white dark:bg-zinc-900 px-4 py-2 border border-slate-300 dark:border-zinc-700 rounded-lg" rows={3} autoFocus />
                     <div className="flex justify-end gap-2 mt-4">
-                      <button onClick={() => setIsReporting(false)} className="bg-slate-200 dark:bg-zinc-700 text-slate-700 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg">
-                        Cancel
-                      </button>
-                      <button onClick={handleSubmitReport} className="bg-red-600 text-white font-semibold py-2 px-4 rounded-lg">
-                        Submit Report
-                      </button>
+                      <button onClick={() => setIsReporting(false)} className="bg-slate-200 dark:bg-zinc-700 text-slate-700 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg">Cancel</button>
+                      <button onClick={handleSubmitReport} className="bg-red-600 text-white font-semibold py-2 px-4 rounded-lg">Submit Report</button>
                     </div>
                   </div>
                 )
@@ -903,6 +695,15 @@ Description: ${resource.description}
               AI Smart Summary
             </h3>
 
+            {aiFileError && (
+              <div className="mb-4 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-amber-800 dark:text-amber-200">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="mt-0.5" size={18} />
+                  <p className="text-sm font-semibold">{aiFileError}</p>
+                </div>
+              </div>
+            )}
+
             {!summary && !isSummarizing && (
               <div className="border-2 border-dashed border-slate-300 dark:border-zinc-700 rounded-lg p-8 text-center bg-slate-50 dark:bg-zinc-800/30">
                 <FileText className="mx-auto h-12 w-12 text-slate-400 dark:text-slate-500 mb-4" />
@@ -910,10 +711,7 @@ Description: ${resource.description}
                 <p className="mt-2 text-slate-600 dark:text-slate-400 max-w-md mx-auto">
                   Generate a concise summary, key concepts, and exam questions based on the <strong>actual content</strong> of this file.
                 </p>
-                <button
-                  onClick={handleGenerateSummary}
-                  className="mt-6 inline-flex items-center gap-2 font-bold py-3 px-6 rounded-full bg-purple-600 text-white hover:bg-purple-700 transition shadow-lg shadow-purple-500/30 hover:scale-105 transform"
-                >
+                <button onClick={handleGenerateSummary} className="mt-6 inline-flex items-center gap-2 font-bold py-3 px-6 rounded-full bg-purple-600 text-white hover:bg-purple-700 transition shadow-lg shadow-purple-500/30 hover:scale-105 transform">
                   <BrainCircuit size={18} /> Generate Summary
                 </button>
               </div>
@@ -930,15 +728,13 @@ Description: ${resource.description}
             {summary && (
               <div className="animate-fade-in">
                 {summarySource && (
-                  <div
-                    className={`mb-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold border ${
-                      summarySource === 'file'
-                        ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800'
-                        : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800'
-                    }`}
-                  >
+                  <div className={`mb-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold border ${
+                    summarySource === 'file'
+                      ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800'
+                      : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800'
+                  }`}>
                     {summarySource === 'file' ? <FileCheck size={14} /> : <AlertCircle size={14} />}
-                    {summarySource === 'file' ? 'Based on File Content' : 'Based on Metadata (File Unreadable/Blocked)'}
+                    {summarySource === 'file' ? 'Based on File Content' : 'Based on Metadata (Disabled)'}
                   </div>
                 )}
                 <div className="bg-slate-50 dark:bg-zinc-800/50 border border-slate-200 dark:border-zinc-700 rounded-xl p-6 dark:text-slate-200">
@@ -955,6 +751,15 @@ Description: ${resource.description}
               Interactive Study Tools
             </h3>
 
+            {aiFileError && (
+              <div className="mb-4 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-amber-800 dark:text-amber-200">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="mt-0.5" size={18} />
+                  <p className="text-sm font-semibold">{aiFileError}</p>
+                </div>
+              </div>
+            )}
+
             {isGeneratingStudySet && (
               <div className="border border-slate-200 dark:border-zinc-700 rounded-lg p-8 text-center bg-slate-50 dark:bg-zinc-800/30">
                 <Loader2 className="mx-auto h-10 w-10 text-blue-500 animate-spin mb-4" />
@@ -964,10 +769,7 @@ Description: ${resource.description}
 
             {!isGeneratingStudySet && !studySet && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <button
-                  onClick={() => handleGenerateStudySet('flashcards')}
-                  className="flex flex-col items-center justify-center p-6 bg-white dark:bg-zinc-800 border-2 border-dashed border-slate-200 dark:border-zinc-700 rounded-xl hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition group"
-                >
+                <button onClick={() => handleGenerateStudySet('flashcards')} className="flex flex-col items-center justify-center p-6 bg-white dark:bg-zinc-800 border-2 border-dashed border-slate-200 dark:border-zinc-700 rounded-xl hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition group">
                   <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full text-blue-600 dark:text-blue-400 mb-3 group-hover:scale-110 transition-transform">
                     <BookCopy size={24} />
                   </div>
@@ -975,10 +777,7 @@ Description: ${resource.description}
                   <span className="text-xs text-slate-500 dark:text-slate-400 mt-1">Key terms & definitions</span>
                 </button>
 
-                <button
-                  onClick={() => handleGenerateStudySet('quiz')}
-                  className="flex flex-col items-center justify-center p-6 bg-white dark:bg-zinc-800 border-2 border-dashed border-slate-200 dark:border-zinc-700 rounded-xl hover:border-green-400 dark:hover:border-green-500 hover:bg-green-50 dark:hover:bg-green-900/10 transition group"
-                >
+                <button onClick={() => handleGenerateStudySet('quiz')} className="flex flex-col items-center justify-center p-6 bg-white dark:bg-zinc-800 border-2 border-dashed border-slate-200 dark:border-zinc-700 rounded-xl hover:border-green-400 dark:hover:border-green-500 hover:bg-green-50 dark:hover:bg-green-900/10 transition group">
                   <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-full text-green-600 dark:text-green-400 mb-3 group-hover:scale-110 transition-transform">
                     <HelpCircle size={24} />
                   </div>
@@ -998,18 +797,14 @@ Description: ${resource.description}
             {!isGeneratingStudySet && studySet && studySet.length === 0 && (
               <div className="p-4 text-center bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
                 <p className="text-red-700 dark:text-red-300 font-semibold">Could not generate study set.</p>
-                <button onClick={resetStudySet} className="mt-2 text-sm text-primary-600 dark:text-primary-400 font-semibold hover:underline">
-                  Try again
-                </button>
+                <button onClick={resetStudySet} className="mt-2 text-sm text-primary-600 dark:text-primary-400 font-semibold hover:underline">Try again</button>
               </div>
             )}
           </div>
 
           {/* Discussion */}
           <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md mt-8 transition-colors duration-300 border border-transparent dark:border-zinc-700">
-            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-              <MessageSquare size={22} /> Discussion ({resource.comments.length})
-            </h3>
+            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2"><MessageSquare size={22} /> Discussion ({resource.comments.length})</h3>
             <form onSubmit={handlePostComment} className="flex gap-4 items-start pb-6 mb-6 border-b border-slate-200 dark:border-zinc-700">
               <Avatar src={user?.avatarUrl} alt={user?.name} className="w-10 h-10 rounded-full shrink-0" />
               <div className="w-full">
@@ -1030,9 +825,7 @@ Description: ${resource.description}
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
                   placeholder="Add a comment..."
-                  className={`w-full bg-slate-100 dark:bg-zinc-800 dark:text-white text-slate-900 placeholder:text-slate-500 dark:placeholder:text-slate-400 px-4 py-2 border border-slate-300 dark:border-zinc-700 ${
-                    newCommentFile ? 'border-t-0' : ''
-                  } rounded-b-lg focus:ring-primary-500 focus:border-primary-500 transition focus:outline-none`}
+                  className={`w-full bg-slate-100 dark:bg-zinc-800 dark:text-white text-slate-900 placeholder:text-slate-500 dark:placeholder:text-slate-400 px-4 py-2 border border-slate-300 dark:border-zinc-700 ${newCommentFile ? 'border-t-0' : ''} rounded-b-lg focus:ring-primary-500 focus:border-primary-500 transition focus:outline-none`}
                   rows={3}
                 />
                 <input type="file" ref={commentFileInputRef} className="hidden" onChange={handleFileSelect} />
@@ -1045,13 +838,10 @@ Description: ${resource.description}
                   >
                     <Paperclip size={18} />
                   </button>
-                  <button type="submit" className="bg-primary-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-primary-700 transition">
-                    Post
-                  </button>
+                  <button type="submit" className="bg-primary-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-primary-700 transition">Post</button>
                 </div>
               </div>
             </form>
-
             <div className="mt-6">{renderComments(null)}</div>
           </div>
         </div>
@@ -1074,7 +864,6 @@ Description: ${resource.description}
               >
                 <ThumbsUp size={18} /> {resource.upvotes > 0 && <span>{resource.upvotes}</span>}
               </button>
-
               <button
                 onClick={handleDownvoteClick}
                 disabled={isAuthor}
@@ -1088,53 +877,23 @@ Description: ${resource.description}
               >
                 <ThumbsDown size={18} /> {resource.downvotes > 0 && <span>{resource.downvotes}</span>}
               </button>
-
-              <button
-                onClick={() => toggleSaveResource(resource.id)}
-                title={isSaved ? "Unsave" : "Save for later"}
-                className={`p-3 rounded-lg transition font-medium ${
-                  isSaved
-                    ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'
-                    : 'bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-zinc-700'
-                }`}
-              >
+              <button onClick={() => toggleSaveResource(resource.id)} title={isSaved ? "Unsave" : "Save for later"} className={`p-3 rounded-lg transition font-medium ${isSaved ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-zinc-700'}`}>
                 {isSaved ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
               </button>
-
-              <button
-                onClick={() => setIsShareModalOpen(true)}
-                title="Share"
-                className="p-3 rounded-lg transition font-medium bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-zinc-700"
-              >
-                <Share2 size={18} />
-              </button>
-
+              <button onClick={() => setIsShareModalOpen(true)} title="Share" className="p-3 rounded-lg transition font-medium bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-zinc-700"><Share2 size={18} /></button>
               {canDelete && (
-                <button
-                  onClick={() => setIsDeleteConfirmOpen(true)}
-                  title="Delete Resource"
-                  className="p-3 rounded-lg transition font-medium bg-slate-100 dark:bg-zinc-800 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30"
-                >
+                <button onClick={() => setIsDeleteConfirmOpen(true)} title="Delete Resource" className="p-3 rounded-lg transition font-medium bg-slate-100 dark:bg-zinc-800 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30">
                   <Trash2 size={18} />
                 </button>
               )}
             </div>
-
             <div className="mt-6 pt-6 border-t border-slate-200 dark:border-dark-border">
               <p className="text-sm font-semibold text-slate-800 dark:text-white mb-3">Uploaded by</p>
-              <button
-                onClick={() => handleAuthorClick(resource.author.id)}
-                className="flex items-center gap-3 w-full text-left hover:bg-slate-50 dark:hover:bg-zinc-800 p-2 rounded-lg transition-colors"
-              >
+              <button onClick={() => handleAuthorClick(resource.author.id)} className="flex items-center gap-3 w-full text-left hover:bg-slate-50 dark:hover:bg-zinc-800 p-2 rounded-lg transition-colors">
                 <Avatar src={resource.author.avatarUrl} alt={resource.author.name} className="w-12 h-12 rounded-full" />
                 <div>
-                  <div className="flex items-center">
-                    <p className="font-bold text-slate-900 dark:text-slate-100">{resource.author.name}</p>
-                    <UserRankBadge rank={authorRank} />
-                  </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    <span className="font-semibold">{resource.author.course}</span> • Joined on {new Date(resource.author.joinDate).toLocaleDateString()}
-                  </p>
+                  <div className="flex items-center"><p className="font-bold text-slate-900 dark:text-slate-100">{resource.author.name}</p><UserRankBadge rank={authorRank} /></div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400"><span className="font-semibold">{resource.author.course}</span> • Joined on {new Date(resource.author.joinDate).toLocaleDateString()}</p>
                 </div>
               </button>
             </div>
@@ -1147,33 +906,17 @@ Description: ${resource.description}
           <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-6">Related Resources</h2>
           <div className="relative group px-4">
             {relatedStartIndex > 0 && (
-              <button
-                onClick={() => setRelatedStartIndex((prev) => Math.max(0, prev - 1))}
-                className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-20 bg-white dark:bg-zinc-800 text-slate-700 dark:text-slate-200 p-3 rounded-full shadow-lg border border-slate-100 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-700 hover:text-primary-600 hover:scale-110 transition-all duration-200 flex items-center justify-center"
-                aria-label="Previous"
-              >
+              <button onClick={() => setRelatedStartIndex(prev => Math.max(0, prev - 1))} className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-20 bg-white dark:bg-zinc-800 text-slate-700 dark:text-slate-200 p-3 rounded-full shadow-lg border border-slate-100 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-700 hover:text-primary-600 hover:scale-110 transition-all duration-200 flex items-center justify-center" aria-label="Previous">
                 <ArrowLeft size={24} />
               </button>
             )}
-
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
-              {relatedResources.slice(relatedStartIndex, relatedStartIndex + 4).map((related) => (
-                <ResourceCard
-                  key={related.id}
-                  resource={related}
-                  onSelect={() => setView('resourceDetail', related.id)}
-                  onAuthorClick={handleAuthorClick}
-                  compact={true}
-                />
+              {relatedResources.slice(relatedStartIndex, relatedStartIndex + 4).map(related => (
+                <ResourceCard key={related.id} resource={related} onSelect={() => setView('resourceDetail', related.id)} onAuthorClick={handleAuthorClick} compact={true} />
               ))}
             </div>
-
             {relatedStartIndex < relatedResources.length - 4 && (
-              <button
-                onClick={() => setRelatedStartIndex((prev) => Math.min(Math.max(0, relatedResources.length - 4), prev + 1))}
-                className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-20 bg-white dark:bg-zinc-800 text-slate-700 dark:text-slate-200 p-3 rounded-full shadow-lg border border-slate-100 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-700 hover:text-primary-600 hover:scale-110 transition-all duration-200 flex items-center justify-center"
-                aria-label="Next"
-              >
+              <button onClick={() => setRelatedStartIndex(prev => Math.min(Math.max(0, relatedResources.length - 4), prev + 1))} className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-20 bg-white dark:bg-zinc-800 text-slate-700 dark:text-slate-200 p-3 rounded-full shadow-lg border border-slate-100 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-700 hover:text-primary-600 hover:scale-110 transition-all duration-200 flex items-center justify-center" aria-label="Next">
                 <ArrowRight size={24} />
               </button>
             )}
@@ -1185,23 +928,12 @@ Description: ${resource.description}
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white dark:bg-zinc-800 p-6 rounded-xl shadow-xl max-w-sm w-full border dark:border-zinc-700">
             <div className="flex flex-col items-center text-center">
-              <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-full text-red-600 dark:text-red-400 mb-4">
-                <Trash2 size={32} />
-              </div>
+              <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-full text-red-600 dark:text-red-400 mb-4"><Trash2 size={32} /></div>
               <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Delete Resource?</h3>
-              <p className="text-slate-500 dark:text-slate-400 mb-6">
-                Are you sure you want to delete <strong>{resource.title}</strong>? This action cannot be undone.
-              </p>
+              <p className="text-slate-500 dark:text-slate-400 mb-6">Are you sure you want to delete <strong>{resource.title}</strong>? This action cannot be undone.</p>
               <div className="flex gap-3 w-full">
-                <button
-                  onClick={() => setIsDeleteConfirmOpen(false)}
-                  className="flex-1 py-2.5 bg-slate-100 dark:bg-zinc-700 text-slate-700 dark:text-slate-200 font-semibold rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-600 transition"
-                >
-                  Cancel
-                </button>
-                <button onClick={confirmDelete} className="flex-1 py-2.5 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition">
-                  Delete
-                </button>
+                <button onClick={() => setIsDeleteConfirmOpen(false)} className="flex-1 py-2.5 bg-slate-100 dark:bg-zinc-700 text-slate-700 dark:text-slate-200 font-semibold rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-600 transition">Cancel</button>
+                <button onClick={confirmDelete} className="flex-1 py-2.5 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition">Delete</button>
               </div>
             </div>
           </div>
@@ -1220,12 +952,8 @@ Description: ${resource.description}
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <a href={resource.fileUrl} download={resource.fileName} className="p-2 rounded-full hover:bg-slate-200 text-slate-600 transition" title="Download">
-                  <Download size={20} />
-                </a>
-                <button onClick={() => setIsPreviewOpen(false)} className="p-2 rounded-full hover:bg-red-100 text-slate-500 hover:text-red-600 transition">
-                  <X size={24} />
-                </button>
+                <a href={resource.fileUrl} download={resource.fileName} className="p-2 rounded-full hover:bg-slate-200 text-slate-600 transition" title="Download"><Download size={20} /></a>
+                <button onClick={() => setIsPreviewOpen(false)} className="p-2 rounded-full hover:bg-red-100 text-slate-500 hover:text-red-600 transition"><X size={24} /></button>
               </div>
             </div>
             <div className="flex-grow bg-slate-200 overflow-hidden flex items-center justify-center rounded-b-xl relative">
@@ -1249,12 +977,7 @@ Description: ${resource.description}
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <a
-                  href={previewAttachment.url}
-                  download={previewAttachment.name}
-                  className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-600 dark:text-slate-300 transition"
-                  title="Download"
-                >
+                <a href={previewAttachment.url} download={previewAttachment.name} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-600 dark:text-slate-300 transition" title="Download">
                   <Download size={20} />
                 </a>
                 <button onClick={() => setPreviewAttachment(null)} className="p-2 rounded-full hover:bg-red-100 dark:hover:bg-red-900/20 text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 transition">

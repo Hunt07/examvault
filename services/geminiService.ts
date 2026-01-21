@@ -1,8 +1,12 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
+if (!apiKey) {
+  throw new Error("VITE_GEMINI_API_KEY is missing. Add it to .env.local and restart Vite.");
+}
 
-// Keep your current model unless you want to swap it
+const genAI = new GoogleGenerativeAI(apiKey);
+
 const MODEL = "gemini-1.5-pro";
 
 /**
@@ -11,21 +15,23 @@ const MODEL = "gemini-1.5-pro";
 function buildParts(text: string, base64?: string, mimeType?: string) {
   const parts: any[] = [];
 
-  // Only include text part if it isn't empty/whitespace
   const trimmed = (text ?? "").trim();
   if (trimmed.length > 0) parts.push({ text: trimmed });
 
   if (base64 && mimeType) {
+    const data = base64.includes(",") ? base64.split(",")[1] : base64; // supports dataURL or raw base64
     parts.push({
       inlineData: {
-        data: base64.includes(",") ? base64.split(",")[1] : base64, // supports raw or dataURL
+        data,
         mimeType
       }
     });
   }
 
-  // If both empty, still send something
-  if (parts.length === 0) parts.push({ text: "Summarize the attached document." });
+  // Ensure Gemini always receives at least something
+  if (parts.length === 0) {
+    parts.push({ text: "Summarize the attached document." });
+  }
 
   return parts;
 }
@@ -33,16 +39,13 @@ function buildParts(text: string, base64?: string, mimeType?: string) {
 function stripJsonFences(raw: string) {
   const s = raw.trim();
   if (s.startsWith("```")) {
-    return s
-      .replace(/^```(?:json)?/i, "")
-      .replace(/```$/i, "")
-      .trim();
+    return s.replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
   }
   return s;
 }
 
 /**
- * Summarize document or metadata
+ * Summarize document content ONLY (you are passing "" text when file bytes exist)
  */
 export async function summarizeContent(
   text: string,
@@ -51,20 +54,23 @@ export async function summarizeContent(
 ): Promise<string> {
   const model = genAI.getGenerativeModel({ model: MODEL });
 
-  const prompt = `
+  const result = await model.generateContent({
+    contents: [
+      {
+        role: "user",
+        parts: buildParts(
+          `
 You are an academic assistant.
 Summarize the document clearly.
 Include:
 - Key topics
 - Important formulas or concepts
 - Exam-relevant points
-`.trim();
-
-  const result = await model.generateContent({
-    contents: [
-      {
-        role: "user",
-        parts: buildParts(`${prompt}\n\n${text ?? ""}`, base64, mimeType)
+${text ? `\n\n${text}` : ""}
+          `.trim(),
+          base64,
+          mimeType
+        )
       }
     ]
   });
@@ -110,7 +116,16 @@ Format:
     contents: [
       {
         role: "user",
-        parts: buildParts(`${instruction}\n\nUse the actual document content.\n\n${text ?? ""}`, base64, mimeType)
+        parts: buildParts(
+          `
+${instruction}
+
+Use the actual document content.
+${text ? `\n\n${text}` : ""}
+          `.trim(),
+          base64,
+          mimeType
+        )
       }
     ]
   });

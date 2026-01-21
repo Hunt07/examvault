@@ -1,152 +1,153 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 
-const MODEL = "gemini-1.5-pro";
+// Use Vite environment variable for Vercel deployment with safety check
+// Cast to any to prevent TS error: Property 'env' does not exist on type 'ImportMeta'
+const apiKey = (import.meta as any).env?.VITE_API_KEY || "";
+const genAI = new GoogleGenerativeAI(apiKey);
 
-function getGenAI(): GoogleGenerativeAI {
-  const key = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
+// Using gemini-1.5-flash for best speed/cost ratio in production
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-  // IMPORTANT: Do NOT throw at module load time.
-  // Only throw when user actually tries to call Gemini.
-  if (!key || key.trim().length === 0) {
-    throw new Error(
-      "Missing VITE_GEMINI_API_KEY. Add it to .env.local (VITE_GEMINI_API_KEY=...) and restart Vite."
-    );
-  }
-
-  return new GoogleGenerativeAI(key);
-}
-
-/**
- * Shared helper to build Gemini input
- */
-function buildParts(text: string, base64?: string, mimeType?: string) {
-  const parts: any[] = [];
-
-  const trimmedText = (text ?? "").trim();
-  if (trimmedText.length > 0) {
-    parts.push({ text: trimmedText });
-  }
-
-  if (base64 && mimeType) {
-    const data = base64.includes(",") ? base64.split(",")[1] : base64; // supports dataURL or raw base64
-    parts.push({
-      inlineData: {
-        data,
-        mimeType
-      }
-    });
-  }
-
-  // Ensure there's always at least one part
-  if (parts.length === 0) {
-    parts.push({ text: "Summarize the attached document." });
-  }
-
-  return parts;
-}
-
-/**
- * Summarize document or metadata
- */
-export async function summarizeContent(
-  text: string,
-  base64?: string,
+export const summarizeContent = async (
+  content: string, 
+  fileBase64?: string, 
   mimeType?: string
-): Promise<string> {
-  const genAI = getGenAI();
-  const model = genAI.getGenerativeModel({ model: MODEL });
+): Promise<string> => {
+  try {
+    const textPrompt = `You are an expert academic assistant. Your task is to analyze the provided study material and create a highly informative, concise summary for a university student, formatted in markdown. The summary should be easy to digest and focus on what's most important for exam preparation.
 
-  const result = await model.generateContent({
-    contents: [
-      {
-        role: "user",
-        parts: buildParts(
-          `
-You are an academic assistant.
-Summarize the document clearly.
-Include:
-- Key topics
-- Important formulas or concepts
-- Exam-relevant points
+Do not use generic phrases like "This document discusses..." or "The material covers...". Get straight to the point.
 
-${text ?? ""}
-          `.trim(),
-          base64,
-          mimeType
-        )
-      }
-    ]
-  });
-
-  return result.response.text();
-}
-
-/**
- * Generate flashcards OR quiz
- */
-export async function generateStudySet(
-  text: string,
-  type: "flashcards" | "quiz",
-  base64?: string,
-  mimeType?: string
-) {
-  const genAI = getGenAI();
-  const model = genAI.getGenerativeModel({ model: MODEL });
-
-  const instruction =
-    type === "flashcards"
-      ? `
-Generate flashcards in JSON.
-Return ONLY valid JSON (no markdown).
-Format:
-[
-  { "front": "Question", "back": "Answer" }
-]
-`
-      : `
-Generate multiple-choice quiz questions in JSON.
-Return ONLY valid JSON (no markdown).
-Format:
-[
-  {
-    "question": "...",
-    "options": ["A", "B", "C", "D"],
-    "correctIndex": 0
-  }
-]
+Based on the following material, please provide the summary with these exact sections:
+- **Key Concepts:** A bulleted list of the most important terms, definitions, and concepts.
+- **Main Takeaways:** 2-3 sentences summarizing the core message or conclusions.
+- **Potential Exam Questions:** A numbered list of 2-3 sample questions that could be asked on an exam based on this material.
 `;
 
-  const result = await model.generateContent({
-    contents: [
-      {
-        role: "user",
-        parts: buildParts(
-          `
-${instruction}
+    let parts: any[] = [];
 
-Use the actual document content.
-${text ?? ""}
-          `.trim(),
-          base64,
-          mimeType
-        )
-      }
-    ]
-  });
+    if (fileBase64 && mimeType) {
+        // Remove data URL prefix if present for clean base64
+        const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
+        
+        parts = [
+            { text: textPrompt },
+            {
+                inlineData: {
+                    mimeType: mimeType,
+                    data: cleanBase64
+                }
+            }
+        ];
+    } else {
+        parts = [{ text: `${textPrompt}\n\nMaterial to analyze:\n---\n${content}\n---` }];
+    }
 
-  // Gemini returns text — parse JSON safely
-  const raw = result.response.text().trim();
+    const result = await model.generateContent(parts);
+    const response = result.response;
+    return response.text() || "No summary generated.";
+  } catch (error) {
+    console.error("Error generating summary with Gemini:", error);
+    return "Could not generate summary. Please check your VITE_API_KEY configuration.";
+  }
+};
 
-  // Strip code fences if Gemini ignores instructions
-  const cleaned = raw
-    .replace(/^```(?:json)?/i, "")
-    .replace(/```$/i, "")
-    .trim();
-
+export const describeImage = async (base64Data: string, mimeType: string): Promise<string> => {
   try {
-    return JSON.parse(cleaned);
-  } catch (err) {
-    console.error("Failed to parse study set JSON:", raw);
+    const textPart = {
+      text: "Analyze this image from a study document. Describe the key information, including any text, diagrams, or main concepts. This will be used as a summary for other students."
+    };
+
+    // Remove data URL prefix if present for clean base64
+    const cleanBase64 = base64Data.replace(/^data:.+;base64,/, '');
+
+    const imagePart = {
+      inlineData: {
+        data: cleanBase64,
+        mimeType: mimeType,
+      },
+    };
+
+    const result = await model.generateContent([textPart, imagePart]);
+    const response = result.response;
+    return response.text() || "No description generated.";
+  } catch (error) {
+    console.error("Error describing image with Gemini:", error);
+    return "Could not generate a description for the image.";
+  }
+};
+
+export const generateStudySet = async (
+  content: string, 
+  setType: 'flashcards' | 'quiz',
+  fileBase64?: string, 
+  mimeType?: string
+): Promise<any> => {
+  try {
+    let promptText;
+    let schema;
+
+    if (setType === 'flashcards') {
+      promptText = `Analyze the provided study material and generate a set of 5-10 flashcards.`;
+      schema = {
+        type: SchemaType.ARRAY,
+        items: {
+          type: SchemaType.OBJECT,
+          properties: {
+            term: { type: SchemaType.STRING },
+            definition: { type: SchemaType.STRING },
+          },
+          required: ['term', 'definition'],
+        },
+      };
+    } else {
+      promptText = `Analyze the provided study material and generate a 5-question multiple-choice quiz.`;
+      schema = {
+        type: SchemaType.ARRAY,
+        items: {
+            type: SchemaType.OBJECT,
+            properties: {
+                question: { type: SchemaType.STRING },
+                options: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+                correctAnswer: { type: SchemaType.STRING },
+            },
+            required: ['question', 'options', 'correctAnswer'],
+        }
+      };
+    }
+
+    // Initialize a model with generation config for JSON
+    const jsonModel = genAI.getGenerativeModel({
+        model: "gemini-1.5-flash",
+        generationConfig: {
+            responseMimeType: "application/json",
+            responseSchema: schema,
+        }
+    });
+
+    let parts: any[] = [];
+    if (fileBase64 && mimeType) {
+        const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
+        parts = [
+            { text: promptText },
+            {
+                inlineData: {
+                    mimeType: mimeType,
+                    data: cleanBase64
+                }
+            }
+        ];
+    } else {
+        parts = [{ text: `${promptText}\n\nMaterial to analyze:\n---\n${content}\n---` }];
+    }
+    
+    const result = await jsonModel.generateContent(parts);
+    const response = result.response;
+    const text = response.text();
+    
+    return JSON.parse(text);
+  } catch (error) {
+    console.error(`Error generating ${setType} with Gemini:`, error);
     return [];
   }
-}
+};

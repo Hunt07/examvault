@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 // @ts-ignore
 import mammoth from "mammoth";
@@ -138,7 +137,26 @@ Based on the following material, please provide the summary with these exact sec
 - **Main Takeaways:** 2-3 sentences summarizing the core message or conclusions.
 - **Potential Exam Questions:** A numbered list of 2-3 sample questions that could be asked on an exam based on this material.`;
 
-    const parts: any[] = [];
+    const createTextParts = (text: string) => [{ text }];
+
+    const getFallbackParts = () => {
+        const fallbackText = `File content could not be read. Use the following description/metadata to generate the best possible summary.\n\n${content}`;
+        return createTextParts(fallbackText);
+    };
+
+    const generateSummary = async (parts: any[]) => {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            config: {
+                systemInstruction: systemInstruction,
+            },
+            contents: { parts }
+        });
+
+        return response.text || "No summary generated.";
+    };
+
+    let parts: any[] = [];
     
     // Handle File Input
     if (fileBase64 && mimeType) {
@@ -146,37 +164,41 @@ Based on the following material, please provide the summary with these exact sec
             return "⚠️ **Format Not Supported**\n\nAI Summarization is available for **PDFs**, **Images**, **Word (.docx)**, and **PowerPoint (.pptx)**.\n\nLegacy binary formats like .doc and .ppt are not supported. Please convert them to the newer formats.";
         }
 
-        // Branching logic for extraction
-        if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-            const extractedText = await extractTextFromDocx(fileBase64);
-            parts.push({ text: `Analyze the following document content:\n\n${extractedText}` });
-        } else if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
-            const extractedText = await extractTextFromPptx(fileBase64);
-            parts.push({ text: `Analyze the following presentation slides:\n\n${extractedText}` });
-        } else {
-            // PDF or Image (Native Support)
-            const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
-            parts.push({
-                inlineData: {
-                    data: cleanBase64,
-                    mimeType: mimeType
-                }
-            });
-            parts.push({ text: "Analyze the above document/image." });
+        try {
+            // Branching logic for extraction
+            if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+                const extractedText = await extractTextFromDocx(fileBase64);
+                parts = createTextParts(`Analyze the following document content:\n\n${extractedText}`);
+            } else if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
+                const extractedText = await extractTextFromPptx(fileBase64);
+                parts = createTextParts(`Analyze the following presentation slides:\n\n${extractedText}`);
+            } else {
+                // PDF or Image (Native Support)
+                const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
+                parts = [
+                    {
+                    inlineData: {
+                        data: cleanBase64,
+                        mimeType: mimeType
+                    }
+                    },
+                    { text: "Analyze the above document/image." }
+                ];
+            }
+        } catch (error) {
+            console.warn("File extraction failed. Falling back to description.", error);
+            parts = getFallbackParts();
         }
     } else {
-        parts.push({ text: `\n\nMaterial to analyze:\n---\n${content}\n---` });
+        parts = createTextParts(`\n\nMaterial to analyze:\n---\n${content}\n---`);
     }
 
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        config: {
-            systemInstruction: systemInstruction,
-        },
-        contents: { parts }
-    });
-
-    return response.text || "No summary generated.";
+    try {
+        return await generateSummary(parts);
+    } catch (error) {
+        console.warn("Primary summary generation failed. Falling back to description.", error);
+        return await generateSummary(getFallbackParts());
+    }
   } catch (error: any) {
     console.error("Gemini API Error:", error);
     if (error.message?.includes('403') || error.message?.includes('API key')) {

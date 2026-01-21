@@ -1,13 +1,21 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 
 // Use gemini-3-flash-preview for best speed/cost ratio in production
 const MODEL_NAME = "gemini-3-flash-preview";
 
-// Helper to get the AI instance lazily.
-// This prevents "ReferenceError: process is not defined" crashes at module evaluation time
-// if the environment uses a bundler that injects process.env at runtime or if initialization order matters.
+// Helper to get the AI instance lazily and safely.
 const getAI = () => {
-  return new GoogleGenAI({ apiKey: process.env.API_KEY });
+  let apiKey = "";
+  try {
+    // @ts-ignore
+    if (typeof process !== "undefined" && process.env) {
+        apiKey = process.env.API_KEY || "";
+    }
+  } catch (e) {
+    // Ignore ReferenceError if process is not defined
+  }
+  return new GoogleGenAI({ apiKey });
 };
 
 export const summarizeContent = async (

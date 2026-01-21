@@ -7,9 +7,14 @@ const MODEL_NAME = "gemini-3-flash-preview";
 // Helper to get the AI instance lazily and safely.
 const getAI = () => {
   // @ts-ignore
-  // Vite replaces process.env.API_KEY with the string literal of the key at build time.
-  // We must access it directly. The previous runtime check for `process` failed in browsers.
+  // Access process.env.API_KEY directly. Vite replaces this with the string value.
   const apiKey = process.env.API_KEY;
+  
+  if (!apiKey) {
+    console.error("Gemini API Key is missing. Please check your .env file or environment variables.");
+    throw new Error("API Key is missing");
+  }
+  
   return new GoogleGenAI({ apiKey });
 };
 

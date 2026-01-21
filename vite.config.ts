@@ -10,6 +10,9 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     define: {
+      // Polyfill process.env for safe access in browser
+      'process.env': JSON.stringify(env),
+      // Explicit replacement for API_KEY
       'process.env.API_KEY': JSON.stringify(env.API_KEY),
     },
   };

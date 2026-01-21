@@ -1,10 +1,14 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
-// Initialize with the process.env.API_KEY as per strict guidelines
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 // Use gemini-3-flash-preview for best speed/cost ratio in production
 const MODEL_NAME = "gemini-3-flash-preview";
+
+// Helper to get the AI instance lazily.
+// This prevents "ReferenceError: process is not defined" crashes at module evaluation time
+// if the environment uses a bundler that injects process.env at runtime or if initialization order matters.
+const getAI = () => {
+  return new GoogleGenAI({ apiKey: process.env.API_KEY });
+};
 
 export const summarizeContent = async (
   content: string, 
@@ -12,6 +16,7 @@ export const summarizeContent = async (
   mimeType?: string
 ): Promise<string> => {
   try {
+    const ai = getAI();
     const textPrompt = `You are an expert academic assistant. Your task is to analyze the provided study material and create a highly informative, concise summary for a university student, formatted in markdown. The summary should be easy to digest and focus on what's most important for exam preparation.
 
 Do not use generic phrases like "This document discusses..." or "The material covers...". Get straight to the point.
@@ -54,6 +59,7 @@ Based on the following material, please provide the summary with these exact sec
 
 export const describeImage = async (base64Data: string, mimeType: string): Promise<string> => {
   try {
+    const ai = getAI();
     // Remove data URL prefix if present for clean base64
     const cleanBase64 = base64Data.replace(/^data:.+;base64,/, '');
 
@@ -80,6 +86,7 @@ export const generateStudySet = async (
   mimeType?: string
 ): Promise<any> => {
   try {
+    const ai = getAI();
     let promptText;
     let schema;
 

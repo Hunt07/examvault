@@ -1,19 +1,43 @@
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 
-// Use Vite environment variable for Vercel deployment with safety check
-// Cast to any to prevent TS error: Property 'env' does not exist on type 'ImportMeta'
-const apiKey = (import.meta as any).env?.VITE_API_KEY || "AIzaSyB045vOfwnjSeImdx3RPqZTK23J0cV70m8";
+const apiKey =
+  (import.meta as any).env?.VITE_API_KEY ||
+  (import.meta as any).env?.VITE_GEMINI_API_KEY ||
+  "";
+
 const genAI = new GoogleGenerativeAI(apiKey);
 
-// Using gemini-1.5-flash for best speed/cost ratio in production
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+// Keep flash model (your old one)
+const DEFAULT_MODEL = "gemini-1.5-flash";
 
-export const summarizeContent = async (
-  content: string, 
-  fileBase64?: string, 
+function assertApiKey() {
+  if (!apiKey || apiKey.trim().length === 0) {
+    throw new Error(
+      "Missing API key. Set VITE_API_KEY (or VITE_GEMINI_API_KEY) in .env.local and restart Vite."
+    );
+  }
+}
+
+function canUseInlineData(mimeType?: string) {
+  if (!mimeType) return false;
+  if (mimeType === "application/pdf") return true;
+  if (mimeType.startsWith("image/")) return true;
+  return false; // DOCX/PPTX => prefer extracted text
+}
+
+function cleanBase64(dataUrlOrBase64: string) {
+  return dataUrlOrBase64.replace(/^data:.+;base64,/, "");
+}
+
+export async function summarizeContent(
+  content: string,
+  fileBase64?: string,
   mimeType?: string
-): Promise<string> => {
+): Promise<string> {
   try {
+    assertApiKey();
+    const model = genAI.getGenerativeModel({ model: DEFAULT_MODEL });
+
     const textPrompt = `You are an expert academic assistant. Your task is to analyze the provided study material and create a highly informative, concise summary for a university student, formatted in markdown. The summary should be easy to digest and focus on what's most important for exam preparation.
 
 Do not use generic phrases like "This document discusses..." or "The material covers...". Get straight to the point.
@@ -24,70 +48,49 @@ Based on the following material, please provide the summary with these exact sec
 - **Potential Exam Questions:** A numbered list of 2-3 sample questions that could be asked on an exam based on this material.
 `;
 
-    let parts: any[] = [];
+    // ✅ If we have PDF/image bytes, send inlineData (works best)
+    if (fileBase64 && mimeType && canUseInlineData(mimeType)) {
+      const parts: any[] = [
+        { text: textPrompt },
+        {
+          inlineData: {
+            mimeType,
+            data: cleanBase64(fileBase64),
+          },
+        },
+      ];
 
-    if (fileBase64 && mimeType) {
-        // Remove data URL prefix if present for clean base64
-        const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
-        
-        parts = [
-            { text: textPrompt },
-            {
-                inlineData: {
-                    mimeType: mimeType,
-                    data: cleanBase64
-                }
-            }
-        ];
-    } else {
-        parts = [{ text: `${textPrompt}\n\nMaterial to analyze:\n---\n${content}\n---` }];
+      const result = await model.generateContent(parts);
+      return result.response.text() || "No summary generated.";
     }
 
+    // ✅ Otherwise send extracted text
+    const parts: any[] = [
+      {
+        text: `${textPrompt}\n\nMaterial to analyze:\n---\n${content || ""}\n---`,
+      },
+    ];
     const result = await model.generateContent(parts);
-    const response = result.response;
-    return response.text() || "No summary generated.";
+    return result.response.text() || "No summary generated.";
   } catch (error) {
     console.error("Error generating summary with Gemini:", error);
-    return "Could not generate summary. Please check your VITE_API_KEY configuration.";
+    return "Could not generate summary. Please check your API key configuration (VITE_API_KEY / VITE_GEMINI_API_KEY).";
   }
-};
+}
 
-export const describeImage = async (base64Data: string, mimeType: string): Promise<string> => {
-  try {
-    const textPart = {
-      text: "Analyze this image from a study document. Describe the key information, including any text, diagrams, or main concepts. This will be used as a summary for other students."
-    };
-
-    // Remove data URL prefix if present for clean base64
-    const cleanBase64 = base64Data.replace(/^data:.+;base64,/, '');
-
-    const imagePart = {
-      inlineData: {
-        data: cleanBase64,
-        mimeType: mimeType,
-      },
-    };
-
-    const result = await model.generateContent([textPart, imagePart]);
-    const response = result.response;
-    return response.text() || "No description generated.";
-  } catch (error) {
-    console.error("Error describing image with Gemini:", error);
-    return "Could not generate a description for the image.";
-  }
-};
-
-export const generateStudySet = async (
-  content: string, 
-  setType: 'flashcards' | 'quiz',
-  fileBase64?: string, 
+export async function generateStudySet(
+  content: string,
+  setType: "flashcards" | "quiz",
+  fileBase64?: string,
   mimeType?: string
-): Promise<any> => {
+): Promise<any> {
   try {
-    let promptText;
-    let schema;
+    assertApiKey();
 
-    if (setType === 'flashcards') {
+    let promptText = "";
+    let schema: any;
+
+    if (setType === "flashcards") {
       promptText = `Analyze the provided study material and generate a set of 5-10 flashcards.`;
       schema = {
         type: SchemaType.ARRAY,
@@ -97,7 +100,7 @@ export const generateStudySet = async (
             term: { type: SchemaType.STRING },
             definition: { type: SchemaType.STRING },
           },
-          required: ['term', 'definition'],
+          required: ["term", "definition"],
         },
       };
     } else {
@@ -105,49 +108,46 @@ export const generateStudySet = async (
       schema = {
         type: SchemaType.ARRAY,
         items: {
-            type: SchemaType.OBJECT,
-            properties: {
-                question: { type: SchemaType.STRING },
-                options: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
-                correctAnswer: { type: SchemaType.STRING },
-            },
-            required: ['question', 'options', 'correctAnswer'],
-        }
+          type: SchemaType.OBJECT,
+          properties: {
+            question: { type: SchemaType.STRING },
+            options: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+            correctAnswer: { type: SchemaType.STRING },
+          },
+          required: ["question", "options", "correctAnswer"],
+        },
       };
     }
 
-    // Initialize a model with generation config for JSON
     const jsonModel = genAI.getGenerativeModel({
-        model: "gemini-1.5-flash",
-        generationConfig: {
-            responseMimeType: "application/json",
-            responseSchema: schema,
-        }
+      model: DEFAULT_MODEL,
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: schema,
+      },
     });
 
-    let parts: any[] = [];
-    if (fileBase64 && mimeType) {
-        const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
-        parts = [
-            { text: promptText },
-            {
-                inlineData: {
-                    mimeType: mimeType,
-                    data: cleanBase64
-                }
-            }
-        ];
-    } else {
-        parts = [{ text: `${promptText}\n\nMaterial to analyze:\n---\n${content}\n---` }];
+    // ✅ If we have PDF/image bytes, send inlineData
+    if (fileBase64 && mimeType && canUseInlineData(mimeType)) {
+      const parts: any[] = [
+        { text: promptText },
+        {
+          inlineData: {
+            mimeType,
+            data: cleanBase64(fileBase64),
+          },
+        },
+      ];
+      const result = await jsonModel.generateContent(parts);
+      return JSON.parse(result.response.text());
     }
-    
+
+    // ✅ Otherwise send extracted text
+    const parts: any[] = [{ text: `${promptText}\n\nMaterial to analyze:\n---\n${content || ""}\n---` }];
     const result = await jsonModel.generateContent(parts);
-    const response = result.response;
-    const text = response.text();
-    
-    return JSON.parse(text);
+    return JSON.parse(result.response.text());
   } catch (error) {
     console.error(`Error generating ${setType} with Gemini:`, error);
     return [];
   }
-};
+}

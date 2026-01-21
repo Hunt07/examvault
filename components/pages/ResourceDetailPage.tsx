@@ -436,8 +436,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
           
           if (!base64) {
               // Graceful Fallback: If we can't get the file (CORS), we don't break.
-              // We inform the user via toast and guide the AI to use metadata.
-              showToast("Cannot read file content directly. AI will use metadata summary.", "info");
+              // We guide the AI to use metadata silently.
               additionalText += "\n[System Note: The file content could not be accessed directly due to browser security restrictions. Please generate the best possible summary/guide based on the Title, Course, and Description provided above. Infer standard topics covered in this subject.]";
           } else {
               // Fix: Extract mimeType from base64 if it wasn't available in the resource metadata

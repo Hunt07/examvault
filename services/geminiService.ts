@@ -66,57 +66,13 @@ const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
     return bytes.buffer;
 };
 
-// Helper: Manual XML Text Extraction using DOMParser (Fallback)
-const extractXmlTextByTag = (xmlString: string, tagName: string): string => {
-    try {
-        const parser = new DOMParser();
-        const xmlDoc = parser.parseFromString(xmlString, "text/xml");
-        const textNodes = xmlDoc.getElementsByTagName("*");
-        let text = "";
-        
-        for (let i = 0; i < textNodes.length; i++) {
-            const node = textNodes[i];
-            // Check localName to ignore namespaces (e.g., 'w:t' -> 't', 'a:t' -> 't')
-            if (node.localName === tagName) {
-                if (node.textContent) {
-                    text += node.textContent + " ";
-                }
-            }
-        }
-        return text.trim();
-    } catch (e) {
-        console.error("XML Parse Error", e);
-        return "";
-    }
-};
-
 // Helper: Extract text from DOCX
 const extractTextFromDocx = async (fileBase64: string): Promise<string> => {
     try {
         const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
         const arrayBuffer = base64ToArrayBuffer(cleanBase64);
-        
-        // 1. Try Mammoth (Standard Library)
-        try {
-            const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
-            const text = result.value.trim();
-            if (text.length > 50) return text; // If we got a decent amount of text, return it
-        } catch (err) {
-            console.warn("Mammoth extraction failed, trying manual fallback", err);
-        }
-
-        // 2. Fallback: Manual XML Parsing of word/document.xml
-        // This helps catch text in textboxes or headers that mammoth might skip
-        const zip = await JSZip.loadAsync(arrayBuffer);
-        const docXml = await zip.file("word/document.xml")?.async("string");
-        
-        if (docXml) {
-            // 't' is the tag for text in WordXML (<w:t>)
-            const manualText = extractXmlTextByTag(docXml, "t");
-            if (manualText.length > 0) return manualText;
-        }
-
-        return "";
+        const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+        return result.value;
     } catch (e) {
         console.error("DOCX Extraction failed", e);
         throw new Error("Failed to extract text from Word document.");
@@ -130,38 +86,32 @@ const extractTextFromPptx = async (fileBase64: string): Promise<string> => {
         const arrayBuffer = base64ToArrayBuffer(cleanBase64);
         const zip = await JSZip.loadAsync(arrayBuffer);
         
-        const xmlFiles: { path: string, file: any }[] = [];
-        
-        // Scan for slide XML files
-        zip.forEach((relativePath, file) => {
-            if (relativePath.match(/ppt\/slides\/slide\d+\.xml/i)) {
-                xmlFiles.push({ path: relativePath, file: file });
+        const slideFiles: any[] = [];
+        zip.folder("ppt/slides")?.forEach((relativePath, file) => {
+            if (relativePath.match(/slide\d+\.xml/)) {
+                slideFiles.push({ path: relativePath, file: file });
             }
         });
 
         // Sort slides naturally (slide1, slide2, slide10...)
-        xmlFiles.sort((a, b) => {
-            const numA = parseInt(a.path.match(/slide(\d+)\.xml/)?.[1] || "0");
-            const numB = parseInt(b.path.match(/slide(\d+)\.xml/)?.[1] || "0");
+        slideFiles.sort((a, b) => {
+            const numA = parseInt(a.path.match(/\d+/)?.[0] || "0");
+            const numB = parseInt(b.path.match(/\d+/)?.[0] || "0");
             return numA - numB;
         });
 
         let extractedText = "";
-        
-        for (const slide of xmlFiles) {
+        for (const slide of slideFiles) {
             const xmlContent = await slide.file.async("string");
-            
-            // Use DOMParser instead of Regex for robust XML handling
-            // 't' is the tag for text in DrawingML (<a:t>)
-            const slideText = extractXmlTextByTag(xmlContent, "t");
-
-            if (slideText.trim()) {
-                const slideNum = slide.path.match(/slide(\d+)\.xml/)?.[1];
-                extractedText += `[Slide ${slideNum}]: ${slideText}\n\n`;
+            // Simple Regex to extract text from XML <a:t> tags (PowerPoint text nodes)
+            const textMatches = xmlContent.match(/<a:t[^>]*>(.*?)<\/a:t>/g);
+            if (textMatches) {
+                const slideText = textMatches.map((t: string) => t.replace(/<\/?a:t[^>]*>/g, '')).join(" ");
+                extractedText += `[Slide]: ${slideText}\n\n`;
             }
         }
         
-        return extractedText.trim();
+        return extractedText || "No text content found in slides.";
     } catch (e) {
         console.error("PPTX Extraction failed", e);
         throw new Error("Failed to extract text from PowerPoint presentation.");
@@ -179,14 +129,14 @@ export const summarizeContent = async (
   }
 
   try {
-    const systemInstruction = `You are an expert academic assistant. Your task is to analyze the provided study material (or context about it) and create a highly informative, concise summary for a university student, formatted in markdown. The summary should be easy to digest and focus on what's most important for exam preparation.
+    const systemInstruction = `You are an expert academic assistant. Your task is to analyze the provided study material and create a highly informative, concise summary for a university student, formatted in markdown. The summary should be easy to digest and focus on what's most important for exam preparation.
 
 Do not use generic phrases like "This document discusses..." or "The material covers...". Get straight to the point.
 
-Based on the available context, please provide the summary with these exact sections:
-- **Key Concepts:** A bulleted list of the most important terms, definitions, and concepts likely covered.
-- **Main Takeaways:** 2-3 sentences summarizing the core message or likely conclusions.
-- **Potential Exam Questions:** A numbered list of 2-3 sample questions that could be asked on an exam based on this topic.`;
+Based on the following material, please provide the summary with these exact sections:
+- **Key Concepts:** A bulleted list of the most important terms, definitions, and concepts.
+- **Main Takeaways:** 2-3 sentences summarizing the core message or conclusions.
+- **Potential Exam Questions:** A numbered list of 2-3 sample questions that could be asked on an exam based on this material.`;
 
     const parts: any[] = [];
     
@@ -199,18 +149,10 @@ Based on the available context, please provide the summary with these exact sect
         // Branching logic for extraction
         if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
             const extractedText = await extractTextFromDocx(fileBase64);
-            // Check for empty text result BEFORE sending to AI
-            if (!extractedText || extractedText.length < 50) {
-                return "⚠️ **No Readable Text Found**\n\nThe AI could not extract enough text from this Word document.\n\n**Possible reasons:**\n- The document contains scanned images instead of text.\n- The file is empty or corrupted.\n\n*Try converting the file to PDF first.*";
-            }
-            parts.push({ text: `Analyze the following document content:\n\n${extractedText}\n\nContext:\n${content}` });
+            parts.push({ text: `Analyze the following document content:\n\n${extractedText}` });
         } else if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
             const extractedText = await extractTextFromPptx(fileBase64);
-            // Check for empty text result BEFORE sending to AI
-            if (!extractedText || extractedText.length < 20) {
-                return "⚠️ **No Readable Text Found**\n\nThe AI could not extract text from this presentation.\n\n**Possible reasons:**\n- The slides contain only images or screenshots (scanned).\n- The text is inside complex shapes/SmartArt not supported by the extractor.\n\n*Try converting the file to PDF first for better results.*";
-            }
-            parts.push({ text: `Analyze the following presentation slides:\n\n${extractedText}\n\nContext:\n${content}` });
+            parts.push({ text: `Analyze the following presentation slides:\n\n${extractedText}` });
         } else {
             // PDF or Image (Native Support)
             const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
@@ -220,12 +162,10 @@ Based on the available context, please provide the summary with these exact sect
                     mimeType: mimeType
                 }
             });
-            // Include metadata/context to help the model if file content is ambiguous
-            parts.push({ text: `Analyze the above document/image.\n\nContext:\n${content}` });
+            parts.push({ text: "Analyze the above document/image." });
         }
     } else {
-        // Metadata only fallback
-        parts.push({ text: `\n\nContext/Metadata:\n---\n${content}\n---` });
+        parts.push({ text: `\n\nMaterial to analyze:\n---\n${content}\n---` });
     }
 
     const response = await ai.models.generateContent({
@@ -264,7 +204,7 @@ export const generateStudySet = async (
     let schema;
 
     if (setType === 'flashcards') {
-      promptText = `Analyze the provided study material (or infer from context) and generate a set of 5-10 flashcards.`;
+      promptText = `Analyze the provided study material and generate a set of 5-10 flashcards.`;
       schema = {
         type: Type.ARRAY,
         items: {
@@ -277,7 +217,7 @@ export const generateStudySet = async (
         },
       };
     } else {
-      promptText = `Analyze the provided study material (or infer from context) and generate a 5-question multiple-choice quiz.`;
+      promptText = `Analyze the provided study material and generate a 5-question multiple-choice quiz.`;
       schema = {
         type: Type.ARRAY,
         items: {
@@ -307,19 +247,14 @@ export const generateStudySet = async (
         // Branching logic for extraction
         if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
             const extractedText = await extractTextFromDocx(fileBase64);
-            if (!extractedText || extractedText.length < 50) return [];
-            parts.push({ text: `${promptText}\n\nMaterial:\n${extractedText}\n\nContext:\n${content}` });
+            parts.push({ text: `${promptText}\n\nMaterial:\n${extractedText}` });
         } else if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
             const extractedText = await extractTextFromPptx(fileBase64);
-            if (!extractedText || extractedText.length < 20) return [];
-            parts.push({ text: `${promptText}\n\nMaterial:\n${extractedText}\n\nContext:\n${content}` });
+            parts.push({ text: `${promptText}\n\nMaterial:\n${extractedText}` });
         } else {
             // PDF or Image
             const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
-            
-            // Include metadata context
-            parts.push({ text: `${promptText}\n\nContext:\n${content}` });
-            
+            parts.push({ text: promptText });
             parts.push({
                 inlineData: {
                     data: cleanBase64,
@@ -328,7 +263,7 @@ export const generateStudySet = async (
             });
         }
     } else {
-        parts.push({ text: `${promptText}\n\nContext/Metadata:\n---\n${content}\n---` });
+        parts.push({ text: `${promptText}\n\nMaterial:\n---\n${content}\n---` });
     }
     
     const response = await ai.models.generateContent({

@@ -289,7 +289,7 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
             reader.readAsDataURL(blob);
         });
     } catch (error) {
-        console.warn("Failed to download file for AI analysis (CORS suspected):", error);
+        // Quietly fail to undefined so we fallback to metadata analysis
         return undefined;
     }
   };
@@ -312,11 +312,6 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
       setIsStudyLoading(true);
       const base64 = await resolveFileBase64();
       
-      // Warn if base64 is missing but we expected a file based on mime type
-      if (!base64 && resource.fileUrl && !resource.fileUrl.startsWith('data:') && !resource.fileUrl.includes('localhost')) {
-          showToast("CORS blocked file access. Generating content based on title/metadata only.", "info");
-      }
-
       const contentToAnalyze = base64 ? getMetadataContext() : (resource.contentForAI || getMetadataContext());
 
       // Parallel fetch

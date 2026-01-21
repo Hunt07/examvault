@@ -1,6 +1,6 @@
 
 import React, { useState, useContext, useMemo, useRef, useEffect, useCallback } from 'react';
-import { AppContext } from '../../App';
+import { AppContext } from '../../components/AppContext';
 import type { Resource, User } from '../../types';
 import { ResourceType, SemesterIntake } from '../../types';
 import ResourceCard from '../ResourceCard';

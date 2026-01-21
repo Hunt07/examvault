@@ -1,6 +1,7 @@
 
 import React, { useContext, useState } from 'react';
-import { AppContext, View } from '../App';
+import { AppContext } from '../components/AppContext';
+import { View } from '../types';
 import { LayoutDashboard, MessageSquare, BarChart3, Send, ClipboardList, Shield } from 'lucide-react';
 
 const SideNav: React.FC = () => {

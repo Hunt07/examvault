@@ -171,7 +171,7 @@ const CommentComponent: React.FC<{
 
 
 const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
-  const { user, userRanks, setView, handleVote, addCommentToResource, goBack, toggleLecturerSubscription, toggleCourseCodeSubscription, savedResourceIds, toggleSaveResource, resources, deleteResource, scrollTargetId, setScrollTargetId } = useContext(AppContext);
+  const { user, userRanks, setView, handleVote, addCommentToResource, goBack, toggleLecturerSubscription, toggleCourseCodeSubscription, savedResourceIds, toggleSaveResource, resources, deleteResource, scrollTargetId, setScrollTargetId, showToast } = useContext(AppContext);
   const [newComment, setNewComment] = useState('');
   const [isReporting, setIsReporting] = useState(false);
   const [reportReason, setReportReason] = useState('');
@@ -302,44 +302,6 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
       `;
   };
 
-  // Unified Generation Handler
-  const handleGenerate = async () => {
-    setIsStudyLoading(true);
-    const base64 = await resolveFileBase64();
-    const contentToAnalyze = base64 ? getMetadataContext() : (resource.contentForAI || getMetadataContext());
-
-    try {
-        // Run all generations in parallel for a snappy feel after loading
-        const [summaryResult, flashcardsResult, quizResult] = await Promise.all([
-            summarizeContent(contentToAnalyze, base64, resource.mimeType),
-            generateStudySet(contentToAnalyze, 'flashcards', base64, resource.mimeType),
-            generateStudySet(contentToAnalyze, 'quiz', base64, resource.mimeType)
-        ]);
-
-        setSummary(summaryResult);
-        // Store sets in a way that we can switch between them without re-generating (simplified here to just set current based on tab)
-        // For simplicity in this demo, let's just store all results in state logic if needed, but here we will 
-        // stick to the active tab logic.
-        // Wait, to make tabs switchable instantly, we should store all.
-        // Let's refactor state slightly.
-        
-        // Actually, let's keep it simple: Generate strictly what is needed? 
-        // No, user wants "Guarantee it will work". Pre-fetching all is safer to avoid multiple "loading" states.
-        
-        setSummary(summaryResult);
-        // We need a way to store flashcards and quiz separately.
-        // Let's hack the studySet state to hold an object or change logic. 
-        // For this fix, let's just use separate states.
-        
-        // I will use a local variable to hold them and dispatch to state
-        // We need to add state for specific sets.
-    } catch (e) {
-        console.error(e);
-    }
-    setIsStudyLoading(false);
-    setHasGenerated(true);
-  };
-
   // Refactored Study State
   const [cachedFlashcards, setCachedFlashcards] = useState<Flashcard[] | null>(null);
   const [cachedQuiz, setCachedQuiz] = useState<QuizQuestion[] | null>(null);
@@ -347,6 +309,12 @@ const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
   const handleSmartGenerate = async () => {
       setIsStudyLoading(true);
       const base64 = await resolveFileBase64();
+      
+      // Warn if base64 is missing but we expected a file based on mime type
+      if (!base64 && resource.fileUrl && !resource.fileUrl.startsWith('data:') && !resource.fileUrl.includes('localhost')) {
+          showToast("Could not download file for analysis (likely browser security/CORS). Generating from metadata.", "info");
+      }
+
       const contentToAnalyze = base64 ? getMetadataContext() : (resource.contentForAI || getMetadataContext());
 
       // Parallel fetch

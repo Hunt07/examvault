@@ -1,6 +1,5 @@
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import type { User, Resource, ForumPost, Comment, ForumReply, Notification, Conversation, DirectMessage, ResourceRequest, Attachment, Report, LogEntry, View } from './types';
+import type { User, Resource, ForumPost, Comment, ForumReply, Notification, Conversation, DirectMessage, ResourceRequest, Attachment, Report, LogEntry } from './types';
 import { NotificationType, MessageStatus, ResourceRequestStatus } from './types';
 import AuthPage from './components/pages/AuthPage';
 import DashboardPage from './components/pages/DashboardPage';
@@ -11,13 +10,12 @@ import ProfilePage from './components/pages/ProfilePage';
 import MessagesPage from './components/pages/MessagesPage';
 import LeaderboardPage from './components/pages/LeaderboardPage';
 import ResourceRequestsPage from './components/pages/ResourceRequestsPage';
-import AdminPage from './components/pages/AdminPage'; 
+import AdminPage from './components/pages/AdminPage'; // Import Admin Page
 import SideNav from './components/SideNav';
 import Header from './components/Header';
 import UploadModal, { generateFilePreview } from './components/UploadModal';
 import TooltipGuide from './components/TooltipGuide';
 import ToastNotification from './components/ToastNotification';
-import { AppContext } from './components/AppContext';
 
 // Firebase Imports
 import { auth, db, storage } from './services/firebase';
@@ -28,6 +26,79 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { Loader2, AlertCircle } from 'lucide-react';
+
+export type View = 'dashboard' | 'resourceDetail' | 'discussions' | 'forumDetail' | 'profile' | 'publicProfile' | 'messages' | 'leaderboard' | 'requests' | 'admin';
+
+interface AppContextType {
+  user: User | null;
+  users: User[];
+  resources: Resource[];
+  forumPosts: ForumPost[];
+  notifications: Notification[];
+  conversations: Conversation[];
+  directMessages: DirectMessage[];
+  resourceRequests: ResourceRequest[];
+  reports: Report[]; // Added reports
+  logs: LogEntry[]; // Added logs
+  view: View;
+  setView: (view: View, id?: string, options?: { replace?: boolean }) => void;
+  logout: () => void;
+  isDarkMode: boolean;
+  toggleDarkMode: () => void;
+  userRanks: Map<string, number>;
+  savedResourceIds: string[];
+  savedPostIds: string[];
+  savedRequestIds: string[];
+  toggleSaveResource: (resourceId: string) => void;
+  toggleSavePost: (postId: string) => void;
+  toggleSaveRequest: (requestId: string) => void;
+  handleVote: (resourceId: string, action: 'up' | 'down') => void;
+  addCommentToResource: (resourceId: string, text: string, parentId: string | null, file?: File) => void;
+  handleCommentVote: (resourceId: string, commentId: string) => void;
+  deleteCommentFromResource: (resourceId: string, comment: Comment) => Promise<void>;
+  addForumPost: (post: { title: string; courseCode: string; body: string; tags: string[] }, file?: File) => void;
+  handlePostVote: (postId: string, action: 'up' | 'down') => void;
+  deleteForumPost: (postId: string) => Promise<void>;
+  addReplyToPost: (postId: string, text: string, parentId: string | null, file?: File) => void;
+  handleReplyVote: (postId: string, replyId: string) => void;
+  deleteReplyFromPost: (postId: string, reply: ForumReply) => Promise<void>;
+  toggleVerifiedAnswer: (postId: string, replyId: string) => void;
+  addResourceRequest: (req: { title: string; courseCode: string; details: string }, file?: File) => void;
+  deleteResourceRequest: (requestId: string) => Promise<void>;
+  openUploadForRequest: (requestId: string) => void;
+  toggleUserSubscription: (userId: string) => void;
+  toggleLecturerSubscription: (lecturerName: string) => void;
+  toggleCourseCodeSubscription: (courseCode: string) => void;
+  updateUserProfile: (data: Partial<User>) => void;
+  // Admin Functions
+  toggleUserRole: (userId: string, role: 'student' | 'admin') => void;
+  toggleUserStatus: (userId: string, status: 'active' | 'banned') => void;
+  resolveReport: (reportId: string, status: 'resolved' | 'dismissed') => void;
+  
+  sendMessage: (conversationId: string, text: string) => void;
+  editMessage: (messageId: string, newText: string) => void;
+  deleteMessage: (messageId: string) => void;
+  startConversation: (userId: string, initialMessage?: string) => void;
+  hideConversation: (conversationId: string) => void;
+  sendDirectMessageToUser: (userId: string, text: string) => void;
+  markNotificationAsRead: (id: string) => void;
+  markAllNotificationsAsRead: () => void;
+  clearAllNotifications: () => void;
+  markMessagesAsRead: (conversationId: string) => void;
+  goBack: () => void;
+  deleteResource: (resourceId: string, fileUrl: string, previewUrl?: string) => Promise<void>;
+  deactivateAccount: () => Promise<void>; // Added deactivateAccount
+  deleteAccount: () => Promise<void>; // Added Permanent Delete
+  hasUnreadMessages: boolean;
+  hasUnreadDiscussions: boolean;
+  isLoading: boolean;
+  areResourcesLoading: boolean;
+  scrollTargetId: string | null;
+  setScrollTargetId: (id: string | null) => void;
+  showToast: (message: string, type?: 'success' | 'error' | 'info', points?: number) => void;
+}
+
+export const AppContext = React.createContext<AppContextType>({} as AppContextType);
 
 // Helper to remove undefined values which Firestore hates
 const sanitizeForFirestore = (obj: any): any => {
@@ -130,9 +201,29 @@ const propagateUserUpdates = async (userId: string, updateData: any) => {
 
 const MASTER_ADMIN_EMAIL = 'b09220024@student.unimy.edu.my';
 
+const FirebaseSetup = () => (
+  <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+    <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-lg border border-red-100">
+      <div className="flex items-center gap-3 text-red-600 mb-4">
+        <AlertCircle size={32} />
+        <h2 className="text-xl font-bold">Firebase Configuration Error</h2>
+      </div>
+      <p className="text-slate-600 mb-4">
+        The application could not connect to Firebase services. This is likely due to missing environment variables.
+      </p>
+      <div className="bg-slate-100 p-4 rounded-lg overflow-x-auto">
+        <code className="text-xs text-slate-700">
+          Check your .env file or Vercel/Netlify configuration.
+        </code>
+      </div>
+    </div>
+  </div>
+);
+
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [authError, setAuthError] = useState<{title: string, message: string, code?: string, details?: string} | null>(null);
   const [areResourcesLoading, setAreResourcesLoading] = useState(true);
   const [view, setViewState] = useState<View>('dashboard');
   const [viewHistory, setViewHistory] = useState<{ view: View; id?: string }[]>([]);
@@ -189,6 +280,7 @@ const App: React.FC = () => {
 
     const updatePresence = async () => {
         const now = Date.now();
+        // Throttle updates to at least every 10 seconds to avoid spamming on focus/click
         if (now - lastUpdateRef.current < 10000) return;
 
         try {
@@ -202,7 +294,9 @@ const App: React.FC = () => {
         }
     };
 
-    updatePresence(); 
+    updatePresence(); // Initial update
+    
+    // Increased frequency to 30 seconds for near "real-time" accuracy
     const interval = setInterval(updatePresence, 30 * 1000); 
 
     const handleInteraction = () => {
@@ -213,7 +307,7 @@ const App: React.FC = () => {
 
     document.addEventListener("visibilitychange", handleInteraction);
     window.addEventListener("focus", handleInteraction);
-    window.addEventListener("click", handleInteraction);
+    window.addEventListener("click", handleInteraction); // Update on clicks too
 
     return () => {
         clearInterval(interval);
@@ -266,6 +360,7 @@ const App: React.FC = () => {
                 updates.subscriptions = { users: [], lecturers: [], courseCodes: [] };
                 hasUpdates = true;
             }
+            // Ensure Role and Status exist
             if (!userData.role) {
                 userData.role = 'student';
                 updates.role = 'student';
@@ -287,6 +382,7 @@ const App: React.FC = () => {
                 hasUpdates = true;
             }
 
+            // Check if user is banned
             if (userData.status === 'banned') {
                 await firebaseAuth.signOut(auth);
                 setUser(null);
@@ -295,12 +391,14 @@ const App: React.FC = () => {
                 return;
             }
 
+            // Handle Reactivation
             if (userData.status === 'deactivated') {
                 updates.status = 'active';
                 userData.status = 'active';
                 hasUpdates = true;
                 showToast("Welcome back! Your account has been reactivated.", "success");
                 
+                // Log Reactivation
                 try {
                     await addDoc(collection(db, "logs"), {
                         actorId: userData.id,
@@ -322,6 +420,7 @@ const App: React.FC = () => {
 
             setUser(userData);
             
+            // Trigger tour if not done
             if (!localStorage.getItem(`examvault_tour_${userData.id}`)) {
                 setRunTour(true);
             }
@@ -330,9 +429,10 @@ const App: React.FC = () => {
             const displayName = firebaseUser.displayName || "Student";
             const defaultAvatar = generateDefaultAvatar(displayName);
             
+            // Check for lecturer email
             const isLecturerEmail = firebaseUser.email?.endsWith('@unimy.edu.my') && !firebaseUser.email?.endsWith('@student.unimy.edu.my');
             const role = isLecturerEmail ? 'lecturer' : 'student';
-            const bio = isLecturerEmail ? 'Lecturer' : 'Student';
+            const bio = isLecturerEmail ? 'Lecturer' : 'Student'; // Default bio for new lecturers
             const course = isLecturerEmail ? 'Lecturer' : 'Student';
 
             const newUser: User = {
@@ -359,6 +459,7 @@ const App: React.FC = () => {
             
             await setDoc(userRef, newUser);
             
+            // Log New Registration / Re-registration
             try {
                 await addDoc(collection(db, "logs"), {
                     actorId: newUser.id,
@@ -371,7 +472,7 @@ const App: React.FC = () => {
             } catch(e) { console.error("Log error", e); }
 
             setUser(newUser);
-            setRunTour(true);
+            setRunTour(true); // Always run for new users
           }
         } catch (error) {
           console.error("Error fetching user data:", error);
@@ -386,6 +487,7 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
+  // Central logging function
   const logAction = async (actionType: LogEntry['actionType'], description: string, targetId?: string) => {
       if (!db || !user) return;
       try {
@@ -398,20 +500,22 @@ const App: React.FC = () => {
               targetId: targetId || null,
               timestamp: new Date().toISOString()
           });
-      } catch (e) {
+      } catch (e: any) {
           console.error("Failed to log action", e);
       }
   };
 
+  // ... (useEffect for data fetching snapshots remains the same) ...
   useEffect(() => {
     if (!user || !db) return;
 
     setAreResourcesLoading(true);
 
     const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
+      // 1. Fetch raw data
       let rawUsers = snapshot.docs.map(docSnap => ({ ...docSnap.data(), id: docSnap.id } as User));
 
-      // ADMIN CLEANUP
+      // 2. MASTER ADMIN CLEANUP
       const adminAccounts = rawUsers.filter(u => u.email.toLowerCase().trim() === MASTER_ADMIN_EMAIL.toLowerCase());
 
       if (adminAccounts.length > 0) {
@@ -440,6 +544,7 @@ const App: React.FC = () => {
           }
       }
 
+      // Sort users for display list (admin priority)
       rawUsers.sort((a, b) => {
           const emailA = a.email.toLowerCase().trim();
           const emailB = b.email.toLowerCase().trim();
@@ -537,7 +642,8 @@ const App: React.FC = () => {
             setReports(fetchedReports);
         });
 
-        const logsQuery = query(collection(db, "logs"), orderBy("timestamp", "desc"));
+        // Fetch logs for Admin
+        const logsQuery = query(collection(db, "logs"), orderBy("timestamp", "desc")); // Fetch most recent logs
         unsubLogs = onSnapshot(logsQuery, (snapshot) => {
             const fetchedLogs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LogEntry));
             setLogs(fetchedLogs);
@@ -607,7 +713,7 @@ const App: React.FC = () => {
           await updateDoc(userRef, { status: 'deactivated' });
           await logAction('account', 'Account Deactivated');
           await logout();
-      } catch (error) { console.error("Failed to deactivate", error); showToast("Failed to deactivate account.", "error"); }
+      } catch (error: any) { console.error("Failed to deactivate", error); showToast("Failed to deactivate account.", "error"); }
   };
 
   const deleteAccount = async () => {
@@ -628,13 +734,14 @@ const App: React.FC = () => {
           const reqSnap = await getDocs(reqQuery);
           for (const docSnap of reqSnap.docs) { await deleteDoc(doc(db, "resourceRequests", docSnap.id)); }
 
+          // Log before deletion
           await logAction('account', 'Account Deleted Permanently');
 
           await deleteDoc(doc(db, "users", user.id));
           localStorage.removeItem(`examvault_tour_${user.id}`);
           if (auth.currentUser) await auth.currentUser.delete(); else await logout();
           window.location.reload();
-      } catch (error) { setIsLoading(false); showToast("Failed to delete account.", "error"); }
+      } catch (error: any) { setIsLoading(false); showToast("Failed to delete account.", "error"); }
   };
 
   const toggleSaveResource = async (resourceId: string) => { if (!user) return; const isSaved = user.savedResourceIds?.includes(resourceId); await updateDoc(doc(db, "users", user.id), { savedResourceIds: isSaved ? arrayRemove(resourceId) : arrayUnion(resourceId) }); };
@@ -643,7 +750,9 @@ const App: React.FC = () => {
 
   const earnPoints = async (amount: number, message: string) => { if (!user) return; await updateDoc(doc(db, "users", user.id), { points: increment(amount), weeklyPoints: increment(amount) }); setToast({ message, points: amount, type: amount > 0 ? 'success' : 'info' }); };
   
+  // Rank calculation based strictly on points and then ID for determinism
   const userRanks = useMemo(() => {
+      // Sort primarily by points (desc), secondarily by ID (asc) to prevent jitter on equal scores
       const sortedByPoints = [...users].sort((a, b) => b.points - a.points || a.id.localeCompare(b.id));
       const r = new Map();
       sortedByPoints.forEach((u, i) => r.set(u.id, i));
@@ -703,6 +812,7 @@ const App: React.FC = () => {
               earnPoints(25, "Resource Uploaded!");
           }
 
+          // Notify subscribers
           const subscribers = users.filter(u => 
              u.subscriptions.users.includes(user.id) || 
              (newResource.lecturer && u.subscriptions.lecturers.includes(newResource.lecturer)) ||
@@ -725,23 +835,31 @@ const App: React.FC = () => {
 
           setIsUploadModalOpen(false);
           showToast("Upload successful!", "success");
-      } catch (error) { console.error(error); setToast({ message: "Upload failed.", type: 'error' }); } finally { setIsUploading(false); }
+      } catch (error: any) { console.error(error); setToast({ message: "Upload failed.", type: 'error' }); } finally { setIsUploading(false); }
   };
 
   const deleteResource = async (resourceId: string, fileUrl: string, previewUrl?: string) => {
       if (!user || !db) return;
+      
       try {
+          // 1. Get the resource first to identify the author and calculate point reduction
           const resRef = doc(db, "resources", resourceId);
           const resSnap = await getDoc(resRef);
+          
           if (!resSnap.exists()) {
              throw new Error("Resource not found");
           }
+          
           const resourceData = resSnap.data() as Resource;
           const authorId = resourceData.author.id;
 
+          // 2. Delete the document
           await deleteDoc(resRef);
+          
+          // Log deletion
           await logAction('delete', `Deleted resource: ${resourceData.title}`, resourceId);
 
+          // 3. Delete files from Storage
           if (fileUrl.includes('firebasestorage')) {
              try {
                 const fileRef = ref(storage, fileUrl);
@@ -755,6 +873,8 @@ const App: React.FC = () => {
              } catch(e) { console.warn("Could not delete preview", e); }
           }
 
+          // 4. Deduct Points & Update Stats
+          // Standard upload points = 25. Decrement upload count.
           const userRef = doc(db, "users", authorId);
           await updateDoc(userRef, {
               points: increment(-25),
@@ -762,12 +882,16 @@ const App: React.FC = () => {
               uploadCount: increment(-1)
           });
 
+          // 5. Navigate away if on detail view
           if (view === 'resourceDetail' && selectedId === resourceId) { 
               setViewState('dashboard'); 
               setSelectedId(undefined); 
           }
+          
+          // 6. Show notification with negative points
           showToast("Resource deleted.", "info", -25);
-      } catch (error) { 
+
+      } catch (error: any) { 
           console.error(error); 
           setToast({ message: "Failed to delete resource.", type: 'error' }); 
       }
@@ -804,6 +928,7 @@ const App: React.FC = () => {
 
   const addCommentToResource = async (resourceId: string, text: string, parentId: string | null, file?: File) => {
       if (!user || !db) return;
+      
       let attachment = undefined;
       if (file) {
           const storageRef = ref(storage, `attachments/${Date.now()}_${file.name}`);
@@ -811,6 +936,7 @@ const App: React.FC = () => {
           const url = await getDownloadURL(storageRef);
           attachment = { type: file.type.startsWith('image/') ? 'image' : 'file', url, name: file.name, size: (file.size / 1024).toFixed(0) + ' KB' };
       }
+
       const newComment = { 
           id: `c-${Date.now()}`, 
           author: sanitizeForFirestore(user), 
@@ -822,11 +948,15 @@ const App: React.FC = () => {
           attachment 
       };
       await updateDoc(doc(db, "resources", resourceId), { comments: arrayUnion(sanitizeForFirestore(newComment)) });
+      
       const res = resources.find(r => r.id === resourceId);
       if (res) {
+          // 1. Notify Resource Author (if they didn't write the comment)
           if (res.author.id !== user.id) {
               await sendNotification(res.author.id, user.id, NotificationType.NewForumPost, `${user.name} commented on your resource '${res.title}'`, { resourceId: res.id, commentId: newComment.id });
           }
+
+          // 2. Notify Parent Comment Author (if reply and not self, and distinct from resource author)
           if (parentId) {
               const parentComment = res.comments.find(c => c.id === parentId);
               if (parentComment && parentComment.author.id !== user.id && parentComment.author.id !== res.author.id) {
@@ -848,7 +978,7 @@ const App: React.FC = () => {
              await logAction('delete', `Deleted comment from resource ${data.title}`, resourceId);
           }
           setToast({ message: "Comment deleted.", type: 'success' });
-      } catch (error) {
+      } catch (error: any) {
           console.error("Failed to delete comment", error);
           setToast({ message: "Failed to delete comment.", type: 'error' });
       }
@@ -906,7 +1036,9 @@ const App: React.FC = () => {
               await logAction('delete', `Deleted discussion post: ${data.title}`, postId);
               setViewState('discussions'); 
           }
-      } catch (e) { console.error(e); }
+      } catch (e: any) {
+          console.error(e);
+      }
   };
   
   const handlePostVote = async (postId: string, action: 'up' | 'down') => { 
@@ -967,7 +1099,7 @@ const App: React.FC = () => {
              await logAction('delete', `Deleted reply from discussion: ${data.title}`, postId);
           }
           setToast({ message: "Reply deleted.", type: 'success' });
-      } catch (error) {
+      } catch (error: any) {
           console.error("Delete reply failed", error);
           setToast({ message: "Failed to delete reply.", type: 'error' });
       }
@@ -1045,17 +1177,31 @@ const App: React.FC = () => {
       try {
           const reqRef = doc(db, "resourceRequests", requestId);
           const reqSnap = await getDoc(reqRef);
+          
           if (reqSnap.exists()) {
               const reqData = reqSnap.data() as ResourceRequest;
               const requesterId = reqData.requester.id;
+              
               await deleteDoc(reqRef);
               await logAction('delete', `Deleted request: ${reqData.title}`, requestId);
+              
+              // Deduct 5 points from requester
               const userRef = doc(db, "users", requesterId);
-              await updateDoc(userRef, { points: increment(-5), weeklyPoints: increment(-5) });
-              if (user?.id === requesterId) { showToast("Request deleted.", "info", -5); } 
-              else { showToast("Request deleted.", "success"); }
+              await updateDoc(userRef, {
+                  points: increment(-5),
+                  weeklyPoints: increment(-5)
+              });
+              
+              if (user?.id === requesterId) {
+                  showToast("Request deleted.", "info", -5);
+              } else {
+                  showToast("Request deleted.", "success");
+              }
           }
-      } catch (e) { console.error("Failed to delete request", e); showToast("Failed to delete request.", "error"); }
+      } catch (e: any) {
+          console.error("Failed to delete request", e);
+          showToast("Failed to delete request.", "error");
+      }
   };
   
   const openUploadForRequest = (id: string) => { const req = resourceRequests.find(r => r.id === id); if (req) { setFulfillingRequest(req); setIsUploadModalOpen(true); } };
@@ -1095,28 +1241,54 @@ const App: React.FC = () => {
   const sendMessage = async (cid: string, text: string) => {
       if (!user || !db) return;
       const msg = { conversationId: cid, senderId: user.id, recipientId: "", text, timestamp: new Date().toISOString(), status: MessageStatus.Sent, isDeleted: false };
+      
+      // Determine recipient
       const convo = conversations.find(c => c.id === cid);
-      if (convo) { msg.recipientId = convo.participants.find(p => p !== user.id) || ""; }
+      if (convo) {
+          msg.recipientId = convo.participants.find(p => p !== user.id) || "";
+      }
+
       await addDoc(collection(db, "directMessages"), msg);
-      await updateDoc(doc(db, "conversations", cid), { lastMessageTimestamp: msg.timestamp, hiddenBy: [] });
-      if (msg.recipientId) { await sendNotification(msg.recipientId, user.id, NotificationType.NewMessage, `${user.name} sent you a message.`, { conversationId: cid }); }
+      // Update convo timestamp AND reset hiddenBy so chat reappears for all
+      await updateDoc(doc(db, "conversations", cid), { 
+          lastMessageTimestamp: msg.timestamp,
+          hiddenBy: [] 
+      });
+      
+      if (msg.recipientId) {
+          await sendNotification(msg.recipientId, user.id, NotificationType.NewMessage, `${user.name} sent you a message.`, { conversationId: cid });
+      }
   };
 
-  const editMessage = async (mid: string, text: string) => { if (!db) return; await updateDoc(doc(db, "directMessages", mid), { text, editedAt: new Date().toISOString() }); };
-  const deleteMessage = async (mid: string) => { if (!db) return; await updateDoc(doc(db, "directMessages", mid), { isDeleted: true, text: '' }); };
+  const editMessage = async (mid: string, text: string) => {
+      if (!db) return;
+      await updateDoc(doc(db, "directMessages", mid), { text, editedAt: new Date().toISOString() });
+  };
+
+  const deleteMessage = async (mid: string) => {
+      if (!db) return;
+      await updateDoc(doc(db, "directMessages", mid), { isDeleted: true, text: '' });
+  };
 
   const startConversation = async (uid: string, msg?: string) => {
       if (!user || !db) return;
+      // Check if conversation exists
       const existing = conversations.find(c => c.participants.includes(user.id) && c.participants.includes(uid));
       let cid = existing?.id;
+      
       if (!existing) {
           const newConvo = { participants: [user.id, uid], lastMessageTimestamp: new Date().toISOString(), hiddenBy: [] };
           const ref = await addDoc(collection(db, "conversations"), newConvo);
           cid = ref.id;
       } else if (cid && existing.hiddenBy?.includes(user.id)) {
+          // If conversation exists but is hidden for user, unhide it immediately
           await updateDoc(doc(db, "conversations", cid), { hiddenBy: arrayRemove(user.id) });
       }
-      if (msg && cid) { await sendMessage(cid, msg); }
+      
+      if (msg && cid) {
+          await sendMessage(cid, msg);
+      }
+      
       setView('messages', cid);
   };
   
@@ -1125,9 +1297,14 @@ const App: React.FC = () => {
       try {
           const convoRef = doc(db, "conversations", conversationId);
           await updateDoc(convoRef, { hiddenBy: arrayUnion(user.id) });
-          if (view === 'messages' && selectedId === conversationId) { setView('messages', undefined); }
+          if (view === 'messages' && selectedId === conversationId) {
+              setView('messages', undefined);
+          }
           showToast("Conversation removed from list.", "info");
-      } catch (e) { console.error("Failed to hide conversation", e); showToast("Failed to hide conversation", "error"); }
+      } catch (e: any) {
+          console.error("Failed to hide conversation", e);
+          showToast("Failed to hide conversation", "error");
+      }
   };
   
   const sendDirectMessageToUser = (uid: string, text: string) => { startConversation(uid, text); };
@@ -1136,20 +1313,26 @@ const App: React.FC = () => {
   const markAllNotificationsAsRead = async () => {
       if (!user || !db) return;
       const batch = writeBatch(db);
-      notifications.filter(n => !n.isRead && n.recipientId === user.id).forEach(n => { batch.update(doc(db, "notifications", n.id), { isRead: true }); });
+      notifications.filter(n => !n.isRead && n.recipientId === user.id).forEach(n => {
+          batch.update(doc(db, "notifications", n.id), { isRead: true });
+      });
       await batch.commit();
   };
   const clearAllNotifications = async () => {
       if (!user || !db) return;
       const batch = writeBatch(db);
-      notifications.filter(n => n.recipientId === user.id).forEach(n => { batch.delete(doc(db, "notifications", n.id)); });
+      notifications.filter(n => n.recipientId === user.id).forEach(n => {
+          batch.delete(doc(db, "notifications", n.id));
+      });
       await batch.commit();
   };
   
   const markMessagesAsRead = async (cid: string) => {
       if (!user || !db) return;
       const batch = writeBatch(db);
-      directMessages.filter(m => m.conversationId === cid && m.recipientId === user.id && m.status !== MessageStatus.Read).forEach(m => { batch.update(doc(db, "directMessages", m.id), { status: MessageStatus.Read }); });
+      directMessages.filter(m => m.conversationId === cid && m.recipientId === user.id && m.status !== MessageStatus.Read).forEach(m => {
+           batch.update(doc(db, "directMessages", m.id), { status: MessageStatus.Read });
+      });
       await batch.commit();
   };
 
@@ -1157,6 +1340,7 @@ const App: React.FC = () => {
     setViewState(newView);
     setSelectedId(id);
     window.scrollTo(0, 0);
+    
     setViewHistory(currentHistory => {
         const newEntry = { view: newView, id };
         if (options?.replace && currentHistory.length > 0) {
@@ -1182,6 +1366,7 @@ const App: React.FC = () => {
     { selector: '#tour-profile-menu', content: 'Profile settings.' },
   ];
 
+  // Logic to calculate unread states
   const hasUnreadMessages = useMemo(() => {
     if (!user) return false;
     return directMessages.some(m => m.recipientId === user.id && m.status !== MessageStatus.Read);
@@ -1193,7 +1378,7 @@ const App: React.FC = () => {
   }, [notifications, user]);
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg"><Loader2 size={48} className="animate-spin text-primary-600" /></div>;
-  if (!auth) return <div>Auth Error</div>;
+  if (!auth) return <div>Auth Error</div>; // Simplified error view for brevity
   if (!user) return <AuthPage onLogin={() => {}} />;
 
   return (

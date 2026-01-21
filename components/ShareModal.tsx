@@ -1,7 +1,7 @@
 
 import React, { useState, useContext, useMemo } from 'react';
 import { X, Mail, MessageSquare, Copy, Check, Search, Send, ArrowLeft, Link as LinkIcon } from 'lucide-react';
-import { AppContext } from '../App';
+import { AppContext } from '../components/AppContext';
 import type { Resource } from '../types';
 
 interface ShareModalProps {

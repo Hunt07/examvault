@@ -1,7 +1,7 @@
 
 import React, { useContext, useState, useMemo, useRef, useEffect } from 'react';
 import type { ForumPost, ForumReply, Attachment } from '../../types';
-import { AppContext } from '../../App';
+import { AppContext } from '../../components/AppContext';
 import { ArrowLeft, ThumbsUp, ThumbsDown, CheckCircle, MessageCircle, Paperclip, Image as ImageIcon, X, FileText, Download, Trash2, Eye, Bookmark, BookmarkCheck } from 'lucide-react';
 import MarkdownRenderer from '../MarkdownRenderer';
 import MarkdownToolbar from '../MarkdownToolbar';

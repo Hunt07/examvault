@@ -1,800 +1,1285 @@
 
-import React, { useState, useContext, useRef, useMemo, useEffect } from 'react';
-import { ResourceType, type Resource, type Comment, type Flashcard, type QuizQuestion } from '../../types';
-import { AppContext } from '../../components/AppContext';
-import { summarizeContent, generateStudySet } from '../../services/geminiService';
-import { ArrowLeft, ArrowRight, ThumbsUp, ThumbsDown, MessageSquare, Download, BrainCircuit, Loader2, FileText, Notebook, ClipboardList, Archive, Bell, BellOff, Flag, CheckCircle, MessageCircle, BookCopy, HelpCircle, Eye, X, AlertCircle, FileType, Bookmark, BookmarkCheck, Share2, Trash2, Sparkles, BookOpen } from 'lucide-react';
-import MarkdownRenderer from '../MarkdownRenderer';
-import MarkdownToolbar from '../MarkdownToolbar';
-import UserRankBadge from '../UserRankBadge';
-import FlashcardViewer from '../FlashcardViewer';
-import QuizComponent from '../QuizComponent';
-import ShareModal from '../ShareModal';
-import ResourceCard from '../ResourceCard';
-import Avatar from '../Avatar';
-import { db } from '../../services/firebase';
-import { collection, addDoc } from 'firebase/firestore';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import type { User, Resource, ForumPost, Comment, ForumReply, Notification, Conversation, DirectMessage, ResourceRequest, Attachment, Report } from '../../types';
+import { NotificationType, MessageStatus, ResourceRequestStatus } from '../../types';
+import AuthPage from '../../components/pages/AuthPage';
+import DashboardPage from '../../components/pages/DashboardPage';
+import ResourceDetailPage from '../../components/pages/ResourceDetailPage';
+import DiscussionsPage from '../../components/pages/ForumsPage';
+import ForumPostDetailPage from '../../components/pages/ForumPostDetailPage';
+import ProfilePage from '../../components/pages/ProfilePage';
+import MessagesPage from '../../components/pages/MessagesPage';
+import LeaderboardPage from '../../components/pages/LeaderboardPage';
+import ResourceRequestsPage from '../../components/pages/ResourceRequestsPage';
+import AdminPage from '../../components/pages/AdminPage'; // Import Admin Page
+import SideNav from '../../components/SideNav';
+import Header from '../../components/Header';
+import UploadModal, { generateFilePreview } from '../../components/UploadModal';
+import TooltipGuide from '../../components/TooltipGuide';
+import ToastNotification from '../../components/ToastNotification';
 
-const CommentComponent: React.FC<{
-  comment: Comment;
-  resourceId: string;
-  children: React.ReactNode;
-}> = ({ comment, resourceId, children }) => {
-  const { user, userRanks, setView, handleCommentVote, addCommentToResource, deleteCommentFromResource } = useContext(AppContext);
-  const [isReplying, setIsReplying] = useState(false);
-  const [replyText, setReplyText] = useState('');
-  const replyTextareaRef = useRef<HTMLTextAreaElement>(null);
-  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+// Firebase Imports
+import { auth, db, storage } from '../../services/firebase';
+import * as firebaseAuth from 'firebase/auth';
+import { 
+  collection, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, getDocs,
+  onSnapshot, query, orderBy, serverTimestamp, arrayUnion, increment, where, arrayRemove, deleteField, writeBatch 
+} from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { Loader2, AlertCircle } from 'lucide-react';
+
+export type View = 'dashboard' | 'resourceDetail' | 'discussions' | 'forumDetail' | 'profile' | 'publicProfile' | 'messages' | 'leaderboard' | 'requests' | 'admin';
+
+interface AppContextType {
+  user: User | null;
+  users: User[];
+  resources: Resource[];
+  forumPosts: ForumPost[];
+  notifications: Notification[];
+  conversations: Conversation[];
+  directMessages: DirectMessage[];
+  resourceRequests: ResourceRequest[];
+  reports: Report[]; // Added reports
+  view: View;
+  setView: (view: View, id?: string, options?: { replace?: boolean }) => void;
+  logout: () => void;
+  isDarkMode: boolean;
+  toggleDarkMode: () => void;
+  userRanks: Map<string, number>;
+  savedResourceIds: string[];
+  savedPostIds: string[];
+  savedRequestIds: string[];
+  toggleSaveResource: (resourceId: string) => void;
+  toggleSavePost: (postId: string) => void;
+  toggleSaveRequest: (requestId: string) => void;
+  handleVote: (resourceId: string, action: 'up' | 'down') => void;
+  addCommentToResource: (resourceId: string, text: string, parentId: string | null) => void;
+  handleCommentVote: (resourceId: string, commentId: string) => void;
+  deleteCommentFromResource: (resourceId: string, comment: Comment) => Promise<void>;
+  addForumPost: (post: { title: string; courseCode: string; body: string; tags: string[] }, file?: File) => void;
+  handlePostVote: (postId: string, action: 'up' | 'down') => void;
+  deleteForumPost: (postId: string) => Promise<void>;
+  addReplyToPost: (postId: string, text: string, parentId: string | null, file?: File) => void;
+  handleReplyVote: (postId: string, replyId: string) => void;
+  deleteReplyFromPost: (postId: string, reply: ForumReply) => Promise<void>;
+  toggleVerifiedAnswer: (postId: string, replyId: string) => void;
+  addResourceRequest: (req: { title: string; courseCode: string; details: string }, file?: File) => void;
+  deleteResourceRequest: (requestId: string) => Promise<void>;
+  openUploadForRequest: (requestId: string) => void;
+  toggleUserSubscription: (userId: string) => void;
+  toggleLecturerSubscription: (lecturerName: string) => void;
+  toggleCourseCodeSubscription: (courseCode: string) => void;
+  updateUserProfile: (data: Partial<User>) => void;
+  // Admin Functions
+  toggleUserRole: (userId: string, role: 'student' | 'admin') => void;
+  toggleUserStatus: (userId: string, status: 'active' | 'banned') => void;
+  resolveReport: (reportId: string, status: 'resolved' | 'dismissed') => void;
   
-  const authorRank = userRanks.get(comment.author.id);
-  const isUpvoted = comment.upvotedBy?.includes(user?.id || '');
-  const isOwnComment = user?.id === comment.author.id;
+  sendMessage: (conversationId: string, text: string) => void;
+  editMessage: (messageId: string, newText: string) => void;
+  deleteMessage: (messageId: string) => void;
+  startConversation: (userId: string, initialMessage?: string) => void;
+  sendDirectMessageToUser: (userId: string, text: string) => void;
+  markNotificationAsRead: (id: string) => void;
+  markAllNotificationsAsRead: () => void;
+  clearAllNotifications: () => void;
+  markMessagesAsRead: (conversationId: string) => void;
+  goBack: () => void;
+  deleteResource: (resourceId: string, fileUrl: string, previewUrl?: string) => Promise<void>;
+  deactivateAccount: () => Promise<void>; // Added deactivateAccount
+  deleteAccount: () => Promise<void>; // Added Permanent Delete
+  hasUnreadMessages: boolean;
+  hasUnreadDiscussions: boolean;
+  isLoading: boolean;
+  areResourcesLoading: boolean;
+  scrollTargetId: string | null;
+  setScrollTargetId: (id: string | null) => void;
+  showToast: (message: string, type?: 'success' | 'error' | 'info', points?: number) => void;
+}
 
-  const handleUserClick = (userId: string) => {
-    if (userId === user?.id) {
-      setView('profile');
-    } else {
-      setView('publicProfile', userId);
-    }
-  };
+export const AppContext = React.createContext<AppContextType>({} as AppContextType);
 
-  const handleVoteForComment = () => {
-    if (isOwnComment || !user) return;
-    handleCommentVote(resourceId, comment.id);
-  };
-
-  const handleReplySubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (replyText.trim() && user) {
-      addCommentToResource(resourceId, replyText, comment.id);
-      setReplyText('');
-      setIsReplying(false);
-    }
-  };
-
-  const handleDelete = () => {
-      deleteCommentFromResource(resourceId, comment);
-      setIsDeleteConfirmOpen(false);
-  };
-
-  return (
-    <div id={comment.id} className="mt-4 scroll-mt-24 transition-colors duration-1000 p-2 rounded-lg">
-      <div className="flex gap-4 items-start">
-        <button onClick={() => handleUserClick(comment.author.id)} className="shrink-0">
-          <Avatar src={comment.author.avatarUrl} alt={comment.author.name} className="w-10 h-10" />
-        </button>
-        <div className="flex-grow bg-slate-50 dark:bg-zinc-800/50 p-4 rounded-lg">
-          <div className="flex justify-between items-start">
-            <div className="flex flex-col">
-              <div className="flex items-center gap-2">
-                 <button onClick={() => handleUserClick(comment.author.id)} className="font-bold text-slate-900 dark:text-slate-100 hover:text-primary-600 dark:hover:text-primary-400 text-sm hover:underline">{comment.author.name}</button>
-                 <UserRankBadge rank={authorRank} size={14} />
-                 <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-200 dark:bg-zinc-700 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded border border-slate-300 dark:border-zinc-600">
-                    {comment.author.course}
-                 </span>
-              </div>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                {new Date(comment.timestamp).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-              </p>
-            </div>
-          </div>
-          <div className="mt-2 dark:text-slate-200">
-            <MarkdownRenderer content={comment.text} />
-          </div>
-          <div className="flex items-center gap-3 mt-3">
-            <button
-              onClick={handleVoteForComment}
-              disabled={isOwnComment}
-              className={`flex items-center p-2 text-sm font-semibold rounded-lg transition-colors ${
-                isUpvoted
-                  ? 'bg-primary-600 text-white'
-                  : isOwnComment
-                  ? 'bg-slate-100 dark:bg-zinc-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'
-                  : 'bg-white dark:bg-zinc-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-zinc-600'
-              }`}
-            >
-              <ThumbsUp size={14} />
-              {comment.upvotes > 0 && <span className="ml-1.5">{comment.upvotes}</span>}
-            </button>
-            {user && user.id !== comment.author.id && (
-              <button
-                onClick={() => setIsReplying(!isReplying)}
-                className="flex items-center gap-1.5 p-2 text-sm font-semibold text-slate-600 dark:text-slate-300 bg-white dark:bg-zinc-700 hover:bg-slate-200 dark:hover:bg-zinc-600 rounded-lg transition-colors"
-              >
-                <MessageCircle size={14} /> Reply
-              </button>
-            )}
-            {isOwnComment && (
-               <>
-                <button
-                    onClick={() => setIsDeleteConfirmOpen(true)}
-                    className="flex items-center gap-1.5 p-2 text-sm font-semibold text-red-500 bg-white dark:bg-zinc-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                >
-                    <Trash2 size={14} />
-                </button>
-                {isDeleteConfirmOpen && (
-                    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in">
-                        <div className="bg-white dark:bg-zinc-800 p-6 rounded-xl shadow-xl max-w-sm w-full border dark:border-zinc-700">
-                            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Delete Comment?</h3>
-                            <p className="text-slate-500 dark:text-slate-400 mb-6">Are you sure you want to delete this comment?</p>
-                            <div className="flex gap-3 w-full">
-                                <button onClick={() => setIsDeleteConfirmOpen(false)} className="flex-1 py-2 bg-slate-100 dark:bg-zinc-700 text-slate-700 dark:text-slate-200 font-semibold rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-600 transition">Cancel</button>
-                                <button onClick={handleDelete} className="flex-1 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition">Delete</button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-               </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {isReplying && (
-        <div className="ml-14 mt-4">
-          <form onSubmit={handleReplySubmit} className="flex gap-4 items-start">
-            <Avatar src={user?.avatarUrl} alt={user?.name || "User"} className="w-8 h-8" />
-            <div className="flex-grow">
-              <MarkdownToolbar
-                textareaRef={replyTextareaRef}
-                value={replyText}
-                onValueChange={setReplyText}
-              />
-              <textarea
-                ref={replyTextareaRef}
-                value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-                placeholder={`Replying to ${comment.author.name}...`}
-                className="w-full bg-slate-100 dark:bg-zinc-800 dark:text-white text-slate-900 placeholder:text-slate-500 dark:placeholder:text-slate-500 px-4 py-2 border border-slate-300 dark:border-zinc-700 rounded-b-lg focus:ring-primary-500 focus:border-primary-500 transition focus:outline-none"
-                rows={2}
-                autoFocus
-              />
-              <div className="flex gap-2 mt-2">
-                <button type="submit" className="bg-primary-600 text-white font-semibold py-1 px-3 rounded-lg hover:bg-primary-700 transition text-sm">
-                  Post Reply
-                </button>
-                <button type="button" onClick={() => setIsReplying(false)} className="bg-slate-200 dark:bg-zinc-700 text-slate-700 dark:text-slate-300 font-semibold py-1 px-3 rounded-lg hover:bg-slate-300 dark:hover:bg-zinc-600 transition text-sm">
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </form>
-        </div>
-      )}
-
-      <div className="pl-8 border-l-2 border-slate-200 dark:border-zinc-700 ml-5">
-        {children}
-      </div>
-    </div>
-  );
+// Helper to remove undefined values which Firestore hates
+const sanitizeForFirestore = (obj: any): any => {
+  return JSON.parse(JSON.stringify(obj));
 };
 
+// Generate a default SVG avatar with the user's first initial
+const generateDefaultAvatar = (name: string): string => {
+  const initial = name && name.length > 0 ? name.charAt(0).toUpperCase() : '?';
+  const colors = ['#2563eb', '#db2777', '#ca8a04', '#16a34a', '#dc2626', '#7c3aed', '#0891b2', '#be123c'];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const color = colors[Math.abs(hash) % colors.length];
 
-const ResourceDetailPage: React.FC<{ resource: Resource }> = ({ resource }) => {
-  const { user, userRanks, setView, handleVote, addCommentToResource, goBack, toggleLecturerSubscription, toggleCourseCodeSubscription, savedResourceIds, toggleSaveResource, resources, deleteResource, scrollTargetId, setScrollTargetId } = useContext(AppContext);
-  const [newComment, setNewComment] = useState('');
-  const [isReporting, setIsReporting] = useState(false);
-  const [reportReason, setReportReason] = useState('');
-  const [hasReported, setHasReported] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
-  const [relatedStartIndex, setRelatedStartIndex] = useState(0);
-  const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const svgString = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
+      <rect width="100" height="100" fill="${color}"/>
+      <text x="50" y="65" font-family="Arial, sans-serif" font-size="50" font-weight="bold" fill="white" text-anchor="middle">${initial}</text>
+    </svg>
+  `.trim();
+  return `data:image/svg+xml;base64,${btoa(svgString)}`;
+};
 
-  // Unified Study Companion State
-  const [activeStudyTab, setActiveStudyTab] = useState<'summary' | 'flashcards' | 'quiz'>('summary');
-  const [summary, setSummary] = useState('');
-  const [studySet, setStudySet] = useState<(Flashcard[] | QuizQuestion[]) | null>(null);
-  const [isStudyLoading, setIsStudyLoading] = useState(false);
-  const [hasGenerated, setHasGenerated] = useState(false);
+// Extracted Helper for Deep Profile Propagation
+const propagateUserUpdates = async (userId: string, updateData: any) => {
+    // 1. Propagate to Resources (Author field)
+    const resQuery = query(collection(db!, "resources"), where("author.id", "==", userId));
+    const resSnap = await getDocs(resQuery);
+    const batch = writeBatch(db!);
+    let count = 0;
 
-  const authorRank = userRanks.get(resource.author.id);
-  const isFollowingLecturer = user?.subscriptions.lecturers.includes(resource.lecturer || '');
-  const isFollowingCourse = user?.subscriptions.courseCodes.includes(resource.courseCode);
-  const isSaved = savedResourceIds.includes(resource.id);
-  const isAuthor = user?.id === resource.author.id;
+    resSnap.forEach((docSnap) => {
+         const resRef = doc(db!, "resources", docSnap.id);
+         batch.update(resRef, { author: { ...docSnap.data().author, ...updateData } });
+         count++;
+    });
 
-  const isUpvoted = resource.upvotedBy?.includes(user?.id || '');
-  const isDownvoted = resource.downvotedBy?.includes(user?.id || '');
+    // 2. Propagate to Forum Posts
+    const postQuery = query(collection(db!, "forumPosts"), where("author.id", "==", userId));
+    const postSnap = await getDocs(postQuery);
+    postSnap.forEach((docSnap) => {
+         const postRef = doc(db!, "forumPosts", docSnap.id);
+         batch.update(postRef, { author: { ...docSnap.data().author, ...updateData } });
+         count++;
+    });
 
-  // Handle Deep Linking / Scrolling
-  useEffect(() => {
-      if (scrollTargetId) {
-          setTimeout(() => {
-              const targetElement = document.getElementById(scrollTargetId);
-              if (targetElement) {
-                  targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                  targetElement.classList.add('bg-yellow-100', 'dark:bg-yellow-900/20', 'rounded-lg');
-                  setTimeout(() => {
-                      targetElement.classList.remove('bg-yellow-100', 'dark:bg-yellow-900/20', 'rounded-lg');
-                      setScrollTargetId(null);
-                  }, 2000);
-              }
-          }, 500);
-      }
-  }, [scrollTargetId, resource.id]);
+    // 3. Propagate to Requests
+    const reqQuery = query(collection(db!, "resourceRequests"), where("requester.id", "==", userId));
+    const reqSnap = await getDocs(reqQuery);
+    reqSnap.forEach((docSnap) => {
+         const reqRef = doc(db!, "resourceRequests", docSnap.id);
+         batch.update(reqRef, { requester: { ...docSnap.data().requester, ...updateData } });
+         count++;
+    });
 
-  useEffect(() => {
-    // Reset state on resource change
-    setSummary('');
-    setStudySet(null);
-    setIsStudyLoading(false);
-    setHasGenerated(false);
-    setActiveStudyTab('summary');
-    setNewComment('');
-    setIsReporting(false);
-    setReportReason('');
-    setHasReported(false);
-    setIsPreviewOpen(false);
-    setRelatedStartIndex(0);
-  }, [resource.id]);
-
-  const commentsByParentId = useMemo(() => {
-    const group: Record<string, Comment[]> = {};
-    for (const comment of resource.comments) {
-        const parentId = comment.parentId || 'root';
-        if (!group[parentId]) {
-            group[parentId] = [];
-        }
-        group[parentId].push(comment);
+    if (count > 0) {
+        await batch.commit();
     }
-    for (const parentId in group) {
-        group[parentId].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-    }
-    return group;
-  }, [resource.comments]);
 
-  const relatedResources = useMemo(() => {
-    const candidates = resources.filter(r => r.id !== resource.id);
-    let matches = candidates.filter(r => r.courseCode === resource.courseCode);
-    if (matches.length < 8) {
-        const subjectMatch = resource.courseCode.match(/^[A-Za-z]+/);
-        if (subjectMatch) {
-            const subject = subjectMatch[0];
-            matches = [...matches, ...candidates.filter(r => r.courseCode.startsWith(subject) && !matches.includes(r))];
-        }
-    }
-    if (matches.length < 8) {
-        matches = [...matches, ...candidates.filter(r => r.type === resource.type && !matches.includes(r))];
-    }
-    if (matches.length < 8) {
-        matches = [...matches, ...candidates.filter(r => !matches.includes(r))];
-    }
-    return matches.slice(0, 8);
-  }, [resources, resource]);
-
-  const handleUserClick = (userId: string) => {
-    if (userId === user?.id) setView('profile');
-    else setView('publicProfile', userId);
-  };
-  
-  const handleAuthorClick = (authorId: string) => {
-    if (authorId === user?.id) setView('profile');
-    else setView('publicProfile', authorId);
-  };
-
-  const resolveFileBase64 = async (): Promise<string | undefined> => {
-    if (resource.fileBase64) return resource.fileBase64;
-    try {
-        const response = await fetch(resource.fileUrl);
-        if (!response.ok) throw new Error('Fetch failed');
-        const blob = await response.blob();
-        return await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
+    // 4. Propagate to Comments (inside Resources)
+    const allResSnap = await getDocs(collection(db!, "resources"));
+    allResSnap.forEach(async (docSnap) => {
+        const res = docSnap.data() as Resource;
+        if (!res.comments) return;
+        
+        let changed = false;
+        const updatedComments = res.comments.map(c => {
+            if (c.author.id === userId) {
+                changed = true;
+                return { ...c, author: { ...c.author, ...updateData } };
+            }
+            return c;
         });
-    } catch (error) {
-        return undefined;
-    }
-  };
+        if (changed) {
+            await updateDoc(docSnap.ref, { comments: updatedComments });
+        }
+    });
 
-  const getMetadataContext = () => {
-      return `
-      Title: ${resource.title}
-      Course: ${resource.courseCode}
-      Type: ${resource.type}
-      Description: ${resource.description}
-      Content Hint: ${resource.contentForAI}
-      `;
-  };
+    // 5. Propagate to Replies (inside Forum Posts)
+    const allPostsSnap = await getDocs(collection(db!, "forumPosts"));
+    allPostsSnap.forEach(async (docSnap) => {
+        const post = docSnap.data() as ForumPost;
+        if (!post.replies) return;
 
-  // Unified Generation Handler
-  const handleGenerate = async () => {
-    setIsStudyLoading(true);
-    const base64 = await resolveFileBase64();
-    const contentToAnalyze = base64 ? getMetadataContext() : (resource.contentForAI || getMetadataContext());
-
-    try {
-        // Run all generations in parallel for a snappy feel after loading
-        const [summaryResult, flashcardsResult, quizResult] = await Promise.all([
-            summarizeContent(contentToAnalyze, base64, resource.mimeType),
-            generateStudySet(contentToAnalyze, 'flashcards', base64, resource.mimeType),
-            generateStudySet(contentToAnalyze, 'quiz', base64, resource.mimeType)
-        ]);
-
-        setSummary(summaryResult);
-        // Store sets in a way that we can switch between them without re-generating (simplified here to just set current based on tab)
-        // For simplicity in this demo, let's just store all results in state logic if needed, but here we will 
-        // stick to the active tab logic.
-        // Wait, to make tabs switchable instantly, we should store all.
-        // Let's refactor state slightly.
-        
-        // Actually, let's keep it simple: Generate strictly what is needed? 
-        // No, user wants "Guarantee it will work". Pre-fetching all is safer to avoid multiple "loading" states.
-        
-        setSummary(summaryResult);
-        // We need a way to store flashcards and quiz separately.
-        // Let's hack the studySet state to hold an object or change logic. 
-        // For this fix, let's just use separate states.
-        
-        // I will use a local variable to hold them and dispatch to state
-        // We need to add state for specific sets.
-    } catch (e) {
-        console.error(e);
-    }
-    setIsStudyLoading(false);
-    setHasGenerated(true);
-  };
-
-  // Refactored Study State
-  const [cachedFlashcards, setCachedFlashcards] = useState<Flashcard[] | null>(null);
-  const [cachedQuiz, setCachedQuiz] = useState<QuizQuestion[] | null>(null);
-
-  const handleSmartGenerate = async () => {
-      setIsStudyLoading(true);
-      const base64 = await resolveFileBase64();
-      const contentToAnalyze = base64 ? getMetadataContext() : (resource.contentForAI || getMetadataContext());
-
-      // Parallel fetch
-      const summaryPromise = summarizeContent(contentToAnalyze, base64, resource.mimeType);
-      const flashcardsPromise = generateStudySet(contentToAnalyze, 'flashcards', base64, resource.mimeType);
-      const quizPromise = generateStudySet(contentToAnalyze, 'quiz', base64, resource.mimeType);
-
-      const [sum, flash, quiz] = await Promise.all([summaryPromise, flashcardsPromise, quizPromise]);
-
-      setSummary(sum);
-      setCachedFlashcards(flash);
-      setCachedQuiz(quiz);
-      
-      setIsStudyLoading(false);
-      setHasGenerated(true);
-  };
-
-  const handlePostComment = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newComment.trim() && user) {
-      addCommentToResource(resource.id, newComment, null);
-      setNewComment('');
-    }
-  };
-
-  const handleUpvoteClick = () => { if (user) handleVote(resource.id, 'up'); };
-  const handleDownvoteClick = () => { if (user) handleVote(resource.id, 'down'); };
-  
-  const handleSubmitReport = async () => {
-    if (reportReason.trim() !== "") {
-      try {
-        await addDoc(collection(db, "reports"), {
-          resourceId: resource.id,
-          resourceTitle: resource.title,
-          uploaderId: resource.author.id,
-          uploaderName: resource.author.name,
-          reporterId: user?.id || 'anonymous',
-          reporterName: user?.name || 'Anonymous',
-          reason: reportReason,
-          timestamp: new Date().toISOString(),
-          status: 'pending'
+        let changed = false;
+        const updatedReplies = post.replies.map(r => {
+            if (r.author.id === userId) {
+                changed = true;
+                return { ...r, author: { ...r.author, ...updateData } };
+            }
+            return r;
         });
-        setIsReporting(false);
-        setReportReason('');
-        setHasReported(true);
-      } catch (error) { alert("Failed to submit report."); }
-    } else { alert("Reason required."); }
-  };
+        if (changed) {
+            await updateDoc(docSnap.ref, { replies: updatedReplies });
+        }
+    });
+};
 
-  const confirmDelete = () => {
-      deleteResource(resource.id, resource.fileUrl, resource.previewImageUrl);
-      setIsDeleteConfirmOpen(false);
-  };
+const MASTER_ADMIN_EMAIL = 'b09220024@student.unimy.edu.my';
 
-  const handleDownloadClick = () => {
-      setIsDownloading(true);
-      setTimeout(() => setIsDownloading(false), 2000);
-  };
+const FirebaseSetup = () => (
+  <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+    <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-lg border border-red-100">
+      <div className="flex items-center gap-3 text-red-600 mb-4">
+        <AlertCircle size={32} />
+        <h2 className="text-xl font-bold">Firebase Configuration Error</h2>
+      </div>
+      <p className="text-slate-600 mb-4">
+        The application could not connect to Firebase services. This is likely due to missing environment variables.
+      </p>
+      <div className="bg-slate-100 p-4 rounded-lg overflow-x-auto">
+        <code className="text-xs text-slate-700">
+          Check your .env file or Vercel/Netlify configuration.
+        </code>
+      </div>
+    </div>
+  </div>
+);
 
-  const renderComments = (parentId: string | null) => {
-    const comments = commentsByParentId[parentId || 'root'] || [];
-    return comments.map(comment => (
-        <CommentComponent key={comment.id} comment={comment} resourceId={resource.id}>
-            {renderComments(comment.id)}
-        </CommentComponent>
-    ));
-  };
-
-  const fileType = resource.fileName.split('.').pop()?.toUpperCase();
-  const formattedUploadDate = new Date(resource.uploadDate).toLocaleString(undefined, {
-    year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+const App: React.FC = () => {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [authError, setAuthError] = useState<{title: string, message: string, code?: string, details?: string} | null>(null);
+  const [areResourcesLoading, setAreResourcesLoading] = useState(true);
+  const [view, setViewState] = useState<View>('dashboard');
+  const [viewHistory, setViewHistory] = useState<{ view: View; id?: string }[]>([]);
+  const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
+  const [scrollTargetId, setScrollTargetId] = useState<string | null>(null);
+  
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const savedTheme = localStorage.getItem('examvault_theme');
+    if (savedTheme) {
+      return savedTheme === 'dark';
+    }
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
+  
+  const [users, setUsers] = useState<User[]>([]);
+  const [resources, setResources] = useState<Resource[]>([]);
+  const [forumPosts, setForumPosts] = useState<ForumPost[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [directMessages, setDirectMessages] = useState<DirectMessage[]>([]);
+  const [resourceRequests, setResourceRequests] = useState<ResourceRequest[]>([]);
+  const [reports, setReports] = useState<Report[]>([]); // New state for reports
+  
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [fulfillingRequest, setFulfillingRequest] = useState<ResourceRequest | undefined>(undefined);
 
-  const InfoTag: React.FC<{ label: string; value: string | number }> = ({ label, value }) => (
-    <div className="bg-slate-100 dark:bg-zinc-800 p-3 rounded-lg">
-      <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{label}</p>
-      <p className="text-sm text-slate-800 dark:text-slate-200 font-semibold">{value}</p>
-    </div>
-  );
+  const [toast, setToast] = useState<{ message: string; points?: number; type?: 'success' | 'error' | 'info' } | null>(null);
 
-  const getBadgeStyle = (type: ResourceType) => {
-    switch (type) {
-        case ResourceType.PastPaper: return 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300';
-        case ResourceType.Notes: return 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300';
-        case ResourceType.Assignment: return 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300';
-        case ResourceType.Other: return 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300';
-        default: return 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-300';
-    }
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info', points?: number) => {
+      setToast({ message, type, points });
   };
 
-  const getBadgeIcon = (type: ResourceType) => {
-      switch (type) {
-          case ResourceType.PastPaper: return <FileText size={16}/>;
-          case ResourceType.Notes: return <Notebook size={16}/>;
-          case ResourceType.Assignment: return <ClipboardList size={16}/>;
-          case ResourceType.Other: return <Archive size={16}/>;
-          default: return <FileText size={16}/>;
+  const [runTour, setRunTour] = useState(false);
+  const [tourStep, setTourStep] = useState(0);
+
+  // Apply Dark Mode Class
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('examvault_theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('examvault_theme', 'light');
+    }
+  }, [isDarkMode]);
+
+  // Presence Heartbeat
+  const lastUpdateRef = useRef<number>(0);
+  
+  useEffect(() => {
+    if (!user?.id || !db) return;
+
+    const updatePresence = async () => {
+        const now = Date.now();
+        // Throttle updates to at least every 10 seconds to avoid spamming on focus/click
+        if (now - lastUpdateRef.current < 10000) return;
+
+        try {
+            lastUpdateRef.current = now;
+            const userRef = doc(db, "users", user.id);
+            await updateDoc(userRef, {
+                lastActive: new Date().toISOString()
+            });
+        } catch (error) {
+            console.error("Presence update failed", error);
+        }
+    };
+
+    updatePresence(); // Initial update
+    
+    // Increased frequency to 30 seconds for near "real-time" accuracy
+    const interval = setInterval(updatePresence, 30 * 1000); 
+
+    const handleInteraction = () => {
+        if (document.visibilityState === 'visible') {
+            updatePresence();
+        }
+    };
+
+    document.addEventListener("visibilitychange", handleInteraction);
+    window.addEventListener("focus", handleInteraction);
+    window.addEventListener("click", handleInteraction); // Update on clicks too
+
+    return () => {
+        clearInterval(interval);
+        document.removeEventListener("visibilitychange", handleInteraction);
+        window.removeEventListener("focus", handleInteraction);
+        window.removeEventListener("click", handleInteraction);
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!auth || !db) {
+        setIsLoading(false);
+        return;
+    }
+
+    const unsubscribe = firebaseAuth.onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          const userRef = doc(db!, "users", firebaseUser.uid);
+          const userSnap = await getDoc(userRef);
+
+          if (userSnap.exists()) {
+            const userData = userSnap.data() as User;
+            let hasUpdates = false;
+            const updates: any = {};
+
+            if (!userData.joinDate) {
+                const now = new Date().toISOString();
+                userData.joinDate = now;
+                updates.joinDate = now;
+                hasUpdates = true;
+            }
+            if (!userData.savedResourceIds) {
+                userData.savedResourceIds = [];
+                updates.savedResourceIds = [];
+                hasUpdates = true;
+            }
+            if (!userData.savedPostIds) {
+                userData.savedPostIds = [];
+                updates.savedPostIds = [];
+                hasUpdates = true;
+            }
+            if (!userData.savedRequestIds) {
+                userData.savedRequestIds = [];
+                updates.savedRequestIds = [];
+                hasUpdates = true;
+            }
+            if (!userData.subscriptions) {
+                userData.subscriptions = { users: [], lecturers: [], courseCodes: [] };
+                updates.subscriptions = { users: [], lecturers: [], courseCodes: [] };
+                hasUpdates = true;
+            }
+            // Ensure Role and Status exist
+            if (!userData.role) {
+                userData.role = 'student';
+                updates.role = 'student';
+                hasUpdates = true;
+            }
+            if (!userData.status) {
+                userData.status = 'active';
+                updates.status = 'active';
+                hasUpdates = true;
+            }
+
+            const isLegacyAvatar = !userData.avatarUrl || 
+                                   (!userData.avatarUrl.startsWith('data:') && !userData.avatarUrl.includes('firebasestorage'));
+
+            if (isLegacyAvatar) {
+                const newAvatar = generateDefaultAvatar(userData.name);
+                userData.avatarUrl = newAvatar;
+                updates.avatarUrl = newAvatar;
+                hasUpdates = true;
+            }
+
+            // Check if user is banned
+            if (userData.status === 'banned') {
+                await firebaseAuth.signOut(auth);
+                setUser(null);
+                showToast("Your account has been restricted. Contact support.", "error");
+                setIsLoading(false);
+                return;
+            }
+
+            // Handle Reactivation
+            if (userData.status === 'deactivated') {
+                updates.status = 'active';
+                userData.status = 'active';
+                hasUpdates = true;
+                showToast("Welcome back! Your account has been reactivated.", "success");
+            }
+
+            if (hasUpdates) {
+                await updateDoc(userRef, updates);
+                if (updates.avatarUrl) {
+                    propagateUserUpdates(userData.id, { avatarUrl: updates.avatarUrl });
+                }
+            }
+
+            setUser(userData);
+            
+            // Trigger tour if not done
+            if (!localStorage.getItem(`examvault_tour_${userData.id}`)) {
+                setRunTour(true);
+            }
+
+          } else {
+            const displayName = firebaseUser.displayName || "Student";
+            const defaultAvatar = generateDefaultAvatar(displayName);
+            
+            // Check for lecturer email
+            const isLecturerEmail = firebaseUser.email?.endsWith('@unimy.edu.my') && !firebaseUser.email?.endsWith('@student.unimy.edu.my');
+            const role = isLecturerEmail ? 'lecturer' : 'student';
+            const bio = isLecturerEmail ? 'Lecturer' : 'Student'; // Default bio for new lecturers
+            const course = isLecturerEmail ? 'Lecturer' : 'Student';
+
+            const newUser: User = {
+              id: firebaseUser.uid,
+              name: displayName,
+              email: firebaseUser.email || "",
+              avatarUrl: defaultAvatar,
+              joinDate: new Date().toISOString(),
+              lastActive: new Date().toISOString(),
+              bio: bio,
+              points: 0,
+              weeklyPoints: 0,
+              uploadCount: 0,
+              course: course,
+              currentYear: 1,
+              currentSemester: 1,
+              subscriptions: { users: [], lecturers: [], courseCodes: [] },
+              savedResourceIds: [],
+              savedPostIds: [],
+              savedRequestIds: [],
+              role: role,
+              status: 'active'
+            };
+            
+            await setDoc(userRef, newUser);
+            setUser(newUser);
+            setRunTour(true); // Always run for new users
+          }
+        } catch (error) {
+          console.error("Error fetching user data:", error);
+        }
+      } else {
+        setUser(null);
+        setViewState('dashboard');
+      }
+      setIsLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // ... (useEffect for data fetching snapshots remains the same) ...
+  useEffect(() => {
+    if (!user || !db) return;
+
+    setAreResourcesLoading(true);
+
+    const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
+      // 1. Fetch raw data
+      let rawUsers = snapshot.docs.map(docSnap => ({ ...docSnap.data(), id: docSnap.id } as User));
+
+      // 2. MASTER ADMIN CLEANUP
+      const adminAccounts = rawUsers.filter(u => u.email.toLowerCase().trim() === MASTER_ADMIN_EMAIL.toLowerCase());
+
+      if (adminAccounts.length > 0) {
+          adminAccounts.sort((a, b) => {
+              if (a.name === 'Osama') return -1; 
+              if (b.name === 'Osama') return 1;
+              return a.name.length - b.name.length;
+          });
+
+          const winner = adminAccounts[0];
+
+          if (winner.name !== 'Osama') {
+              const userRef = doc(db, "users", winner.id);
+              updateDoc(userRef, { name: 'Osama' });
+              winner.name = 'Osama';
+              if (user.id === winner.id) {
+                  setUser({ ...user, name: 'Osama' });
+              }
+          }
+
+          for (let i = 1; i < adminAccounts.length; i++) {
+              const loser = adminAccounts[i];
+              deleteDoc(doc(db, "users", loser.id));
+              const idx = rawUsers.findIndex(u => u.id === loser.id);
+              if (idx > -1) rawUsers.splice(idx, 1);
+          }
+      }
+
+      // Sort users for display list (admin priority)
+      rawUsers.sort((a, b) => {
+          const emailA = a.email.toLowerCase().trim();
+          const emailB = b.email.toLowerCase().trim();
+          if (emailA !== emailB) return 0;
+          if (a.role === 'admin' && b.role !== 'admin') return -1;
+          if (b.role === 'admin' && a.role !== 'admin') return 1;
+          return b.points - a.points;
+      });
+
+      const fetchedUsers: User[] = [];
+      const batch = writeBatch(db!);
+      let needsCommit = false;
+      const usersToPropagate: { id: string, avatarUrl: string }[] = [];
+      const seenEmails = new Set<string>();
+
+      rawUsers.forEach((u) => {
+        const normalizedEmail = u.email.toLowerCase().trim();
+        if (seenEmails.has(normalizedEmail)) return;
+        seenEmails.add(normalizedEmail);
+
+        if (!u.role) u.role = 'student';
+        if (!u.status) u.status = 'active';
+
+        if (u.email === MASTER_ADMIN_EMAIL && u.role !== 'admin') {
+             const ref = doc(db!, "users", u.id);
+             batch.update(ref, { role: 'admin' });
+             needsCommit = true;
+             u.role = 'admin';
+        }
+        
+        const isLecturerEmail = u.email.endsWith('@unimy.edu.my') && !u.email.endsWith('@student.unimy.edu.my');
+        if (isLecturerEmail) {
+            let updates: any = {};
+            if (u.role === 'student') {
+                updates.role = 'lecturer';
+                updates.course = 'Lecturer';
+                u.role = 'lecturer';
+                u.course = 'Lecturer';
+            }
+            if (u.bio === 'Student' || u.bio === 'student' || u.bio === 'I am a student at UNIMY.') {
+                updates.bio = 'Lecturer';
+                u.bio = 'Lecturer';
+            }
+            if (Object.keys(updates).length > 0) {
+                const ref = doc(db!, "users", u.id);
+                batch.update(ref, updates);
+                needsCommit = true;
+            }
+        }
+
+        const isLegacy = !u.avatarUrl || (!u.avatarUrl.startsWith('data:') && !u.avatarUrl.includes('firebasestorage.googleapis.com'));
+        if (isLegacy) {
+            const newAvatar = generateDefaultAvatar(u.name);
+            u.avatarUrl = newAvatar;
+            const ref = doc(db!, "users", u.id);
+            batch.update(ref, { avatarUrl: newAvatar });
+            needsCommit = true;
+            usersToPropagate.push({ id: u.id, avatarUrl: newAvatar });
+        }
+        fetchedUsers.push(u);
+      });
+
+      if (needsCommit) {
+          batch.commit().then(() => {
+              usersToPropagate.forEach(u => propagateUserUpdates(u.id, { avatarUrl: u.avatarUrl }));
+          }).catch(e => console.error("Batch update failed", e));
+      }
+
+      setUsers(fetchedUsers);
+      
+      if (auth.currentUser?.email) {
+          const myEmail = auth.currentUser.email.toLowerCase().trim();
+          const bestProfileForMe = fetchedUsers.find(u => u.email.toLowerCase().trim() === myEmail);
+          if (bestProfileForMe) {
+              if (!user || user.id !== bestProfileForMe.id || JSON.stringify(user) !== JSON.stringify(bestProfileForMe)) {
+                   if (bestProfileForMe.status === 'banned') {
+                       logout();
+                       showToast("Your account has been restricted.", "error");
+                   } else {
+                       setUser(bestProfileForMe);
+                   }
+              }
+          }
+      }
+    });
+
+    let unsubReports = () => {};
+    if (user.role === 'admin') {
+        const q = query(collection(db, "reports"), where("status", "==", "pending"));
+        unsubReports = onSnapshot(q, (snapshot) => {
+            const fetchedReports = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Report));
+            fetchedReports.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+            setReports(fetchedReports);
+        });
+    }
+
+    const unsubResources = onSnapshot(query(collection(db, "resources"), orderBy("uploadDate", "desc")), (snapshot) => {
+      setResources(snapshot.docs.map(d => {
+          const data = d.data();
+          return { 
+              id: d.id, 
+              ...data,
+              upvotedBy: data.upvotedBy || [],
+              downvotedBy: data.downvotedBy || [],
+          } as Resource;
+      }));
+      setAreResourcesLoading(false);
+    });
+
+    const unsubPosts = onSnapshot(query(collection(db, "forumPosts"), orderBy("timestamp", "desc")), (snapshot) => {
+      setForumPosts(snapshot.docs.map(d => {
+          const data = d.data();
+          return {
+              id: d.id,
+              ...data,
+              upvotedBy: data.upvotedBy || [],
+              downvotedBy: data.downvotedBy || [],
+              replies: (data.replies || []).map((r: any) => ({...r, upvotedBy: r.upvotedBy || []}))
+          } as ForumPost;
+      }));
+    });
+
+    const unsubRequests = onSnapshot(query(collection(db, "resourceRequests"), orderBy("timestamp", "desc")), (snapshot) => {
+      setResourceRequests(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ResourceRequest)));
+    });
+
+    const unsubConvos = onSnapshot(query(collection(db, "conversations"), where("participants", "array-contains", user.id)), (snapshot) => {
+      setConversations(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Conversation)));
+    });
+
+    const unsubMessages = onSnapshot(query(collection(db, "directMessages"), orderBy("timestamp", "asc")), (snapshot) => {
+        setDirectMessages(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as DirectMessage)));
+    });
+
+    const unsubNotifs = onSnapshot(query(collection(db, "notifications"), where("recipientId", "==", user.id)), (snapshot) => {
+      const fetchedNotifs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Notification));
+      fetchedNotifs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      setNotifications(fetchedNotifs);
+    });
+
+    return () => {
+      unsubUsers(); unsubResources(); unsubPosts(); unsubRequests(); unsubConvos(); unsubMessages(); unsubNotifs(); unsubReports();
+    };
+  }, [user?.id, user?.role]);
+
+  const sendNotification = async (recipientId: string, senderId: string, type: NotificationType, message: string, linkIds?: any) => {
+      if (recipientId === user?.id || !db) return;
+      await addDoc(collection(db, "notifications"), { recipientId, senderId, type, message, timestamp: new Date().toISOString(), isRead: false, ...linkIds });
+  };
+  
+  const logout = async () => { if (!auth) return; await firebaseAuth.signOut(auth); setUser(null); setViewState('dashboard'); setViewHistory([]); };
+  
+  const deactivateAccount = async () => {
+      if (!user || !db) return;
+      try {
+          const userRef = doc(db, "users", user.id);
+          await updateDoc(userRef, { status: 'deactivated' });
+          await logout();
+      } catch (error) { console.error("Failed to deactivate", error); showToast("Failed to deactivate account.", "error"); }
+  };
+
+  const deleteAccount = async () => {
+      if (!user || !db) return;
+      setIsLoading(true);
+      try {
+          const resQuery = query(collection(db, "resources"), where("author.id", "==", user.id));
+          const resSnap = await getDocs(resQuery);
+          for (const docSnap of resSnap.docs) {
+              const res = docSnap.data() as Resource;
+              await deleteResource(docSnap.id, res.fileUrl, res.previewImageUrl);
+          }
+          const postQuery = query(collection(db, "forumPosts"), where("author.id", "==", user.id));
+          const postSnap = await getDocs(postQuery);
+          for (const docSnap of postSnap.docs) { await deleteDoc(doc(db, "forumPosts", docSnap.id)); }
+          
+          const reqQuery = query(collection(db, "resourceRequests"), where("requester.id", "==", user.id));
+          const reqSnap = await getDocs(reqQuery);
+          for (const docSnap of reqSnap.docs) { await deleteDoc(doc(db, "resourceRequests", docSnap.id)); }
+
+          await deleteDoc(doc(db, "users", user.id));
+          localStorage.removeItem(`examvault_tour_${user.id}`);
+          if (auth.currentUser) await auth.currentUser.delete(); else await logout();
+          window.location.reload();
+      } catch (error) { setIsLoading(false); showToast("Failed to delete account.", "error"); }
+  };
+
+  const toggleSaveResource = async (resourceId: string) => { if (!user) return; const isSaved = user.savedResourceIds?.includes(resourceId); await updateDoc(doc(db, "users", user.id), { savedResourceIds: isSaved ? arrayRemove(resourceId) : arrayUnion(resourceId) }); };
+  const toggleSavePost = async (postId: string) => { if (!user) return; const isSaved = user.savedPostIds?.includes(postId); await updateDoc(doc(db, "users", user.id), { savedPostIds: isSaved ? arrayRemove(postId) : arrayUnion(postId) }); };
+  const toggleSaveRequest = async (requestId: string) => { if (!user) return; const isSaved = user.savedRequestIds?.includes(requestId); await updateDoc(doc(db, "users", user.id), { savedRequestIds: isSaved ? arrayRemove(requestId) : arrayUnion(requestId) }); };
+
+  const earnPoints = async (amount: number, message: string) => { if (!user) return; await updateDoc(doc(db, "users", user.id), { points: increment(amount), weeklyPoints: increment(amount) }); setToast({ message, points: amount, type: amount > 0 ? 'success' : 'info' }); };
+  
+  // Rank calculation based strictly on points and then ID for determinism
+  const userRanks = useMemo(() => {
+      // Sort primarily by points (desc), secondarily by ID (asc) to prevent jitter on equal scores
+      const sortedByPoints = [...users].sort((a, b) => b.points - a.points || a.id.localeCompare(b.id));
+      const r = new Map();
+      sortedByPoints.forEach((u, i) => r.set(u.id, i));
+      return r;
+  }, [users]);
+
+  const toggleUserRole = async (uid: string, role: any) => { if (user?.role === 'admin') await updateDoc(doc(db!, "users", uid), { role }); };
+  const toggleUserStatus = async (uid: string, status: any) => { if (user?.role === 'admin') await updateDoc(doc(db!, "users", uid), { status }); };
+  const resolveReport = async (rid: string, status: any) => { if (user?.role === 'admin') await updateDoc(doc(db!, "reports", rid), { status }); };
+
+  const handleUpload = async (resourceData: any, file: File, coverImage: File | null) => {
+      if (!user || !db || !storage) return;
+      setIsUploading(true);
+      try {
+          const storageRef = ref(storage, `resources/${Date.now()}_${file.name}`);
+          await uploadBytes(storageRef, file);
+          const downloadURL = await getDownloadURL(storageRef);
+          let previewUrl = generateFilePreview(file.name);
+          if (coverImage) {
+              const coverRef = ref(storage, `covers/${Date.now()}_${coverImage.name}`);
+              await uploadBytes(coverRef, coverImage);
+              previewUrl = await getDownloadURL(coverRef);
+          }
+          const newResource = { ...resourceData, author: sanitizeForFirestore(user), uploadDate: new Date().toISOString(), upvotes: 0, downvotes: 0, upvotedBy: [], downvotedBy: [], comments: [], fileUrl: downloadURL, fileName: file.name, previewImageUrl: previewUrl, fileBase64: "", mimeType: file.type, contentForAI: "Content is in the file..." };
+          const docRef = await addDoc(collection(db, "resources"), sanitizeForFirestore(newResource));
+          
+          if (fulfillingRequest) {
+              await updateDoc(doc(db, "resourceRequests", fulfillingRequest.id), {
+                  status: 'Fulfilled',
+                  fulfillment: {
+                      fulfiller: sanitizeForFirestore(user),
+                      resourceId: docRef.id,
+                      timestamp: new Date().toISOString()
+                  }
+              });
+              await sendNotification(fulfillingRequest.requester.id, user.id, NotificationType.RequestFulfilled, `${user.name} fulfilled your request for '${fulfillingRequest.title}'`, { requestId: fulfillingRequest.id, resourceId: docRef.id });
+              earnPoints(50, "Request Fulfilled!");
+              setFulfillingRequest(undefined);
+          } else {
+              earnPoints(25, "Resource Uploaded!");
+          }
+
+          // Notify subscribers
+          const subscribers = users.filter(u => 
+             u.subscriptions.users.includes(user.id) || 
+             (newResource.lecturer && u.subscriptions.lecturers.includes(newResource.lecturer)) ||
+             u.subscriptions.courseCodes.includes(newResource.courseCode)
+          );
+          
+          const uniqueRecipients = new Set(subscribers.map(s => s.id));
+          uniqueRecipients.delete(user.id);
+          
+          uniqueRecipients.forEach(async (recipientId) => {
+             const recipient = users.find(u => u.id === recipientId);
+             let msg = `${user.name} uploaded a new resource: '${newResource.title}'`;
+             if (recipient?.subscriptions.lecturers.includes(newResource.lecturer || '')) {
+                 msg = `New resource for ${newResource.lecturer}: '${newResource.title}'`;
+             } else if (recipient?.subscriptions.courseCodes.includes(newResource.courseCode)) {
+                 msg = `New resource for ${newResource.courseCode}: '${newResource.title}'`;
+             }
+             await sendNotification(recipientId, user.id, NotificationType.Subscription, msg, { resourceId: docRef.id });
+          });
+
+          setIsUploadModalOpen(false);
+          showToast("Upload successful!", "success");
+      } catch (error) { console.error(error); setToast({ message: "Upload failed.", type: 'error' }); } finally { setIsUploading(false); }
+  };
+
+  const deleteResource = async (resourceId: string, fileUrl: string, previewUrl?: string) => {
+      if (!user || !db) return;
+      
+      try {
+          // 1. Get the resource first to identify the author and calculate point reduction
+          const resRef = doc(db, "resources", resourceId);
+          const resSnap = await getDoc(resRef);
+          
+          if (!resSnap.exists()) {
+             throw new Error("Resource not found");
+          }
+          
+          const resourceData = resSnap.data() as Resource;
+          const authorId = resourceData.author.id;
+
+          // 2. Delete the document
+          await deleteDoc(resRef);
+          
+          // 3. Delete files from Storage
+          if (fileUrl.includes('firebasestorage')) {
+             try {
+                const fileRef = ref(storage, fileUrl);
+                await deleteObject(fileRef);
+             } catch(e) { console.warn("Could not delete file", e); }
+          }
+           if (previewUrl && previewUrl.includes('firebasestorage')) {
+             try {
+                const prevRef = ref(storage, previewUrl);
+                await deleteObject(prevRef);
+             } catch(e) { console.warn("Could not delete preview", e); }
+          }
+
+          // 4. Deduct Points & Update Stats
+          // Standard upload points = 25. Decrement upload count.
+          const userRef = doc(db, "users", authorId);
+          await updateDoc(userRef, {
+              points: increment(-25),
+              weeklyPoints: increment(-25),
+              uploadCount: increment(-1)
+          });
+
+          // 5. Navigate away if on detail view
+          if (view === 'resourceDetail' && selectedId === resourceId) { 
+              setViewState('dashboard'); 
+              setSelectedId(undefined); 
+          }
+          
+          // 6. Show notification with negative points
+          showToast("Resource deleted.", "info", -25);
+
+      } catch (error) { 
+          console.error(error); 
+          setToast({ message: "Failed to delete resource.", type: 'error' }); 
       }
   };
 
+  const handleVote = async (resourceId: string, action: 'up' | 'down') => {
+      if (!user || !db) return;
+      const resRef = doc(db, "resources", resourceId);
+      const resSnap = await getDoc(resRef);
+      if (!resSnap.exists()) return;
+      const resData = resSnap.data() as Resource;
+      const isUp = resData.upvotedBy?.includes(user.id);
+      const isDown = resData.downvotedBy?.includes(user.id);
+      
+      const batch = writeBatch(db);
+
+      if (action === 'up') {
+          if (isUp) {
+               batch.update(resRef, { upvotes: increment(-1), upvotedBy: arrayRemove(user.id) });
+          } else {
+               batch.update(resRef, { upvotes: increment(1), upvotedBy: arrayUnion(user.id) });
+               if (isDown) batch.update(resRef, { downvotes: increment(-1), downvotedBy: arrayRemove(user.id) });
+          }
+      } else {
+          if (isDown) {
+               batch.update(resRef, { downvotes: increment(-1), downvotedBy: arrayRemove(user.id) });
+          } else {
+               batch.update(resRef, { downvotes: increment(1), downvotedBy: arrayUnion(user.id) });
+               if (isUp) batch.update(resRef, { upvotes: increment(-1), upvotedBy: arrayRemove(user.id) });
+          }
+      }
+      await batch.commit();
+  };
+
+  const addCommentToResource = async (resourceId: string, text: string, parentId: string | null) => {
+      if (!user || !db) return;
+      const newComment = { id: `c-${Date.now()}`, author: sanitizeForFirestore(user), text, timestamp: new Date().toISOString(), parentId, upvotes: 0, upvotedBy: [] };
+      await updateDoc(doc(db, "resources", resourceId), { comments: arrayUnion(sanitizeForFirestore(newComment)) });
+      
+      const res = resources.find(r => r.id === resourceId);
+      if (res) {
+          // 1. Notify Resource Author (if they didn't write the comment)
+          if (res.author.id !== user.id) {
+              await sendNotification(res.author.id, user.id, NotificationType.NewForumPost, `${user.name} commented on your resource '${res.title}'`, { resourceId: res.id, commentId: newComment.id });
+          }
+
+          // 2. Notify Parent Comment Author (if reply and not self, and distinct from resource author)
+          if (parentId) {
+              const parentComment = res.comments.find(c => c.id === parentId);
+              if (parentComment && parentComment.author.id !== user.id && parentComment.author.id !== res.author.id) {
+                   await sendNotification(parentComment.author.id, user.id, NotificationType.NewReply, `${user.name} replied to your comment on '${res.title}'`, { resourceId: res.id, commentId: newComment.id });
+              }
+          }
+      }
+  };
+
+  const deleteCommentFromResource = async (resourceId: string, comment: Comment) => {
+      if (!db) return;
+      try {
+          const resRef = doc(db, "resources", resourceId);
+          const snap = await getDoc(resRef);
+          if (snap.exists()) {
+             const data = snap.data() as Resource;
+             const updatedComments = data.comments.filter(c => c.id !== comment.id);
+             await updateDoc(resRef, { comments: updatedComments });
+          }
+          setToast({ message: "Comment deleted.", type: 'success' });
+      } catch (error) {
+          console.error("Failed to delete comment", error);
+          setToast({ message: "Failed to delete comment.", type: 'error' });
+      }
+  };
+
+  const handleCommentVote = async (resourceId: string, commentId: string) => { 
+      if (!user || !db) return;
+      const resRef = doc(db, "resources", resourceId);
+      const resSnap = await getDoc(resRef);
+      if (!resSnap.exists()) return;
+      const resData = resSnap.data() as Resource;
+      const updatedComments = resData.comments.map(c => {
+          if (c.id === commentId) {
+             const hasVoted = c.upvotedBy?.includes(user.id);
+             return {
+                 ...c,
+                 upvotes: hasVoted ? c.upvotes - 1 : c.upvotes + 1,
+                 upvotedBy: hasVoted ? c.upvotedBy.filter(id => id !== user.id) : [...(c.upvotedBy || []), user.id]
+             };
+          }
+          return c;
+      });
+      await updateDoc(resRef, { comments: updatedComments });
+  };
+
+  const addForumPost = async (postData: any, file?: File) => {
+      if (!user || !db) return;
+      let attachment = undefined;
+      if (file) {
+          const storageRef = ref(storage, `attachments/${Date.now()}_${file.name}`);
+          await uploadBytes(storageRef, file);
+          const url = await getDownloadURL(storageRef);
+          attachment = { type: file.type.startsWith('image/') ? 'image' : 'file', url, name: file.name, size: (file.size / 1024).toFixed(0) + ' KB' };
+      }
+      const newPost = { ...postData, author: sanitizeForFirestore(user), timestamp: new Date().toISOString(), upvotes: 0, downvotes: 0, replies: [], attachment };
+      const refDoc = await addDoc(collection(db, "forumPosts"), sanitizeForFirestore(newPost));
+      earnPoints(10, "Discussion Created!");
+
+      const subscribers = users.filter(u => u.subscriptions.courseCodes.includes(postData.courseCode));
+      subscribers.forEach(async (sub) => {
+          if (sub.id !== user.id) {
+              await sendNotification(sub.id, user.id, NotificationType.NewForumPost, `New discussion in ${postData.courseCode}: '${postData.title}'`, { forumPostId: refDoc.id });
+          }
+      });
+  };
+
+  const deleteForumPost = async (postId: string) => { if(!db) return; setViewState('discussions'); await deleteDoc(doc(db, "forumPosts", postId)); };
+  
+  const handlePostVote = async (postId: string, action: 'up' | 'down') => { 
+      if (!user || !db) return;
+      const postRef = doc(db, "forumPosts", postId);
+      const postSnap = await getDoc(postRef);
+      if (!postSnap.exists()) return;
+      const postData = postSnap.data() as ForumPost;
+      const isUp = postData.upvotedBy?.includes(user.id);
+      const isDown = postData.downvotedBy?.includes(user.id);
+      
+      const batch = writeBatch(db);
+      if (action === 'up') {
+          if (isUp) {
+               batch.update(postRef, { upvotes: increment(-1), upvotedBy: arrayRemove(user.id) });
+          } else {
+               batch.update(postRef, { upvotes: increment(1), upvotedBy: arrayUnion(user.id) });
+               if (isDown) batch.update(postRef, { downvotes: increment(-1), downvotedBy: arrayRemove(user.id) });
+          }
+      } else {
+           if (isDown) {
+               batch.update(postRef, { downvotes: increment(-1), downvotedBy: arrayRemove(user.id) });
+          } else {
+               batch.update(postRef, { downvotes: increment(1), downvotedBy: arrayUnion(user.id) });
+               if (isUp) batch.update(postRef, { upvotes: increment(-1), upvotedBy: arrayRemove(user.id) });
+          }
+      }
+      await batch.commit();
+  };
+
+  const addReplyToPost = async (postId: string, text: string, parentId: string | null, file?: File) => {
+      if (!user || !db) return;
+      let attachment = undefined;
+      if (file) {
+          const storageRef = ref(storage, `attachments/${Date.now()}_${file.name}`);
+          await uploadBytes(storageRef, file);
+          const url = await getDownloadURL(storageRef);
+          attachment = { type: file.type.startsWith('image/') ? 'image' : 'file', url, name: file.name, size: (file.size / 1024).toFixed(0) + ' KB' };
+      }
+      const newReply = { id: `reply-${Date.now()}`, author: sanitizeForFirestore(user), text, timestamp: new Date().toISOString(), upvotes: 0, parentId, isVerified: false, attachment };
+      await updateDoc(doc(db, "forumPosts", postId), { replies: arrayUnion(sanitizeForFirestore(newReply)) });
+      
+      const post = forumPosts.find(p => p.id === postId);
+      if (post && post.author.id !== user.id) {
+          await sendNotification(post.author.id, user.id, NotificationType.NewReply, `${user.name} replied to your post '${post.title}'`, { forumPostId: postId, replyId: newReply.id });
+      }
+  };
+
+  const deleteReplyFromPost = async (postId: string, reply: ForumReply) => {
+      if (!db) return;
+      try {
+          const postRef = doc(db, "forumPosts", postId);
+          const snap = await getDoc(postRef);
+          if (snap.exists()) {
+             const data = snap.data() as ForumPost;
+             const updatedReplies = data.replies.filter(r => r.id !== reply.id);
+             await updateDoc(postRef, { replies: updatedReplies });
+          }
+          setToast({ message: "Reply deleted.", type: 'success' });
+      } catch (error) {
+          console.error("Delete reply failed", error);
+          setToast({ message: "Failed to delete reply.", type: 'error' });
+      }
+  };
+
+  const handleReplyVote = async (postId: string, replyId: string) => {
+      if (!user || !db) return;
+      const postRef = doc(db, "forumPosts", postId);
+      const postSnap = await getDoc(postRef);
+      if (!postSnap.exists()) return;
+      const postData = postSnap.data() as ForumPost;
+      const updatedReplies = postData.replies.map(r => {
+          if (r.id === replyId) {
+             const hasVoted = r.upvotedBy?.includes(user.id);
+             return {
+                 ...r,
+                 upvotes: hasVoted ? r.upvotes - 1 : r.upvotes + 1,
+                 upvotedBy: hasVoted ? r.upvotedBy.filter(id => id !== user.id) : [...(r.upvotedBy || []), user.id]
+             };
+          }
+          return r;
+      });
+      await updateDoc(postRef, { replies: updatedReplies });
+  };
+
+  const toggleVerifiedAnswer = async (postId: string, replyId: string) => {
+      if (!user || !db) return;
+      const postRef = doc(db, "forumPosts", postId);
+      const postSnap = await getDoc(postRef);
+      if (!postSnap.exists()) return;
+      const postData = postSnap.data() as ForumPost;
+      
+      let authorId = "";
+      const updatedReplies = postData.replies.map(r => {
+          if (r.id === replyId) {
+              authorId = r.author.id;
+              return { ...r, isVerified: !r.isVerified };
+          }
+          return r;
+      });
+      await updateDoc(postRef, { replies: updatedReplies });
+      
+      const reply = updatedReplies.find(r => r.id === replyId);
+      if (reply && reply.isVerified) {
+          earnPoints(15, "Answer Verified!");
+          if (authorId && authorId !== user.id) {
+               await updateDoc(doc(db, "users", authorId), { points: increment(15), weeklyPoints: increment(15) });
+               await sendNotification(authorId, user.id, NotificationType.NewReply, `Your reply in '${postData.title}' was marked as Verified!`, { forumPostId: postId, replyId: replyId });
+          }
+      }
+  };
+  
+  const addResourceRequest = async (reqData: any, file?: File) => {
+      if (!user || !db) return;
+      let attachment = undefined;
+      if (file) {
+          const storageRef = ref(storage, `attachments/${Date.now()}_${file.name}`);
+          await uploadBytes(storageRef, file);
+          const url = await getDownloadURL(storageRef);
+          attachment = { type: file.type.startsWith('image/') ? 'image' : 'file', url, name: file.name, size: (file.size / 1024).toFixed(0) + ' KB' };
+      }
+      const newReq = { requester: sanitizeForFirestore(user), timestamp: new Date().toISOString(), status: 'Open', ...reqData, attachment };
+      const refDoc = await addDoc(collection(db, "resourceRequests"), sanitizeForFirestore(newReq));
+      
+      earnPoints(5, "Request Posted!");
+      
+      const potentialHelpers = users.filter(u => u.subscriptions.courseCodes.includes(reqData.courseCode) && u.id !== user.id);
+      potentialHelpers.forEach(async (u) => {
+          await sendNotification(u.id, user.id, NotificationType.NewRequest, `${user.name} requested a resource for ${reqData.courseCode}`, { requestId: refDoc.id });
+      });
+  };
+
+  const deleteResourceRequest = async (requestId: string) => { 
+      if (!db) return; 
+      try {
+          const reqRef = doc(db, "resourceRequests", requestId);
+          const reqSnap = await getDoc(reqRef);
+          
+          if (reqSnap.exists()) {
+              const reqData = reqSnap.data() as ResourceRequest;
+              const requesterId = reqData.requester.id;
+              
+              await deleteDoc(reqRef);
+              
+              // Deduct 5 points from requester
+              const userRef = doc(db, "users", requesterId);
+              await updateDoc(userRef, {
+                  points: increment(-5),
+                  weeklyPoints: increment(-5)
+              });
+              
+              if (user?.id === requesterId) {
+                  showToast("Request deleted.", "info", -5);
+              } else {
+                  showToast("Request deleted.", "success");
+              }
+          }
+      } catch (e) {
+          console.error("Failed to delete request", e);
+          showToast("Failed to delete request.", "error");
+      }
+  };
+  
+  const openUploadForRequest = (id: string) => { const req = resourceRequests.find(r => r.id === id); if (req) { setFulfillingRequest(req); setIsUploadModalOpen(true); } };
+  
+  const toggleUserSubscription = async (uid: string) => {
+      if (!user || !db) return;
+      const isSub = user.subscriptions.users.includes(uid);
+      const updated = isSub ? arrayRemove(uid) : arrayUnion(uid);
+      await updateDoc(doc(db, "users", user.id), { "subscriptions.users": updated });
+      if (!isSub) {
+          await sendNotification(uid, user.id, NotificationType.Subscription, `${user.name} started following you.`);
+      }
+  };
+  const toggleLecturerSubscription = async (name: string) => {
+      if (!user || !db) return;
+      const isSub = user.subscriptions.lecturers.includes(name);
+      await updateDoc(doc(db, "users", user.id), { "subscriptions.lecturers": isSub ? arrayRemove(name) : arrayUnion(name) });
+  };
+  const toggleCourseCodeSubscription = async (code: string) => {
+      if (!user || !db) return;
+      const isSub = user.subscriptions.courseCodes.includes(code);
+      await updateDoc(doc(db, "users", user.id), { "subscriptions.courseCodes": isSub ? arrayRemove(code) : arrayUnion(code) });
+  };
+
+  const updateUserProfile = async (data: Partial<User>) => {
+      if (!user || !db) return;
+      await updateDoc(doc(db, "users", user.id), data);
+      await propagateUserUpdates(user.id, data);
+      showToast("Profile updated successfully.", "success");
+  };
+
+  const sendMessage = async (cid: string, text: string) => {
+      if (!user || !db) return;
+      const msg = { conversationId: cid, senderId: user.id, recipientId: "", text, timestamp: new Date().toISOString(), status: MessageStatus.Sent, isDeleted: false };
+      
+      // Determine recipient
+      const convo = conversations.find(c => c.id === cid);
+      if (convo) {
+          msg.recipientId = convo.participants.find(p => p !== user.id) || "";
+      }
+
+      await addDoc(collection(db, "directMessages"), msg);
+      await updateDoc(doc(db, "conversations", cid), { lastMessageTimestamp: msg.timestamp });
+      
+      if (msg.recipientId) {
+          await sendNotification(msg.recipientId, user.id, NotificationType.NewMessage, `${user.name} sent you a message.`, { conversationId: cid });
+      }
+  };
+
+  const editMessage = async (mid: string, text: string) => {
+      if (!db) return;
+      await updateDoc(doc(db, "directMessages", mid), { text, editedAt: new Date().toISOString() });
+  };
+
+  const deleteMessage = async (mid: string) => {
+      if (!db) return;
+      await updateDoc(doc(db, "directMessages", mid), { isDeleted: true, text: '' });
+  };
+
+  const startConversation = async (uid: string, msg?: string) => {
+      if (!user || !db) return;
+      // Check if conversation exists
+      const existing = conversations.find(c => c.participants.includes(user.id) && c.participants.includes(uid));
+      let cid = existing?.id;
+      
+      if (!existing) {
+          const newConvo = { participants: [user.id, uid], lastMessageTimestamp: new Date().toISOString() };
+          const ref = await addDoc(collection(db, "conversations"), newConvo);
+          cid = ref.id;
+      }
+      
+      if (msg && cid) {
+          await sendMessage(cid, msg);
+      }
+      
+      setView('messages', cid);
+  };
+  
+  const sendDirectMessageToUser = (uid: string, text: string) => { startConversation(uid, text); };
+  
+  const markNotificationAsRead = async (id: string) => { if (!db) return; await updateDoc(doc(db, "notifications", id), { isRead: true }); };
+  const markAllNotificationsAsRead = async () => {
+      if (!user || !db) return;
+      const batch = writeBatch(db);
+      notifications.filter(n => !n.isRead && n.recipientId === user.id).forEach(n => {
+          batch.update(doc(db, "notifications", n.id), { isRead: true });
+      });
+      await batch.commit();
+  };
+  const clearAllNotifications = async () => {
+      if (!user || !db) return;
+      const batch = writeBatch(db);
+      notifications.filter(n => n.recipientId === user.id).forEach(n => {
+          batch.delete(doc(db, "notifications", n.id));
+      });
+      await batch.commit();
+  };
+  
+  const markMessagesAsRead = async (cid: string) => {
+      if (!user || !db) return;
+      const batch = writeBatch(db);
+      directMessages.filter(m => m.conversationId === cid && m.recipientId === user.id && m.status !== MessageStatus.Read).forEach(m => {
+           batch.update(doc(db, "directMessages", m.id), { status: MessageStatus.Read });
+      });
+      await batch.commit();
+  };
+
+  const setView = (newView: View, id?: string, options?: { replace?: boolean }) => {
+    setViewState(newView);
+    setSelectedId(id);
+    window.scrollTo(0, 0);
+    
+    setViewHistory(currentHistory => {
+        const newEntry = { view: newView, id };
+        if (options?.replace && currentHistory.length > 0) {
+            const updated = [...currentHistory];
+            updated[updated.length - 1] = newEntry;
+            return updated;
+        }
+        return [...currentHistory, newEntry];
+    });
+  };
+
+  const goBack = () => { if(viewHistory.length > 1) { const h = [...viewHistory]; h.pop(); const p = h[h.length-1]; setViewHistory(h); setViewState(p.view); setSelectedId(p.id); } else { setViewState('dashboard'); } };
+
+  const tourSteps = [
+    { selector: '#tour-dashboard', content: 'This is your dashboard.' },
+    { selector: '#tour-search-bar', content: 'Search here.' },
+    { selector: '#tour-filter-button', content: 'Filter resources.' },
+    { selector: '#tour-upload-button', content: 'Upload resources.' },
+    { selector: '#tour-discussions', content: 'Join discussions.' },
+    { selector: '#tour-requests', content: 'View requests.' },
+    { selector: '#tour-messages', content: 'Chat here.' },
+    { selector: '#tour-leaderboard', content: 'Leaderboard.' },
+    { selector: '#tour-profile-menu', content: 'Profile settings.' },
+  ];
+
+  // Logic to calculate unread states
+  const hasUnreadMessages = useMemo(() => {
+    if (!user) return false;
+    return directMessages.some(m => m.recipientId === user.id && m.status !== MessageStatus.Read);
+  }, [directMessages, user]);
+
+  const hasUnreadDiscussions = useMemo(() => {
+    if (!user) return false;
+    return notifications.some(n => !n.isRead && n.recipientId === user.id && (n.type === NotificationType.NewForumPost || n.type === NotificationType.NewReply));
+  }, [notifications, user]);
+
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg"><Loader2 size={48} className="animate-spin text-primary-600" /></div>;
+  if (!auth) return <div>Auth Error</div>; // Simplified error view for brevity
+  if (!user) return <AuthPage onLogin={() => {}} />;
+
   return (
-    <div>
-      <button onClick={() => setView('dashboard')} className="flex items-center gap-2 text-primary-600 dark:text-primary-400 font-semibold hover:text-primary-800 dark:hover:text-primary-300 transition mb-6">
-        <ArrowLeft size={20} />
-        Back to all resources
-      </button>
-      
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2">
-          {/* Main Resource Card */}
-          <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md transition-colors duration-300 border border-transparent dark:border-zinc-700">
-            <div className="flex items-center gap-3 mb-4">
-              <span className={`flex items-center gap-2 text-sm font-semibold px-3 py-1 rounded-full ${getBadgeStyle(resource.type)}`}>
-                {getBadgeIcon(resource.type)}
-                {resource.type}
-              </span>
-              <span className="text-sm font-bold text-slate-800 dark:text-white px-3 py-1 bg-slate-100 dark:bg-zinc-800 rounded-full">{resource.courseCode}</span>
-            </div>
-            
-            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">{resource.title}</h1>
-            <p className="text-lg text-slate-600 dark:text-slate-300 mt-1">{resource.courseName}</p>
-            <p className="text-sm text-slate-500 dark:text-slate-200 mt-4">{resource.description}</p>
-            
-            <div className="mt-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                <InfoTag label="Year" value={resource.year} />
-                <InfoTag label="Semester" value={resource.semester} />
-                {resource.lecturer && <InfoTag label="Lecturer" value={resource.lecturer} />}
-                {resource.examType && <InfoTag label={resource.type === ResourceType.PastPaper ? "Paper Type" : "Assessment Type"} value={resource.examType} />}
-                {fileType && <InfoTag label="File Type" value={fileType} />}
-                <InfoTag label="Uploaded On" value={formattedUploadDate} />
-            </div>
-
-            <div className="mt-6 pt-6 border-t border-slate-200 dark:border-dark-border space-y-4">
-                <div className="flex flex-col gap-3">
-                    <button
-                        onClick={() => setIsPreviewOpen(true)}
-                        className="w-full flex items-center justify-center gap-2 font-bold py-3 px-4 rounded-lg transition-all duration-200 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-zinc-700 hover:text-primary-700 dark:hover:text-primary-400 border border-slate-200 dark:border-zinc-700"
-                    >
-                        <Eye size={18} />
-                        Preview File
-                    </button>
-                    <a 
-                        href={resource.fileUrl} 
-                        download={resource.fileName}
-                        onClick={handleDownloadClick}
-                        className={`w-full flex items-center justify-center gap-2 font-bold py-3 px-4 rounded-lg transition-all duration-200 ${
-                            isDownloading 
-                            ? 'bg-primary-700 text-primary-100 cursor-wait' 
-                            : 'bg-primary-600 text-white hover:bg-primary-700 hover:-translate-y-0.5 shadow-md hover:shadow-lg'
-                        }`}
-                    >
-                        {isDownloading ? (
-                            <>
-                                <Loader2 size={18} className="animate-spin" />
-                                Downloading...
-                            </>
-                        ) : (
-                            <>
-                                <Download size={18} />
-                                Download
-                            </>
-                        )}
-                    </a>
-                </div>
-            </div>
-          </div>
-
-          {/* Smart Study Companion - REDESIGNED */}
-          <div className="bg-white dark:bg-dark-surface rounded-xl shadow-md mt-8 transition-colors duration-300 border border-transparent dark:border-zinc-700 overflow-hidden">
-            <div className="p-6 bg-gradient-to-r from-indigo-500 to-purple-600 text-white flex justify-between items-center">
-                <div>
-                    <h3 className="text-xl font-bold flex items-center gap-2">
-                        <Sparkles className="text-yellow-300" /> Smart Study Companion
-                    </h3>
-                    <p className="text-indigo-100 text-sm mt-1">Powered by Gemini AI</p>
-                </div>
-                {!hasGenerated && !isStudyLoading && (
-                    <button 
-                        onClick={handleSmartGenerate}
-                        className="bg-white text-indigo-600 hover:bg-indigo-50 font-bold py-2 px-4 rounded-lg shadow-sm transition flex items-center gap-2"
-                    >
-                        <BrainCircuit size={18} />
-                        Analyze Document
-                    </button>
-                )}
-            </div>
-
-            {isStudyLoading ? (
-                <div className="p-12 text-center">
-                    <Loader2 size={48} className="animate-spin text-primary-500 mx-auto mb-4" />
-                    <h4 className="text-lg font-bold text-slate-800 dark:text-white">Analyzing Content...</h4>
-                    <p className="text-slate-500 dark:text-slate-400">Genering summary, flashcards, and quiz.</p>
-                </div>
-            ) : !hasGenerated ? (
-                <div className="p-8 text-center bg-slate-50 dark:bg-zinc-800/50">
-                    <div className="flex justify-center gap-8 mb-6 opacity-60">
-                        <div className="flex flex-col items-center gap-2"><BookOpen size={32}/><span className="text-xs font-bold">Summary</span></div>
-                        <div className="flex flex-col items-center gap-2"><BookCopy size={32}/><span className="text-xs font-bold">Flashcards</span></div>
-                        <div className="flex flex-col items-center gap-2"><HelpCircle size={32}/><span className="text-xs font-bold">Quiz</span></div>
-                    </div>
-                    <p className="text-slate-600 dark:text-slate-300 max-w-md mx-auto mb-6">
-                        Unlock the power of AI to instantly summarize this document, create study flashcards, and test your knowledge with a practice quiz.
-                    </p>
-                    <button onClick={handleSmartGenerate} className="text-primary-600 dark:text-primary-400 font-bold hover:underline">
-                        Start Analysis
-                    </button>
-                </div>
-            ) : (
-                <div>
-                    {/* Tabs */}
-                    <div className="flex border-b border-slate-200 dark:border-zinc-700">
-                        <button 
-                            onClick={() => setActiveStudyTab('summary')}
-                            className={`flex-1 py-3 text-sm font-bold text-center transition ${activeStudyTab === 'summary' ? 'text-primary-600 border-b-2 border-primary-600 bg-primary-50 dark:bg-primary-900/10' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-zinc-800'}`}
-                        >
-                            Summary
-                        </button>
-                        <button 
-                            onClick={() => setActiveStudyTab('flashcards')}
-                            className={`flex-1 py-3 text-sm font-bold text-center transition ${activeStudyTab === 'flashcards' ? 'text-primary-600 border-b-2 border-primary-600 bg-primary-50 dark:bg-primary-900/10' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-zinc-800'}`}
-                        >
-                            Flashcards
-                        </button>
-                        <button 
-                            onClick={() => setActiveStudyTab('quiz')}
-                            className={`flex-1 py-3 text-sm font-bold text-center transition ${activeStudyTab === 'quiz' ? 'text-primary-600 border-b-2 border-primary-600 bg-primary-50 dark:bg-primary-900/10' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-zinc-800'}`}
-                        >
-                            Quiz
-                        </button>
-                    </div>
-
-                    {/* Tab Content */}
-                    <div className="p-6">
-                        {activeStudyTab === 'summary' && (
-                            <div className="prose-like dark:text-slate-200">
-                                <MarkdownRenderer content={summary} />
-                            </div>
-                        )}
-                        {activeStudyTab === 'flashcards' && cachedFlashcards && (
-                            <FlashcardViewer flashcards={cachedFlashcards} onReset={() => {}} /> // Reset disabled in this view for simplicity
-                        )}
-                        {activeStudyTab === 'quiz' && cachedQuiz && (
-                            <QuizComponent questions={cachedQuiz} onReset={() => {}} />
-                        )}
-                    </div>
-                </div>
-            )}
-          </div>
-
-          <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md mt-8 transition-colors duration-300 border border-transparent dark:border-zinc-700">
-            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-                <MessageSquare size={22}/>
-                Discussion ({resource.comments.length})
-            </h3>
-            <form onSubmit={handlePostComment} className="flex gap-4 items-start pb-6 mb-6 border-b border-slate-200 dark:border-zinc-700">
-              <Avatar src={user?.avatarUrl} alt={user?.name} className="w-10 h-10 rounded-full shrink-0" />
-              <div className="w-full">
-                <MarkdownToolbar
-                    textareaRef={commentTextareaRef}
-                    value={newComment}
-                    onValueChange={setNewComment}
-                />
-                <textarea
-                    ref={commentTextareaRef}
-                    value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
-                    placeholder="Add a comment..."
-                    className="w-full bg-slate-100 dark:bg-zinc-800 dark:text-white text-slate-900 placeholder:text-slate-500 dark:placeholder:text-slate-400 px-4 py-2 border border-slate-300 dark:border-zinc-700 rounded-b-lg focus:ring-primary-500 focus:border-primary-500 transition focus:outline-none"
-                    rows={3}
-                />
-                 <div className="flex justify-end mt-2">
-                    <button type="submit" className="bg-primary-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-primary-700 transition">Post</button>
-                </div>
-              </div>
-            </form>
-            <div className="mt-6">
-                {renderComments(null)}
-            </div>
-          </div>
-        </div>
-
-        <div className="lg:col-span-1">
-            <div className="bg-white dark:bg-dark-surface p-4 sm:p-6 rounded-xl shadow-md lg:sticky top-24 transition-colors duration-300 border border-transparent dark:border-zinc-700">
-                <img src={resource.previewImageUrl} alt={resource.title} className="w-full h-80 object-cover rounded-lg mb-6" />
-                
-                <div className="flex items-center gap-2">
-                    <button 
-                      onClick={handleUpvoteClick}
-                      className={`flex items-center gap-2 p-3 rounded-lg transition font-medium ${isUpvoted ? 'bg-green-600 text-white' : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50'}`}
-                    >
-                        <ThumbsUp size={18} />
-                        {resource.upvotes > 0 && <span>{resource.upvotes}</span>}
-                    </button>
-                    <button
-                      onClick={handleDownvoteClick}
-                      className={`flex items-center gap-2 p-3 rounded-lg transition font-medium ${isDownvoted ? 'bg-red-600 text-white' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50'}`}
-                    >
-                        <ThumbsDown size={18} />
-                        {resource.downvotes > 0 && <span>{resource.downvotes}</span>}
-                    </button>
-                    <button 
-                        onClick={() => toggleSaveResource(resource.id)}
-                        title={isSaved ? "Unsave" : "Save for later"}
-                        className={`p-3 rounded-lg transition font-medium ${isSaved ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-zinc-700'}`}
-                    >
-                        {isSaved ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
-                    </button>
-                     <button 
-                        onClick={() => setIsShareModalOpen(true)}
-                        title="Share"
-                        className="p-3 rounded-lg transition font-medium bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-zinc-700"
-                    >
-                        <Share2 size={18} />
-                    </button>
-                    {isAuthor && (
-                        <button 
-                            onClick={() => setIsDeleteConfirmOpen(true)}
-                            title="Delete Resource"
-                            className="p-3 rounded-lg transition font-medium bg-slate-100 dark:bg-zinc-800 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30"
-                        >
-                            <Trash2 size={18} />
-                        </button>
-                    )}
-                </div>
-
-                <div className="mt-6 pt-6 border-t border-slate-200 dark:border-dark-border">
-                    <p className="text-sm font-semibold text-slate-800 dark:text-white mb-3">Uploaded by</p>
-                    <button onClick={() => handleAuthorClick(resource.author.id)} className="flex items-center gap-3 w-full text-left hover:bg-slate-50 dark:hover:bg-zinc-800 p-2 rounded-lg transition-colors">
-                        <Avatar src={resource.author.avatarUrl} alt={resource.author.name} className="w-12 h-12 rounded-full" />
-                        <div>
-                            <div className="flex items-center">
-                              <p className="font-bold text-slate-900 dark:text-slate-100">{resource.author.name}</p>
-                              <UserRankBadge rank={authorRank} />
-                            </div>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                                <span className="font-semibold">{resource.author.course}</span> • Joined on {new Date(resource.author.joinDate).toLocaleDateString()}
-                            </p>
-                        </div>
-                    </button>
-                </div>
-            </div>
-        </div>
+    <AppContext.Provider value={{
+      user, users, resources, forumPosts, notifications, conversations, directMessages, resourceRequests, reports,
+      view, setView, logout, isDarkMode, toggleDarkMode: () => setIsDarkMode(!isDarkMode),
+      userRanks, 
+      savedResourceIds: user.savedResourceIds || [],
+      savedPostIds: user.savedPostIds || [],
+      savedRequestIds: user.savedRequestIds || [],
+      toggleSaveResource, toggleSavePost, toggleSaveRequest,
+      handleVote, addCommentToResource, handleCommentVote, deleteCommentFromResource,
+      addForumPost, handlePostVote, deleteForumPost, addReplyToPost, handleReplyVote, deleteReplyFromPost, toggleVerifiedAnswer,
+      addResourceRequest, deleteResourceRequest, openUploadForRequest,
+      toggleUserSubscription, toggleLecturerSubscription, toggleCourseCodeSubscription,
+      updateUserProfile, sendMessage, editMessage, deleteMessage, startConversation, sendDirectMessageToUser, markNotificationAsRead, markAllNotificationsAsRead, markMessagesAsRead,
+      clearAllNotifications, goBack, hasUnreadMessages, hasUnreadDiscussions,
+      isLoading, deleteResource, deactivateAccount, deleteAccount,
+      areResourcesLoading, scrollTargetId, setScrollTargetId, showToast, toggleUserRole, toggleUserStatus, resolveReport
+    }}>
+      <div className="min-h-screen bg-slate-50 dark:bg-dark-bg transition-colors duration-300">
+        <Header onUploadClick={() => { setFulfillingRequest(undefined); setIsUploadModalOpen(true); }} />
+        <SideNav />
+        <main className="ml-20 transition-all duration-300 pt-4 px-4 md:px-8 pb-8">
+          {view === 'dashboard' && <DashboardPage />}
+          {view === 'resourceDetail' && selectedId && <ResourceDetailPage />}
+          {view === 'discussions' && <DiscussionsPage />}
+          {view === 'forumDetail' && selectedId && <ForumPostDetailPage post={forumPosts.find(p => p.id === selectedId) || forumPosts[0]} />}
+          {view === 'profile' && user && <ProfilePage user={user} allResources={resources} isCurrentUser={true} />}
+          {view === 'publicProfile' && selectedId && <ProfilePage user={users.find(u => u.id === selectedId) || user} allResources={resources} isCurrentUser={selectedId === user.id} />}
+          {view === 'messages' && <MessagesPage activeConversationId={selectedId || null} />}
+          {view === 'leaderboard' && <LeaderboardPage />}
+          {view === 'requests' && <ResourceRequestsPage />}
+          {view === 'admin' && user.role === 'admin' && <AdminPage />} 
+        </main>
+        {isUploadModalOpen && <UploadModal onClose={() => { if(!isUploading) { setIsUploadModalOpen(false); setFulfillingRequest(undefined); } }} onUpload={handleUpload} fulfillingRequest={fulfillingRequest} isLoading={isUploading} />}
+        {runTour && <TooltipGuide targetSelector={tourSteps[tourStep - 1]?.selector || 'body'} content={tourSteps[tourStep - 1]?.content || ''} currentStep={tourStep} totalSteps={tourSteps.length} onNext={() => { if (tourStep < tourSteps.length) setTourStep(tourStep + 1); else { setRunTour(false); localStorage.setItem(`examvault_tour_${user.id}`, 'true'); } }} onPrev={() => setTourStep(Math.max(1, tourStep - 1))} onSkip={() => { setRunTour(false); localStorage.setItem(`examvault_tour_${user.id}`, 'true'); }} />}
+        {toast && <ToastNotification message={toast.message} points={toast.points} type={toast.type} onClose={() => setToast(null)} />}
       </div>
-      
-      {/* ... (Related Resources Section - Keeping existing logic, just omitted for brevity in XML if unmodified, but including to be safe) ... */}
-      {relatedResources.length > 0 && (
-        <div className="mt-12 border-t border-slate-200 dark:border-zinc-700 pt-8">
-            <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-6">Related Resources</h2>
-            <div className="relative group px-4">
-                
-                {relatedStartIndex > 0 && (
-                    <button 
-                        onClick={() => setRelatedStartIndex(prev => Math.max(0, prev - 1))}
-                        className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-20 bg-white dark:bg-zinc-800 text-slate-700 dark:text-slate-200 p-3 rounded-full shadow-lg border border-slate-100 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-700 hover:text-primary-600 hover:scale-110 transition-all duration-200 flex items-center justify-center"
-                        aria-label="Previous"
-                    >
-                        <ArrowLeft size={24} />
-                    </button>
-                )}
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
-                    {relatedResources.slice(relatedStartIndex, relatedStartIndex + 4).map(related => (
-                        <ResourceCard 
-                            key={related.id}
-                            resource={related}
-                            onSelect={() => setView('resourceDetail', related.id)}
-                            onAuthorClick={handleAuthorClick}
-                            compact={true}
-                        />
-                    ))}
-                </div>
-
-                {relatedStartIndex < relatedResources.length - 4 && (
-                    <button 
-                        onClick={() => setRelatedStartIndex(prev => Math.min(Math.max(0, relatedResources.length - 4), prev + 1))}
-                        className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-20 bg-white dark:bg-zinc-800 text-slate-700 dark:text-slate-200 p-3 rounded-full shadow-lg border border-slate-100 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-700 hover:text-primary-600 hover:scale-110 transition-all duration-200 flex items-center justify-center"
-                        aria-label="Next"
-                    >
-                        <ArrowRight size={24} />
-                    </button>
-                )}
-            </div>
-        </div>
-      )}
-
-      {isDeleteConfirmOpen && (
-            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in">
-                <div className="bg-white dark:bg-zinc-800 p-6 rounded-xl shadow-xl max-w-sm w-full border dark:border-zinc-700">
-                    <div className="flex flex-col items-center text-center">
-                        <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-full text-red-600 dark:text-red-400 mb-4">
-                            <Trash2 size={32} />
-                        </div>
-                        <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Delete Resource?</h3>
-                        <p className="text-slate-500 dark:text-slate-400 mb-6">
-                            Are you sure you want to delete <strong>{resource.title}</strong>? This action cannot be undone.
-                        </p>
-                        <div className="flex gap-3 w-full">
-                            <button onClick={() => setIsDeleteConfirmOpen(false)} className="flex-1 py-2.5 bg-slate-100 dark:bg-zinc-700 text-slate-700 dark:text-slate-200 font-semibold rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-600 transition">Cancel</button>
-                            <button onClick={confirmDelete} className="flex-1 py-2.5 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition">Delete</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-      )}
-
-      {isPreviewOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-             <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col relative animate-in zoom-in-95 duration-200">
-                <div className="p-4 border-b flex justify-between items-center bg-slate-50 rounded-t-xl">
-                    <div className="flex items-center gap-3 overflow-hidden">
-                         <div className={`p-2 rounded-lg ${getBadgeStyle(resource.type)}`}>
-                            {getBadgeIcon(resource.type)}
-                        </div>
-                        <div className="overflow-hidden">
-                             <h3 className="font-bold text-slate-800 truncate text-lg leading-tight">{resource.title}</h3>
-                             <p className="text-xs text-slate-500 truncate">{resource.fileName}</p>
-                        </div>
-                    </div>
-                     <div className="flex items-center gap-2 shrink-0">
-                        <a 
-                            href={resource.fileUrl} 
-                            download={resource.fileName}
-                            className="p-2 rounded-full hover:bg-slate-200 text-slate-600 transition"
-                            title="Download"
-                        >
-                            <Download size={20} />
-                        </a>
-                        <button onClick={() => setIsPreviewOpen(false)} className="p-2 rounded-full hover:bg-red-100 text-slate-500 hover:text-red-600 transition">
-                            <X size={24} />
-                        </button>
-                    </div>
-                </div>
-                <div className="flex-grow bg-slate-200 overflow-hidden flex items-center justify-center rounded-b-xl relative">
-                    {/* Render Preview Logic (Reusing same logic as before, assumed available or would normally function) */}
-                    {resource.fileUrl && (
-                        <iframe src={resource.fileUrl} className="w-full h-full border-none" title="PDF Preview"></iframe>
-                    )}
-                </div>
-            </div>
-        </div>
-    )}
-    <ShareModal 
-        isOpen={isShareModalOpen}
-        onClose={() => setIsShareModalOpen(false)}
-        resource={resource}
-    />
-    </div>
+    </AppContext.Provider>
   );
 };
 
-export default ResourceDetailPage;
+export default App;

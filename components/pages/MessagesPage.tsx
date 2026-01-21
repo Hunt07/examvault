@@ -1,6 +1,6 @@
 
 import React, { useContext, useMemo, useState, useEffect, useRef } from 'react';
-import { AppContext } from '../../components/AppContext';
+import { AppContext } from '../../App';
 import type { User } from '../../types';
 import { MessageStatus, ResourceType } from '../../types';
 import { Send, Check, CheckCheck, MessageCircle, ArrowLeft, FileText, Notebook, ClipboardList, Archive, ExternalLink, MoreVertical, Edit2, Trash2, X, Smile, UserX } from 'lucide-react';

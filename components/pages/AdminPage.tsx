@@ -1,6 +1,6 @@
 
 import React, { useContext, useState, useMemo } from 'react';
-import { AppContext } from '../../components/AppContext';
+import { AppContext } from '../../App';
 import { Shield, User, UserX, UserCheck, AlertTriangle, Trash2, CheckCircle, Search, Ban, RotateCcw, Eye, Check, X, GraduationCap, Lock, Clock, FileText, UploadCloud, MessageSquare, Activity } from 'lucide-react';
 import Avatar from '../Avatar';
 import type { User as UserType, Report, LogEntry } from '../../types';

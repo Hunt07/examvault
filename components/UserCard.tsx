@@ -2,7 +2,7 @@
 import React, { useContext } from 'react';
 import type { User } from '../types';
 import { Award } from 'lucide-react';
-import { AppContext } from '../components/AppContext';
+import { AppContext } from '../App';
 import UserRankBadge from './UserRankBadge';
 
 interface UserCardProps {

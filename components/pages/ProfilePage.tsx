@@ -2,7 +2,7 @@
 import React, { useMemo, useContext, useState } from 'react';
 import type { User, Resource } from '../../types';
 import { ResourceRequestStatus } from '../../types';
-import { AppContext } from '../../components/AppContext';
+import { AppContext } from '../../App';
 import ResourceCard from '../ResourceCard';
 import { Award, UploadCloud, Calendar, MessageSquare as MessageSquareIcon, Edit, X, Save, ArrowLeft, UserPlus, UserMinus, ThumbsUp, MessageSquare, Clock, Loader2, GraduationCap, AlertTriangle, Power, Trash2, ShieldAlert } from 'lucide-react';
 import UserRankBadge from '../UserRankBadge';

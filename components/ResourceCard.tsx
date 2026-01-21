@@ -2,7 +2,7 @@
 import React, { useContext } from 'react';
 import { ResourceType, type Resource } from '../types';
 import { ThumbsUp, MessageSquare, FileText, Notebook, ClipboardList, Archive } from 'lucide-react';
-import { AppContext } from '../components/AppContext';
+import { AppContext } from '../App';
 import UserRankBadge from './UserRankBadge';
 import Avatar from './Avatar';
 

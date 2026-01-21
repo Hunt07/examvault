@@ -1,6 +1,6 @@
 
 import React, { useContext, useState, useMemo } from 'react';
-import { AppContext } from '../../components/AppContext';
+import { AppContext } from '../../App';
 import type { ResourceRequest } from '../../types';
 import { ResourceRequestStatus } from '../../types';
 import { PlusCircle, Search, HelpCircle } from 'lucide-react';

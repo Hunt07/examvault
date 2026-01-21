@@ -1,6 +1,6 @@
 
 import React, { useContext, useMemo, useState } from 'react';
-import { AppContext } from '../../components/AppContext';
+import { AppContext } from '../../App';
 import type { User } from '../../types';
 import { Award, Medal, Trophy, Info, X } from 'lucide-react';
 import UserRankBadge from '../UserRankBadge';

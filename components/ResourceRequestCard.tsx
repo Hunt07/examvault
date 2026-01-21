@@ -2,7 +2,7 @@
 import React, { useContext, useState } from 'react';
 import type { ResourceRequest, Attachment } from '../types';
 import { ResourceRequestStatus } from '../types';
-import { AppContext } from '../components/AppContext';
+import { AppContext } from '../App';
 import UserRankBadge from './UserRankBadge';
 import { CheckCircle, Clock, Trash2, Paperclip, Download, Eye, X, FileText, Bookmark, BookmarkCheck } from 'lucide-react';
 

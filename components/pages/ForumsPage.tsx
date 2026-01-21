@@ -1,6 +1,6 @@
 
 import React, { useContext, useState } from 'react';
-import { AppContext } from '../../components/AppContext';
+import { AppContext } from '../../App';
 import type { ForumPost } from '../../types';
 import { ThumbsUp, MessageSquare, PlusCircle, Paperclip, Bookmark, BookmarkCheck } from 'lucide-react';
 import CreatePostModal from '../CreatePostModal';

@@ -3,7 +3,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import type { Resource, ResourceRequest } from '../types';
 import { ResourceType, ExamType, SemesterIntake } from '../types';
 import { X, UploadCloud, Image as ImageIcon, Info, Loader2 } from 'lucide-react';
-import { AppContext } from '../components/AppContext';
+import { AppContext } from '../App';
 
 interface UploadModalProps {
   onClose: () => void;

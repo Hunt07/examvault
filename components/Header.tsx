@@ -1,7 +1,6 @@
 
 import React, { useContext, useState, useMemo, useRef, useEffect } from 'react';
-import { AppContext } from '../components/AppContext';
-import { View } from '../types';
+import { AppContext, View } from '../App';
 import { BookOpen, PlusCircle, Bell, User as UserIcon, LogOut, FileText, Mail, MessageSquare, Gift, Bookmark, Sun, Moon, HelpCircle } from 'lucide-react';
 import type { Notification } from '../types';
 import UserRankBadge from './UserRankBadge';

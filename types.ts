@@ -25,8 +25,6 @@ export interface User {
   status: 'active' | 'banned' | 'deactivated';
 }
 
-export type View = 'dashboard' | 'resourceDetail' | 'discussions' | 'forumDetail' | 'profile' | 'publicProfile' | 'messages' | 'leaderboard' | 'requests' | 'admin';
-
 export enum ResourceType {
   PastPaper = 'Past Paper',
   Notes = 'Notes',

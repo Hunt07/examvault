@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import type { User, Resource, ForumPost, Comment, ForumReply, Notification, Conversation, DirectMessage, ResourceRequest, Attachment, Report } from './types';
+import type { User, Resource, ForumPost, Comment, ForumReply, Notification, Conversation, DirectMessage, ResourceRequest, Attachment, Report, LogEntry, View } from './types';
 import { NotificationType, MessageStatus, ResourceRequestStatus } from './types';
 import AuthPage from './components/pages/AuthPage';
 import DashboardPage from './components/pages/DashboardPage';
@@ -11,12 +11,13 @@ import ProfilePage from './components/pages/ProfilePage';
 import MessagesPage from './components/pages/MessagesPage';
 import LeaderboardPage from './components/pages/LeaderboardPage';
 import ResourceRequestsPage from './components/pages/ResourceRequestsPage';
-import AdminPage from './components/pages/AdminPage'; // Import Admin Page
+import AdminPage from './components/pages/AdminPage'; 
 import SideNav from './components/SideNav';
 import Header from './components/Header';
 import UploadModal, { generateFilePreview } from './components/UploadModal';
 import TooltipGuide from './components/TooltipGuide';
 import ToastNotification from './components/ToastNotification';
+import { AppContext } from './components/AppContext';
 
 // Firebase Imports
 import { auth, db, storage } from './services/firebase';
@@ -27,77 +28,6 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { Loader2, AlertCircle } from 'lucide-react';
-
-export type View = 'dashboard' | 'resourceDetail' | 'discussions' | 'forumDetail' | 'profile' | 'publicProfile' | 'messages' | 'leaderboard' | 'requests' | 'admin';
-
-interface AppContextType {
-  user: User | null;
-  users: User[];
-  resources: Resource[];
-  forumPosts: ForumPost[];
-  notifications: Notification[];
-  conversations: Conversation[];
-  directMessages: DirectMessage[];
-  resourceRequests: ResourceRequest[];
-  reports: Report[]; // Added reports
-  view: View;
-  setView: (view: View, id?: string, options?: { replace?: boolean }) => void;
-  logout: () => void;
-  isDarkMode: boolean;
-  toggleDarkMode: () => void;
-  userRanks: Map<string, number>;
-  savedResourceIds: string[];
-  savedPostIds: string[];
-  savedRequestIds: string[];
-  toggleSaveResource: (resourceId: string) => void;
-  toggleSavePost: (postId: string) => void;
-  toggleSaveRequest: (requestId: string) => void;
-  handleVote: (resourceId: string, action: 'up' | 'down') => void;
-  addCommentToResource: (resourceId: string, text: string, parentId: string | null) => void;
-  handleCommentVote: (resourceId: string, commentId: string) => void;
-  deleteCommentFromResource: (resourceId: string, comment: Comment) => Promise<void>;
-  addForumPost: (post: { title: string; courseCode: string; body: string; tags: string[] }, file?: File) => void;
-  handlePostVote: (postId: string, action: 'up' | 'down') => void;
-  deleteForumPost: (postId: string) => Promise<void>;
-  addReplyToPost: (postId: string, text: string, parentId: string | null, file?: File) => void;
-  handleReplyVote: (postId: string, replyId: string) => void;
-  deleteReplyFromPost: (postId: string, reply: ForumReply) => Promise<void>;
-  toggleVerifiedAnswer: (postId: string, replyId: string) => void;
-  addResourceRequest: (req: { title: string; courseCode: string; details: string }, file?: File) => void;
-  deleteResourceRequest: (requestId: string) => Promise<void>;
-  openUploadForRequest: (requestId: string) => void;
-  toggleUserSubscription: (userId: string) => void;
-  toggleLecturerSubscription: (lecturerName: string) => void;
-  toggleCourseCodeSubscription: (courseCode: string) => void;
-  updateUserProfile: (data: Partial<User>) => void;
-  // Admin Functions
-  toggleUserRole: (userId: string, role: 'student' | 'admin') => void;
-  toggleUserStatus: (userId: string, status: 'active' | 'banned') => void;
-  resolveReport: (reportId: string, status: 'resolved' | 'dismissed') => void;
-  
-  sendMessage: (conversationId: string, text: string) => void;
-  editMessage: (messageId: string, newText: string) => void;
-  deleteMessage: (messageId: string) => void;
-  startConversation: (userId: string, initialMessage?: string) => void;
-  sendDirectMessageToUser: (userId: string, text: string) => void;
-  markNotificationAsRead: (id: string) => void;
-  markAllNotificationsAsRead: () => void;
-  clearAllNotifications: () => void;
-  markMessagesAsRead: (conversationId: string) => void;
-  goBack: () => void;
-  deleteResource: (resourceId: string, fileUrl: string, previewUrl?: string) => Promise<void>;
-  deactivateAccount: () => Promise<void>; // Added deactivateAccount
-  deleteAccount: () => Promise<void>; // Added Permanent Delete
-  hasUnreadMessages: boolean;
-  hasUnreadDiscussions: boolean;
-  isLoading: boolean;
-  areResourcesLoading: boolean;
-  scrollTargetId: string | null;
-  setScrollTargetId: (id: string | null) => void;
-  showToast: (message: string, type?: 'success' | 'error' | 'info', points?: number) => void;
-}
-
-export const AppContext = React.createContext<AppContextType>({} as AppContextType);
 
 // Helper to remove undefined values which Firestore hates
 const sanitizeForFirestore = (obj: any): any => {
@@ -200,29 +130,9 @@ const propagateUserUpdates = async (userId: string, updateData: any) => {
 
 const MASTER_ADMIN_EMAIL = 'b09220024@student.unimy.edu.my';
 
-const FirebaseSetup = () => (
-  <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-    <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-lg border border-red-100">
-      <div className="flex items-center gap-3 text-red-600 mb-4">
-        <AlertCircle size={32} />
-        <h2 className="text-xl font-bold">Firebase Configuration Error</h2>
-      </div>
-      <p className="text-slate-600 mb-4">
-        The application could not connect to Firebase services. This is likely due to missing environment variables.
-      </p>
-      <div className="bg-slate-100 p-4 rounded-lg overflow-x-auto">
-        <code className="text-xs text-slate-700">
-          Check your .env file or Vercel/Netlify configuration.
-        </code>
-      </div>
-    </div>
-  </div>
-);
-
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [authError, setAuthError] = useState<{title: string, message: string, code?: string, details?: string} | null>(null);
   const [areResourcesLoading, setAreResourcesLoading] = useState(true);
   const [view, setViewState] = useState<View>('dashboard');
   const [viewHistory, setViewHistory] = useState<{ view: View; id?: string }[]>([]);
@@ -245,6 +155,7 @@ const App: React.FC = () => {
   const [directMessages, setDirectMessages] = useState<DirectMessage[]>([]);
   const [resourceRequests, setResourceRequests] = useState<ResourceRequest[]>([]);
   const [reports, setReports] = useState<Report[]>([]); // New state for reports
+  const [logs, setLogs] = useState<LogEntry[]>([]); // New state for logs
   
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -278,7 +189,6 @@ const App: React.FC = () => {
 
     const updatePresence = async () => {
         const now = Date.now();
-        // Throttle updates to at least every 10 seconds to avoid spamming on focus/click
         if (now - lastUpdateRef.current < 10000) return;
 
         try {
@@ -292,9 +202,7 @@ const App: React.FC = () => {
         }
     };
 
-    updatePresence(); // Initial update
-    
-    // Increased frequency to 30 seconds for near "real-time" accuracy
+    updatePresence(); 
     const interval = setInterval(updatePresence, 30 * 1000); 
 
     const handleInteraction = () => {
@@ -305,7 +213,7 @@ const App: React.FC = () => {
 
     document.addEventListener("visibilitychange", handleInteraction);
     window.addEventListener("focus", handleInteraction);
-    window.addEventListener("click", handleInteraction); // Update on clicks too
+    window.addEventListener("click", handleInteraction);
 
     return () => {
         clearInterval(interval);
@@ -358,7 +266,6 @@ const App: React.FC = () => {
                 updates.subscriptions = { users: [], lecturers: [], courseCodes: [] };
                 hasUpdates = true;
             }
-            // Ensure Role and Status exist
             if (!userData.role) {
                 userData.role = 'student';
                 updates.role = 'student';
@@ -380,7 +287,6 @@ const App: React.FC = () => {
                 hasUpdates = true;
             }
 
-            // Check if user is banned
             if (userData.status === 'banned') {
                 await firebaseAuth.signOut(auth);
                 setUser(null);
@@ -389,12 +295,22 @@ const App: React.FC = () => {
                 return;
             }
 
-            // Handle Reactivation
             if (userData.status === 'deactivated') {
                 updates.status = 'active';
                 userData.status = 'active';
                 hasUpdates = true;
                 showToast("Welcome back! Your account has been reactivated.", "success");
+                
+                try {
+                    await addDoc(collection(db, "logs"), {
+                        actorId: userData.id,
+                        actorName: userData.name,
+                        actorAvatar: userData.avatarUrl,
+                        actionType: 'account',
+                        description: 'Account Reactivated',
+                        timestamp: new Date().toISOString()
+                    });
+                } catch(e) { console.error("Log error", e); }
             }
 
             if (hasUpdates) {
@@ -406,7 +322,6 @@ const App: React.FC = () => {
 
             setUser(userData);
             
-            // Trigger tour if not done
             if (!localStorage.getItem(`examvault_tour_${userData.id}`)) {
                 setRunTour(true);
             }
@@ -415,10 +330,9 @@ const App: React.FC = () => {
             const displayName = firebaseUser.displayName || "Student";
             const defaultAvatar = generateDefaultAvatar(displayName);
             
-            // Check for lecturer email
             const isLecturerEmail = firebaseUser.email?.endsWith('@unimy.edu.my') && !firebaseUser.email?.endsWith('@student.unimy.edu.my');
             const role = isLecturerEmail ? 'lecturer' : 'student';
-            const bio = isLecturerEmail ? 'Lecturer' : 'Student'; // Default bio for new lecturers
+            const bio = isLecturerEmail ? 'Lecturer' : 'Student';
             const course = isLecturerEmail ? 'Lecturer' : 'Student';
 
             const newUser: User = {
@@ -444,8 +358,20 @@ const App: React.FC = () => {
             };
             
             await setDoc(userRef, newUser);
+            
+            try {
+                await addDoc(collection(db, "logs"), {
+                    actorId: newUser.id,
+                    actorName: newUser.name,
+                    actorAvatar: newUser.avatarUrl,
+                    actionType: 'account',
+                    description: 'User Registered',
+                    timestamp: new Date().toISOString()
+                });
+            } catch(e) { console.error("Log error", e); }
+
             setUser(newUser);
-            setRunTour(true); // Always run for new users
+            setRunTour(true);
           }
         } catch (error) {
           console.error("Error fetching user data:", error);
@@ -460,17 +386,32 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  // ... (useEffect for data fetching snapshots remains the same) ...
+  const logAction = async (actionType: LogEntry['actionType'], description: string, targetId?: string) => {
+      if (!db || !user) return;
+      try {
+          await addDoc(collection(db, "logs"), {
+              actorId: user.id,
+              actorName: user.name,
+              actorAvatar: user.avatarUrl,
+              actionType,
+              description,
+              targetId: targetId || null,
+              timestamp: new Date().toISOString()
+          });
+      } catch (e) {
+          console.error("Failed to log action", e);
+      }
+  };
+
   useEffect(() => {
     if (!user || !db) return;
 
     setAreResourcesLoading(true);
 
     const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
-      // 1. Fetch raw data
       let rawUsers = snapshot.docs.map(docSnap => ({ ...docSnap.data(), id: docSnap.id } as User));
 
-      // 2. MASTER ADMIN CLEANUP
+      // ADMIN CLEANUP
       const adminAccounts = rawUsers.filter(u => u.email.toLowerCase().trim() === MASTER_ADMIN_EMAIL.toLowerCase());
 
       if (adminAccounts.length > 0) {
@@ -499,7 +440,6 @@ const App: React.FC = () => {
           }
       }
 
-      // Sort users for display list (admin priority)
       rawUsers.sort((a, b) => {
           const emailA = a.email.toLowerCase().trim();
           const emailB = b.email.toLowerCase().trim();
@@ -587,12 +527,20 @@ const App: React.FC = () => {
     });
 
     let unsubReports = () => {};
+    let unsubLogs = () => {};
+
     if (user.role === 'admin') {
         const q = query(collection(db, "reports"), where("status", "==", "pending"));
         unsubReports = onSnapshot(q, (snapshot) => {
             const fetchedReports = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Report));
             fetchedReports.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
             setReports(fetchedReports);
+        });
+
+        const logsQuery = query(collection(db, "logs"), orderBy("timestamp", "desc"));
+        unsubLogs = onSnapshot(logsQuery, (snapshot) => {
+            const fetchedLogs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LogEntry));
+            setLogs(fetchedLogs);
         });
     }
 
@@ -641,7 +589,7 @@ const App: React.FC = () => {
     });
 
     return () => {
-      unsubUsers(); unsubResources(); unsubPosts(); unsubRequests(); unsubConvos(); unsubMessages(); unsubNotifs(); unsubReports();
+      unsubUsers(); unsubResources(); unsubPosts(); unsubRequests(); unsubConvos(); unsubMessages(); unsubNotifs(); unsubReports(); unsubLogs();
     };
   }, [user?.id, user?.role]);
 
@@ -657,6 +605,7 @@ const App: React.FC = () => {
       try {
           const userRef = doc(db, "users", user.id);
           await updateDoc(userRef, { status: 'deactivated' });
+          await logAction('account', 'Account Deactivated');
           await logout();
       } catch (error) { console.error("Failed to deactivate", error); showToast("Failed to deactivate account.", "error"); }
   };
@@ -679,6 +628,8 @@ const App: React.FC = () => {
           const reqSnap = await getDocs(reqQuery);
           for (const docSnap of reqSnap.docs) { await deleteDoc(doc(db, "resourceRequests", docSnap.id)); }
 
+          await logAction('account', 'Account Deleted Permanently');
+
           await deleteDoc(doc(db, "users", user.id));
           localStorage.removeItem(`examvault_tour_${user.id}`);
           if (auth.currentUser) await auth.currentUser.delete(); else await logout();
@@ -692,18 +643,31 @@ const App: React.FC = () => {
 
   const earnPoints = async (amount: number, message: string) => { if (!user) return; await updateDoc(doc(db, "users", user.id), { points: increment(amount), weeklyPoints: increment(amount) }); setToast({ message, points: amount, type: amount > 0 ? 'success' : 'info' }); };
   
-  // Rank calculation based strictly on points and then ID for determinism
   const userRanks = useMemo(() => {
-      // Sort primarily by points (desc), secondarily by ID (asc) to prevent jitter on equal scores
       const sortedByPoints = [...users].sort((a, b) => b.points - a.points || a.id.localeCompare(b.id));
       const r = new Map();
       sortedByPoints.forEach((u, i) => r.set(u.id, i));
       return r;
   }, [users]);
 
-  const toggleUserRole = async (uid: string, role: any) => { if (user?.role === 'admin') await updateDoc(doc(db!, "users", uid), { role }); };
-  const toggleUserStatus = async (uid: string, status: any) => { if (user?.role === 'admin') await updateDoc(doc(db!, "users", uid), { status }); };
-  const resolveReport = async (rid: string, status: any) => { if (user?.role === 'admin') await updateDoc(doc(db!, "reports", rid), { status }); };
+  const toggleUserRole = async (uid: string, role: 'student' | 'admin') => { 
+      if (user?.role === 'admin') {
+          await updateDoc(doc(db!, "users", uid), { role }); 
+          await logAction('admin', `Changed user role to ${role}`, uid);
+      }
+  };
+  const toggleUserStatus = async (uid: string, status: 'active' | 'banned') => { 
+      if (user?.role === 'admin') {
+          await updateDoc(doc(db!, "users", uid), { status });
+          await logAction('admin', `Changed user status to ${status}`, uid);
+      }
+  };
+  const resolveReport = async (rid: string, status: 'resolved' | 'dismissed') => { 
+      if (user?.role === 'admin') {
+          await updateDoc(doc(db!, "reports", rid), { status });
+          await logAction('admin', `Resolved report as ${status}`, rid);
+      }
+  };
 
   const handleUpload = async (resourceData: any, file: File, coverImage: File | null) => {
       if (!user || !db || !storage) return;
@@ -721,6 +685,8 @@ const App: React.FC = () => {
           const newResource = { ...resourceData, author: sanitizeForFirestore(user), uploadDate: new Date().toISOString(), upvotes: 0, downvotes: 0, upvotedBy: [], downvotedBy: [], comments: [], fileUrl: downloadURL, fileName: file.name, previewImageUrl: previewUrl, fileBase64: "", mimeType: file.type, contentForAI: "Content is in the file..." };
           const docRef = await addDoc(collection(db, "resources"), sanitizeForFirestore(newResource));
           
+          await logAction('upload', `Uploaded resource: ${resourceData.title}`, docRef.id);
+
           if (fulfillingRequest) {
               await updateDoc(doc(db, "resourceRequests", fulfillingRequest.id), {
                   status: 'Fulfilled',
@@ -737,7 +703,6 @@ const App: React.FC = () => {
               earnPoints(25, "Resource Uploaded!");
           }
 
-          // Notify subscribers
           const subscribers = users.filter(u => 
              u.subscriptions.users.includes(user.id) || 
              (newResource.lecturer && u.subscriptions.lecturers.includes(newResource.lecturer)) ||
@@ -765,23 +730,18 @@ const App: React.FC = () => {
 
   const deleteResource = async (resourceId: string, fileUrl: string, previewUrl?: string) => {
       if (!user || !db) return;
-      
       try {
-          // 1. Get the resource first to identify the author and calculate point reduction
           const resRef = doc(db, "resources", resourceId);
           const resSnap = await getDoc(resRef);
-          
           if (!resSnap.exists()) {
              throw new Error("Resource not found");
           }
-          
           const resourceData = resSnap.data() as Resource;
           const authorId = resourceData.author.id;
 
-          // 2. Delete the document
           await deleteDoc(resRef);
-          
-          // 3. Delete files from Storage
+          await logAction('delete', `Deleted resource: ${resourceData.title}`, resourceId);
+
           if (fileUrl.includes('firebasestorage')) {
              try {
                 const fileRef = ref(storage, fileUrl);
@@ -795,8 +755,6 @@ const App: React.FC = () => {
              } catch(e) { console.warn("Could not delete preview", e); }
           }
 
-          // 4. Deduct Points & Update Stats
-          // Standard upload points = 25. Decrement upload count.
           const userRef = doc(db, "users", authorId);
           await updateDoc(userRef, {
               points: increment(-25),
@@ -804,15 +762,11 @@ const App: React.FC = () => {
               uploadCount: increment(-1)
           });
 
-          // 5. Navigate away if on detail view
           if (view === 'resourceDetail' && selectedId === resourceId) { 
               setViewState('dashboard'); 
               setSelectedId(undefined); 
           }
-          
-          // 6. Show notification with negative points
           showToast("Resource deleted.", "info", -25);
-
       } catch (error) { 
           console.error(error); 
           setToast({ message: "Failed to delete resource.", type: 'error' }); 
@@ -848,19 +802,31 @@ const App: React.FC = () => {
       await batch.commit();
   };
 
-  const addCommentToResource = async (resourceId: string, text: string, parentId: string | null) => {
+  const addCommentToResource = async (resourceId: string, text: string, parentId: string | null, file?: File) => {
       if (!user || !db) return;
-      const newComment = { id: `c-${Date.now()}`, author: sanitizeForFirestore(user), text, timestamp: new Date().toISOString(), parentId, upvotes: 0, upvotedBy: [] };
+      let attachment = undefined;
+      if (file) {
+          const storageRef = ref(storage, `attachments/${Date.now()}_${file.name}`);
+          await uploadBytes(storageRef, file);
+          const url = await getDownloadURL(storageRef);
+          attachment = { type: file.type.startsWith('image/') ? 'image' : 'file', url, name: file.name, size: (file.size / 1024).toFixed(0) + ' KB' };
+      }
+      const newComment = { 
+          id: `c-${Date.now()}`, 
+          author: sanitizeForFirestore(user), 
+          text, 
+          timestamp: new Date().toISOString(), 
+          parentId, 
+          upvotes: 0, 
+          upvotedBy: [],
+          attachment 
+      };
       await updateDoc(doc(db, "resources", resourceId), { comments: arrayUnion(sanitizeForFirestore(newComment)) });
-      
       const res = resources.find(r => r.id === resourceId);
       if (res) {
-          // 1. Notify Resource Author (if they didn't write the comment)
           if (res.author.id !== user.id) {
               await sendNotification(res.author.id, user.id, NotificationType.NewForumPost, `${user.name} commented on your resource '${res.title}'`, { resourceId: res.id, commentId: newComment.id });
           }
-
-          // 2. Notify Parent Comment Author (if reply and not self, and distinct from resource author)
           if (parentId) {
               const parentComment = res.comments.find(c => c.id === parentId);
               if (parentComment && parentComment.author.id !== user.id && parentComment.author.id !== res.author.id) {
@@ -879,6 +845,7 @@ const App: React.FC = () => {
              const data = snap.data() as Resource;
              const updatedComments = data.comments.filter(c => c.id !== comment.id);
              await updateDoc(resRef, { comments: updatedComments });
+             await logAction('delete', `Deleted comment from resource ${data.title}`, resourceId);
           }
           setToast({ message: "Comment deleted.", type: 'success' });
       } catch (error) {
@@ -928,7 +895,19 @@ const App: React.FC = () => {
       });
   };
 
-  const deleteForumPost = async (postId: string) => { if(!db) return; setViewState('discussions'); await deleteDoc(doc(db, "forumPosts", postId)); };
+  const deleteForumPost = async (postId: string) => { 
+      if(!db) return; 
+      try {
+          const postRef = doc(db, "forumPosts", postId);
+          const snap = await getDoc(postRef);
+          if (snap.exists()) {
+              const data = snap.data() as ForumPost;
+              await deleteDoc(postRef);
+              await logAction('delete', `Deleted discussion post: ${data.title}`, postId);
+              setViewState('discussions'); 
+          }
+      } catch (e) { console.error(e); }
+  };
   
   const handlePostVote = async (postId: string, action: 'up' | 'down') => { 
       if (!user || !db) return;
@@ -985,6 +964,7 @@ const App: React.FC = () => {
              const data = snap.data() as ForumPost;
              const updatedReplies = data.replies.filter(r => r.id !== reply.id);
              await updateDoc(postRef, { replies: updatedReplies });
+             await logAction('delete', `Deleted reply from discussion: ${data.title}`, postId);
           }
           setToast({ message: "Reply deleted.", type: 'success' });
       } catch (error) {
@@ -1065,30 +1045,17 @@ const App: React.FC = () => {
       try {
           const reqRef = doc(db, "resourceRequests", requestId);
           const reqSnap = await getDoc(reqRef);
-          
           if (reqSnap.exists()) {
               const reqData = reqSnap.data() as ResourceRequest;
               const requesterId = reqData.requester.id;
-              
               await deleteDoc(reqRef);
-              
-              // Deduct 5 points from requester
+              await logAction('delete', `Deleted request: ${reqData.title}`, requestId);
               const userRef = doc(db, "users", requesterId);
-              await updateDoc(userRef, {
-                  points: increment(-5),
-                  weeklyPoints: increment(-5)
-              });
-              
-              if (user?.id === requesterId) {
-                  showToast("Request deleted.", "info", -5);
-              } else {
-                  showToast("Request deleted.", "success");
-              }
+              await updateDoc(userRef, { points: increment(-5), weeklyPoints: increment(-5) });
+              if (user?.id === requesterId) { showToast("Request deleted.", "info", -5); } 
+              else { showToast("Request deleted.", "success"); }
           }
-      } catch (e) {
-          console.error("Failed to delete request", e);
-          showToast("Failed to delete request.", "error");
-      }
+      } catch (e) { console.error("Failed to delete request", e); showToast("Failed to delete request.", "error"); }
   };
   
   const openUploadForRequest = (id: string) => { const req = resourceRequests.find(r => r.id === id); if (req) { setFulfillingRequest(req); setIsUploadModalOpen(true); } };
@@ -1097,9 +1064,14 @@ const App: React.FC = () => {
       if (!user || !db) return;
       const isSub = user.subscriptions.users.includes(uid);
       const updated = isSub ? arrayRemove(uid) : arrayUnion(uid);
+      const targetUser = users.find(u => u.id === uid);
       await updateDoc(doc(db, "users", user.id), { "subscriptions.users": updated });
+      
       if (!isSub) {
           await sendNotification(uid, user.id, NotificationType.Subscription, `${user.name} started following you.`);
+          await logAction('social', `Followed user ${targetUser?.name || 'Unknown'}`, uid);
+      } else {
+          await logAction('social', `Unfollowed user ${targetUser?.name || 'Unknown'}`, uid);
       }
   };
   const toggleLecturerSubscription = async (name: string) => {
@@ -1123,48 +1095,39 @@ const App: React.FC = () => {
   const sendMessage = async (cid: string, text: string) => {
       if (!user || !db) return;
       const msg = { conversationId: cid, senderId: user.id, recipientId: "", text, timestamp: new Date().toISOString(), status: MessageStatus.Sent, isDeleted: false };
-      
-      // Determine recipient
       const convo = conversations.find(c => c.id === cid);
-      if (convo) {
-          msg.recipientId = convo.participants.find(p => p !== user.id) || "";
-      }
-
+      if (convo) { msg.recipientId = convo.participants.find(p => p !== user.id) || ""; }
       await addDoc(collection(db, "directMessages"), msg);
-      await updateDoc(doc(db, "conversations", cid), { lastMessageTimestamp: msg.timestamp });
-      
-      if (msg.recipientId) {
-          await sendNotification(msg.recipientId, user.id, NotificationType.NewMessage, `${user.name} sent you a message.`, { conversationId: cid });
-      }
+      await updateDoc(doc(db, "conversations", cid), { lastMessageTimestamp: msg.timestamp, hiddenBy: [] });
+      if (msg.recipientId) { await sendNotification(msg.recipientId, user.id, NotificationType.NewMessage, `${user.name} sent you a message.`, { conversationId: cid }); }
   };
 
-  const editMessage = async (mid: string, text: string) => {
-      if (!db) return;
-      await updateDoc(doc(db, "directMessages", mid), { text, editedAt: new Date().toISOString() });
-  };
-
-  const deleteMessage = async (mid: string) => {
-      if (!db) return;
-      await updateDoc(doc(db, "directMessages", mid), { isDeleted: true, text: '' });
-  };
+  const editMessage = async (mid: string, text: string) => { if (!db) return; await updateDoc(doc(db, "directMessages", mid), { text, editedAt: new Date().toISOString() }); };
+  const deleteMessage = async (mid: string) => { if (!db) return; await updateDoc(doc(db, "directMessages", mid), { isDeleted: true, text: '' }); };
 
   const startConversation = async (uid: string, msg?: string) => {
       if (!user || !db) return;
-      // Check if conversation exists
       const existing = conversations.find(c => c.participants.includes(user.id) && c.participants.includes(uid));
       let cid = existing?.id;
-      
       if (!existing) {
-          const newConvo = { participants: [user.id, uid], lastMessageTimestamp: new Date().toISOString() };
+          const newConvo = { participants: [user.id, uid], lastMessageTimestamp: new Date().toISOString(), hiddenBy: [] };
           const ref = await addDoc(collection(db, "conversations"), newConvo);
           cid = ref.id;
+      } else if (cid && existing.hiddenBy?.includes(user.id)) {
+          await updateDoc(doc(db, "conversations", cid), { hiddenBy: arrayRemove(user.id) });
       }
-      
-      if (msg && cid) {
-          await sendMessage(cid, msg);
-      }
-      
+      if (msg && cid) { await sendMessage(cid, msg); }
       setView('messages', cid);
+  };
+  
+  const hideConversation = async (conversationId: string) => {
+      if (!user || !db) return;
+      try {
+          const convoRef = doc(db, "conversations", conversationId);
+          await updateDoc(convoRef, { hiddenBy: arrayUnion(user.id) });
+          if (view === 'messages' && selectedId === conversationId) { setView('messages', undefined); }
+          showToast("Conversation removed from list.", "info");
+      } catch (e) { console.error("Failed to hide conversation", e); showToast("Failed to hide conversation", "error"); }
   };
   
   const sendDirectMessageToUser = (uid: string, text: string) => { startConversation(uid, text); };
@@ -1173,26 +1136,20 @@ const App: React.FC = () => {
   const markAllNotificationsAsRead = async () => {
       if (!user || !db) return;
       const batch = writeBatch(db);
-      notifications.filter(n => !n.isRead && n.recipientId === user.id).forEach(n => {
-          batch.update(doc(db, "notifications", n.id), { isRead: true });
-      });
+      notifications.filter(n => !n.isRead && n.recipientId === user.id).forEach(n => { batch.update(doc(db, "notifications", n.id), { isRead: true }); });
       await batch.commit();
   };
   const clearAllNotifications = async () => {
       if (!user || !db) return;
       const batch = writeBatch(db);
-      notifications.filter(n => n.recipientId === user.id).forEach(n => {
-          batch.delete(doc(db, "notifications", n.id));
-      });
+      notifications.filter(n => n.recipientId === user.id).forEach(n => { batch.delete(doc(db, "notifications", n.id)); });
       await batch.commit();
   };
   
   const markMessagesAsRead = async (cid: string) => {
       if (!user || !db) return;
       const batch = writeBatch(db);
-      directMessages.filter(m => m.conversationId === cid && m.recipientId === user.id && m.status !== MessageStatus.Read).forEach(m => {
-           batch.update(doc(db, "directMessages", m.id), { status: MessageStatus.Read });
-      });
+      directMessages.filter(m => m.conversationId === cid && m.recipientId === user.id && m.status !== MessageStatus.Read).forEach(m => { batch.update(doc(db, "directMessages", m.id), { status: MessageStatus.Read }); });
       await batch.commit();
   };
 
@@ -1200,7 +1157,6 @@ const App: React.FC = () => {
     setViewState(newView);
     setSelectedId(id);
     window.scrollTo(0, 0);
-    
     setViewHistory(currentHistory => {
         const newEntry = { view: newView, id };
         if (options?.replace && currentHistory.length > 0) {
@@ -1226,7 +1182,6 @@ const App: React.FC = () => {
     { selector: '#tour-profile-menu', content: 'Profile settings.' },
   ];
 
-  // Logic to calculate unread states
   const hasUnreadMessages = useMemo(() => {
     if (!user) return false;
     return directMessages.some(m => m.recipientId === user.id && m.status !== MessageStatus.Read);
@@ -1238,12 +1193,12 @@ const App: React.FC = () => {
   }, [notifications, user]);
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg"><Loader2 size={48} className="animate-spin text-primary-600" /></div>;
-  if (!auth) return <div>Auth Error</div>; // Simplified error view for brevity
+  if (!auth) return <div>Auth Error</div>;
   if (!user) return <AuthPage onLogin={() => {}} />;
 
   return (
     <AppContext.Provider value={{
-      user, users, resources, forumPosts, notifications, conversations, directMessages, resourceRequests, reports,
+      user, users, resources, forumPosts, notifications, conversations, directMessages, resourceRequests, reports, logs,
       view, setView, logout, isDarkMode, toggleDarkMode: () => setIsDarkMode(!isDarkMode),
       userRanks, 
       savedResourceIds: user.savedResourceIds || [],
@@ -1254,7 +1209,7 @@ const App: React.FC = () => {
       addForumPost, handlePostVote, deleteForumPost, addReplyToPost, handleReplyVote, deleteReplyFromPost, toggleVerifiedAnswer,
       addResourceRequest, deleteResourceRequest, openUploadForRequest,
       toggleUserSubscription, toggleLecturerSubscription, toggleCourseCodeSubscription,
-      updateUserProfile, sendMessage, editMessage, deleteMessage, startConversation, sendDirectMessageToUser, markNotificationAsRead, markAllNotificationsAsRead, markMessagesAsRead,
+      updateUserProfile, sendMessage, editMessage, deleteMessage, startConversation, hideConversation, sendDirectMessageToUser, markNotificationAsRead, markAllNotificationsAsRead, markMessagesAsRead,
       clearAllNotifications, goBack, hasUnreadMessages, hasUnreadDiscussions,
       isLoading, deleteResource, deactivateAccount, deleteAccount,
       areResourcesLoading, scrollTargetId, setScrollTargetId, showToast, toggleUserRole, toggleUserStatus, resolveReport
@@ -1264,7 +1219,7 @@ const App: React.FC = () => {
         <SideNav />
         <main className="ml-20 transition-all duration-300 pt-4 px-4 md:px-8 pb-8">
           {view === 'dashboard' && <DashboardPage />}
-          {view === 'resourceDetail' && selectedId && <ResourceDetailPage  />}
+          {view === 'resourceDetail' && selectedId && <ResourceDetailPage resource={resources.find(r => r.id === selectedId) || resources[0]} />}
           {view === 'discussions' && <DiscussionsPage />}
           {view === 'forumDetail' && selectedId && <ForumPostDetailPage post={forumPosts.find(p => p.id === selectedId) || forumPosts[0]} />}
           {view === 'profile' && user && <ProfilePage user={user} allResources={resources} isCurrentUser={true} />}
@@ -1275,7 +1230,7 @@ const App: React.FC = () => {
           {view === 'admin' && user.role === 'admin' && <AdminPage />} 
         </main>
         {isUploadModalOpen && <UploadModal onClose={() => { if(!isUploading) { setIsUploadModalOpen(false); setFulfillingRequest(undefined); } }} onUpload={handleUpload} fulfillingRequest={fulfillingRequest} isLoading={isUploading} />}
-        {runTour && <TooltipGuide targetSelector={tourSteps[tourStep - 1]?.selector || 'body'} content={tourSteps[tourStep - 1]?.content || ''} currentStep={tourStep} totalSteps={tourSteps.length} onNext={() => { if (tourStep < tourSteps.length) setTourStep(tourStep + 1); else { setRunTour(false); localStorage.setItem(`examvault_tour_${user.id}`, 'true'); } }} onPrev={() => setTourStep(Math.max(1, tourStep - 1))} onSkip={() => { setRunTour(false); localStorage.setItem(`examvault_tour_${user.id}`, 'true'); }} />}
+        {runTour && <TooltipGuide targetSelector={tourSteps[tourStep - 1]?.selector || 'body'} content={tourSteps[tourStep - 1]?.content || ''} currentStep={tourStep} totalSteps={tourSteps.length} onNext={() => { if (tourStep < tourSteps.length) setTourStep(tourStep + 1); else { setRunTour(false); if(user) localStorage.setItem(`examvault_tour_${user.id}`, 'true'); } }} onPrev={() => setTourStep(Math.max(1, tourStep - 1))} onSkip={() => { setRunTour(false); if(user) localStorage.setItem(`examvault_tour_${user.id}`, 'true'); }} />}
         {toast && <ToastNotification message={toast.message} points={toast.points} type={toast.type} onClose={() => setToast(null)} />}
       </div>
     </AppContext.Provider>

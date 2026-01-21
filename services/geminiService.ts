@@ -6,15 +6,10 @@ const MODEL_NAME = "gemini-3-flash-preview";
 
 // Helper to get the AI instance lazily and safely.
 const getAI = () => {
-  let apiKey = "";
-  try {
-    // @ts-ignore
-    if (typeof process !== "undefined" && process.env) {
-        apiKey = process.env.API_KEY || "AIzaSyB045vOfwnjSeImdx3RPqZTK23J0cV70m8";
-    }
-  } catch (e) {
-    // Ignore ReferenceError if process is not defined
-  }
+  // @ts-ignore
+  // Vite replaces process.env.API_KEY with the string literal of the key at build time.
+  // We must access it directly. The previous runtime check for `process` failed in browsers.
+  const apiKey = process.env.API_KEY;
   return new GoogleGenAI({ apiKey });
 };
 

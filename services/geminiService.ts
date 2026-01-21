@@ -129,10 +129,16 @@ export const summarizeContent = async (
     if (fileBase64 && mimeType) {
         // Remove data URL prefix if present (e.g., "data:application/pdf;base64,")
         const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
+        
+        // Combine textPrompt with metadata content
+        const fullPrompt = content && content.trim().length > 0 
+            ? `${textPrompt}\n\nAdditional Context/Metadata:\n${content}`
+            : textPrompt;
+
         // IMPORTANT: File part should ideally come before text prompt for better context handling
         parts = [
             { inlineData: { mimeType: mimeType, data: cleanBase64 } },
-            { text: textPrompt }
+            { text: fullPrompt }
         ];
     } else {
         parts = [{ text: `${textPrompt}\n\nMaterial:\n${content}` }];
@@ -197,9 +203,15 @@ export const generateStudySet = async (
     let parts: any[] = [];
     if (fileBase64 && mimeType) {
         const cleanBase64 = fileBase64.replace(/^data:.+;base64,/, '');
+        
+        // Combine promptText with metadata content
+        const fullPrompt = content && content.trim().length > 0 
+            ? `${promptText}\n\nAdditional Context/Metadata:\n${content}`
+            : promptText;
+
         parts = [
             { inlineData: { mimeType: mimeType, data: cleanBase64 } },
-            { text: promptText }
+            { text: fullPrompt }
         ];
     } else {
         parts = [{ text: `${promptText}\n\nMaterial:\n${content}` }];
